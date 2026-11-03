@@ -1,34 +1,13 @@
 //! Table of Contents generation, heading extraction, and anchor slugification.
 
-use pulldown_cmark::{Event, HeadingLevel, Parser, Tag, TagEnd};
+use deap_core::markdown_ast::parse_markdown_ast;
+use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 use std::collections::BTreeSet;
 
-/// Converts a heading string into a standard GitHub Markdown anchor slug.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `slugify` in `crates/assemble-conops/src/toc.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `slugify` (declaration #1) within `ASSEMBLE-CONOPS-TOC`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `slugify`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `slugify` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `slugify`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `slugify`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `slugify` (`String`).
-/// - State: Maintains consistent state invariants across `slugify` without partial mutation on error.
-/// - Action: Executes `slugify` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `slugify` (`ASSEMBLE-CONOPS-TOC`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-TOC-SLUGIFY] | SysML v2: ActionDef(slugify)
+/// [DOC-TIER: A] Converts a heading string into a standard GitHub Markdown anchor slug.
+/// Safety & Traceability: Conforms to DO-178C Level A / DO-330 TQL-4; Realises: [REQ-ASSEMBLE-CONOPS-TOC-SLUGIFY] | SysML v2: ActionDef(slugify)
+/// Contract: Accepts raw heading `text: &str` and returns lowercase hyphenated anchor slug `String` stripped of formatting tokens.
+/// Bounds & Faults: O(N) time and space over `text.len()`; infallible deterministic character filtering.
 pub fn slugify(text: &str) -> String {
     let clean = text.replace(['`', '$', '*'], "").trim().to_string();
     let mut slug = String::new();
@@ -40,96 +19,25 @@ pub fn slugify(text: &str) -> String {
     slug.replace(' ', "-")
 }
 
-/// Extracts markdown headings from content.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `extract_headings` in `crates/assemble-conops/src/toc.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `extract_headings` (declaration #2) within `ASSEMBLE-CONOPS-TOC`.
-///
-/// ## 3. Preconditions
-/// - `content: &str` must satisfy domain and type-safety constraints prior to invoking `extract_headings`.
-///
-/// ## 4. Postconditions
-/// - Returns `Vec<(usize, String, String)>` from `extract_headings` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(content)) bounded over input/member dimension of `extract_headings`.
-/// - Space Complexity: O(N(content)) bounded auxiliary memory for `extract_headings`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `extract_headings` (`Vec<(usize, String, String)>`).
-/// - State: Maintains consistent state invariants across `extract_headings` without partial mutation on error.
-/// - Action: Executes `extract_headings` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `extract_headings` (`ASSEMBLE-CONOPS-TOC`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-TOC-EXTRACT-HEADINGS] | SysML v2: ActionDef(extract_headings)
+/// [DOC-TIER: A] Extracts markdown headings from content via the `deap_core::markdown_ast` (`pulldown-cmark`) section AST.
+/// Safety & Traceability: Conforms to DO-178C Level A / DO-330 TQL-4; Realises: [REQ-ASSEMBLE-CONOPS-TOC-EXTRACT-HEADINGS] | SysML v2: ActionDef(extract_headings)
+/// Contract: Parses `content: &str` into `ParsedMarkdownAst` and returns `Vec<(usize, String, String)>` of `(level, title, slug)`.
+/// Bounds & Faults: O(N) time and space over `content.len()`; ignores `#` lines inside fenced code blocks via AST parsing.
 pub fn extract_headings(content: &str) -> Vec<(usize, String, String)> {
-    let mut headings = Vec::new();
-    let parser = Parser::new(content);
-    let mut current_heading: Option<(usize, String)> = None;
-
-    for event in parser {
-        match event {
-            Event::Start(Tag::Heading { level, .. }) => {
-                let lvl = match level {
-                    HeadingLevel::H1 => 1,
-                    HeadingLevel::H2 => 2,
-                    HeadingLevel::H3 => 3,
-                    HeadingLevel::H4 => 4,
-                    HeadingLevel::H5 => 5,
-                    HeadingLevel::H6 => 6,
-                };
-                current_heading = Some((lvl, String::new()));
-            }
-            Event::End(TagEnd::Heading(_)) => {
-                if let Some((lvl, title)) = current_heading.take() {
-                    let trimmed = title.trim();
-                    let slug = slugify(trimmed);
-                    headings.push((lvl, trimmed.to_string(), slug));
-                }
-            }
-            Event::Text(t) | Event::Code(t) => {
-                if let Some((_, ref mut title)) = current_heading {
-                    title.push_str(&t);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    headings
+    let ast = parse_markdown_ast(content);
+    ast.sections
+        .into_iter()
+        .map(|sec| {
+            let slug = slugify(&sec.heading);
+            (usize::from(sec.level), sec.heading, slug)
+        })
+        .collect()
 }
 
-/// Generates a Markdown Table of Contents from a list of headings.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `generate_table_of_contents` in `crates/assemble-conops/src/toc.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `generate_table_of_contents` (declaration #3) within `ASSEMBLE-CONOPS-TOC`.
-///
-/// ## 3. Preconditions
-/// - `headings: &[(usize, String, String)]` must satisfy domain and type-safety constraints prior to invoking `generate_table_of_contents`.
-/// - `max_depth: usize` must satisfy domain and type-safety constraints prior to invoking `generate_table_of_contents`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `generate_table_of_contents` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(headings)) bounded over input/member dimension of `generate_table_of_contents`.
-/// - Space Complexity: O(N(headings)) bounded auxiliary memory for `generate_table_of_contents`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `generate_table_of_contents` (`String`).
-/// - State: Maintains consistent state invariants across `generate_table_of_contents` without partial mutation on error.
-/// - Action: Executes `generate_table_of_contents` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `generate_table_of_contents` (`ASSEMBLE-CONOPS-TOC`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-TOC-GENERATE-TABLE-OF-CONTENTS] | SysML v2: ActionDef(generate_table_of_contents)
+/// [DOC-TIER: A] Generates a Markdown Table of Contents from a list of extracted headings.
+/// Safety & Traceability: Conforms to DO-178C Level A / DO-330 TQL-4; Realises: [REQ-ASSEMBLE-CONOPS-TOC-GENERATE-TABLE-OF-CONTENTS] | SysML v2: ActionDef(generate_table_of_contents)
+/// Contract: Formats `headings` in `2..=max_depth` into an indented Markdown bullet list with `#slug` links.
+/// Bounds & Faults: O(N) time and space over `headings.len()`; saturating indentation prevents underflow.
 pub fn generate_table_of_contents(
     headings: &[(usize, String, String)],
     max_depth: usize,
@@ -149,32 +57,10 @@ pub fn generate_table_of_contents(
     toc_lines.join("\n")
 }
 
-/// Verifies internal anchor links (#slug) in the document against defined headings.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `verify_markdown_links` in `crates/assemble-conops/src/toc.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `verify_markdown_links` (declaration #4) within `ASSEMBLE-CONOPS-TOC`.
-///
-/// ## 3. Preconditions
-/// - `content: &str` must satisfy domain and type-safety constraints prior to invoking `verify_markdown_links`.
-///
-/// ## 4. Postconditions
-/// - Returns `Vec<String>` from `verify_markdown_links` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(content)) bounded over input/member dimension of `verify_markdown_links`.
-/// - Space Complexity: O(N(content)) bounded auxiliary memory for `verify_markdown_links`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `verify_markdown_links` (`Vec<String>`).
-/// - State: Maintains consistent state invariants across `verify_markdown_links` without partial mutation on error.
-/// - Action: Executes `verify_markdown_links` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `verify_markdown_links` (`ASSEMBLE-CONOPS-TOC`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-TOC-VERIFY-MARKDOWN-LINKS] | SysML v2: ActionDef(verify_markdown_links)
+/// [DOC-TIER: A] Verifies internal anchor links (`#slug`) in the document against AST-extracted headings.
+/// Safety & Traceability: Conforms to DO-178C Level A / DO-330 TQL-4; Realises: [REQ-ASSEMBLE-CONOPS-TOC-VERIFY-MARKDOWN-LINKS] | SysML v2: ActionDef(verify_markdown_links)
+/// Contract: Returns `Vec<String>` of diagnostic messages for every internal `#anchor` link missing from `extract_headings(content)`.
+/// Bounds & Faults: O(N log H) time and O(N) space over `content.len()`; deterministic link event stream traversal.
 pub fn verify_markdown_links(content: &str) -> Vec<String> {
     let headings = extract_headings(content);
     let valid_slugs: BTreeSet<String> = headings.into_iter().map(|(_, _, slug)| slug).collect();

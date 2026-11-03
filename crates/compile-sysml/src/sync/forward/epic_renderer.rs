@@ -1,13 +1,43 @@
-//! Epic Markdown section prose renderers, parent Epic link resolution, and Epic backlog/count helpers.
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
+//! # Epic Markdown Section Prose Renderers
 //!
-//! Safety & Traceability: Realises: [REQ-SYNC-FORWARD-RENDER-EPIC-CONTEXT]
-//! Contract: Projects SysML v2 `PackageDef` documentation, structural classifiers, ports, connectors, state machines, actions, interactions, requirements, and constraints into `EPIC-*.md` Sections 1, 3, 4, and 5, and resolves canonical parent Epic links, package story numbers, and inclusive Epic counts.
-//! Bounds & Faults: Uses `BTreeSet` deterministic deduplication, provenance-safe prose link sanitization, and saturating index arithmetic (`saturating_add`) with zero truncation, panics, or direct slice indexing.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Realises: [REQ-0604], [REQ-SYNC-FORWARD-RENDER-EPIC-CONTEXT]
+//! Projects SysML v2 `PackageDef` documentation, structural classifiers, ports, connectors,
+//! state machines, actions, interactions, requirements, and constraints into `EPIC-*.md`
+//! Sections 1, 3, 4, and 5 under ISO/IEC/IEEE 15288:2023.
+//!
+//! ## 2. Preconditions, Postconditions & Mathematical Invariants
+//! - **Preconditions**: Input `PackageDef` and `RequirementDef` slices are valid AST nodes.
+//! - **Postconditions**: Returns sanitized, deterministic Markdown prose for each Epic section.
+//! - **Invariants**: `BTreeSet` deduplication guarantees stable ordering with zero duplicate clauses.
+//!
+//! ## 3. Failure Modes, Degraded Operation & Recovery
+//! - Packages lacking explicit documentation or AST members emit deterministic structural summaries.
+//!
+//! ## 4. Concurrency, Memory & Resource Bounds
+//! - Pure single-threaded `O(N log N)` deduplication and formatting over package members.
+//!
+//! ## 5. Dependencies & Integration Contracts
+//! - Consumed by `epic_emitter`; re-exports parent Epic link and count helpers from `story_allocator`.
+//!
+//! ## 6. Verification & Acceptance Criteria
+//! - Verified by Epic prose and count tests in `sync/forward/tests*.rs`.
+//!
+//! ## 7. Realization & Traceability
+//! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-RENDER-EPIC-CONTEXT]
 
+pub use super::story_allocator::{
+    collect_package_story_numbers, count_total_epics_inclusive, resolve_parent_epic_link,
+};
 use super::*;
 
 /// Projects `PackageDef::doc` (sanitized of broken link syntax) or an AST member inventory into `EPIC-*.md` `## 1. Context`.
-/// Realises: [REQ-SYNC-FORWARD-RENDER-EPIC-CONTEXT]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-RENDER-EPIC-CONTEXT]
 pub(crate) fn render_epic_context(p: &PackageDef, subsys_display: &str) -> String {
     if let Some(doc) = p.doc.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
         return sanitize_prose_links(doc);
@@ -55,7 +85,7 @@ pub(crate) fn render_epic_context(p: &PackageDef, subsys_display: &str) -> Strin
 }
 
 /// Formats a `PartDef` classifier and its declared `PortDef` allocations for `EPIC-*.md` `## 3. Architecture`.
-/// Realises: [REQ-SYNC-FORWARD-RENDER-EPIC-ARCHITECTURE]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-RENDER-EPIC-ARCHITECTURE]
 fn format_epic_part_classifier(pt: &PartDef) -> String {
     if pt.ports.is_empty() {
         format!("`{}`", pt.name.trim())
@@ -82,7 +112,7 @@ fn format_epic_part_classifier(pt: &PartDef) -> String {
 }
 
 /// Projects `PackageDef` structural classifiers, boundary ports, and connectors into `EPIC-*.md` `## 3. Architecture`.
-/// Realises: [REQ-SYNC-FORWARD-RENDER-EPIC-ARCHITECTURE]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-RENDER-EPIC-ARCHITECTURE]
 pub(crate) fn render_epic_architecture(p: &PackageDef) -> String {
     let mut clauses: Vec<String> = Vec::new();
 
@@ -145,7 +175,7 @@ pub(crate) fn render_epic_architecture(p: &PackageDef) -> String {
 }
 
 /// Collects deduplicated `StateDef` lifecycle summaries across package-level and `PartDef`-scoped state machines.
-/// Realises: [REQ-SYNC-FORWARD-RENDER-EPIC-OPERATIONS]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-RENDER-EPIC-OPERATIONS]
 fn collect_epic_state_items(p: &PackageDef) -> Vec<String> {
     let mut state_items: Vec<String> = Vec::new();
     let mut seen_states: BTreeSet<String> = BTreeSet::new();
@@ -191,7 +221,7 @@ fn collect_epic_state_items(p: &PackageDef) -> Vec<String> {
 }
 
 /// Projects `PackageDef` and `PartDef` state machines, actions, and interactions into `EPIC-*.md` `## 4. Operational Considerations`.
-/// Realises: [REQ-SYNC-FORWARD-RENDER-EPIC-OPERATIONS]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-RENDER-EPIC-OPERATIONS]
 pub(crate) fn render_epic_operational_considerations(p: &PackageDef) -> String {
     let state_items = collect_epic_state_items(p);
 
@@ -243,7 +273,7 @@ pub(crate) fn render_epic_operational_considerations(p: &PackageDef) -> String {
 }
 
 /// Projects `PackageDef` and `PartDef` requirements and constraints into `EPIC-*.md` `## 5. Security & Governance`.
-/// Realises: [REQ-SYNC-FORWARD-RENDER-EPIC-GOVERNANCE]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-RENDER-EPIC-GOVERNANCE]
 pub(crate) fn render_epic_security_and_governance(
     p: &PackageDef,
     all_requirements: &[RequirementDef],
@@ -311,70 +341,4 @@ pub(crate) fn render_epic_security_and_governance(
     } else {
         clauses.join(" ")
     }
-}
-
-/// Resolves the canonical Parent Epic relative Markdown link for `pkg_name` against `ordered_packages`.
-///
-/// Safety & Traceability: Realises: [REQ-0604]
-/// Contract: Maps `"ConOps"` to `[EPIC-02-ConOps](../epics/EPIC-02-ConOps.md)`, `"SysML_Model"` or the first package in `ordered_packages` to `EPIC-01-<root>`, and all other packages to their 1-based position in `ordered_packages`.
-/// Bounds & Faults: Executes a single `O(N)` linear scan over `ordered_packages` using `saturating_add(1)` and defaults unindexed packages deterministically to `EPIC-01` without panicking.
-pub fn resolve_parent_epic_link(ordered_packages: &[&PackageDef], pkg_name: &str) -> String {
-    if pkg_name == "ConOps" {
-        "[EPIC-02-ConOps](../epics/EPIC-02-ConOps.md)".to_string()
-    } else if pkg_name == "SysML_Model"
-        || ordered_packages.first().map(|p| p.name.as_str()) == Some(pkg_name)
-    {
-        let root = ordered_packages
-            .first()
-            .map(|p| p.name.as_str())
-            .unwrap_or(pkg_name);
-        format!("[EPIC-01-{root}](../epics/EPIC-01-{root}.md)")
-    } else {
-        let ep_idx = ordered_packages
-            .iter()
-            .position(|p| p.name == pkg_name)
-            .map(|idx| idx.saturating_add(1))
-            .unwrap_or(1);
-        format!("[EPIC-{ep_idx:02}-{pkg_name}](../epics/EPIC-{ep_idx:02}-{pkg_name}.md)")
-    }
-}
-
-/// Collects 1-based User Story numbers (`s_num`) belonging strictly to `pkg_name` in source order.
-///
-/// Safety & Traceability: Realises: [REQ-0604]
-/// Contract: Filters `story_metas` for entries matching `pkg_name` while preserving ascending `s_num` ordering and excluding stories allocated to sibling packages.
-/// Bounds & Faults: Executes a single `O(N)` linear pass over `story_metas`, returning an empty `Vec` when zero stories belong to `pkg_name`.
-pub fn collect_package_story_numbers(story_metas: &[StoryMeta], pkg_name: &str) -> Vec<usize> {
-    story_metas
-        .iter()
-        .filter(|s| s.pkg_name == pkg_name)
-        .map(|s| s.s_num)
-        .collect()
-}
-
-/// Counts distinct `EPIC-*.md` specifications inclusively across both the parent Epic and `child_specs` (`Diagnostic: E0400`).
-///
-/// Safety & Traceability: Realises: [REQ-0604]
-/// Contract: Inserts `parent_rel_path` when `parent_is_epic` is `true` and deduplicates all `EPIC-*` relative paths across `child_specs` in a `BTreeSet` so shared paths are never double-counted.
-/// Bounds & Faults: Executes in `O(K log K)` time and `O(K)` space over `K = child_specs.len()` with zero recursion or fallible operations.
-pub fn count_total_epics_inclusive(
-    parent_rel_path: &str,
-    parent_is_epic: bool,
-    child_specs: &[(String, String)],
-) -> usize {
-    let mut epic_paths: BTreeSet<&str> = BTreeSet::new();
-    let trimmed_parent = parent_rel_path.trim();
-    if parent_is_epic
-        && !trimmed_parent.is_empty()
-        && (trimmed_parent.contains("epics/EPIC-") || trimmed_parent.starts_with("EPIC-"))
-    {
-        epic_paths.insert(trimmed_parent);
-    }
-    for (rel, _) in child_specs {
-        let r = rel.trim();
-        if r.contains("epics/EPIC-") || r.starts_with("EPIC-") {
-            epic_paths.insert(r);
-        }
-    }
-    epic_paths.len()
 }

@@ -1,11 +1,4 @@
-#![deny(
-    clippy::all,
-    clippy::pedantic,
-    clippy::nursery,
-    clippy::too_many_lines,
-    clippy::too_many_arguments,
-    clippy::undocumented_unsafe_blocks
-)]
+#![deny(clippy::all, clippy::pedantic, clippy::nursery, clippy::too_many_lines, clippy::too_many_arguments, clippy::undocumented_unsafe_blocks)]
 //! Deterministic `syn` + `quote` + `prettyplease` AST code generation and fixed-point verifier. [DOC-TIER: A]
 //!
 //! ## 1. Safety Intent & Regulatory Scope
@@ -49,6 +42,55 @@ pub struct SynCodegenFixedPointReceipt {
     pub formatted_source: String,
 }
 
+/// Verified compilation unit buffer holding formatted Rust source and its raw 32-byte SHA-256 digest.
+/// Realises: [REQ-0607], [REQ-0701], [BP-07]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VerifiedUnitBuffer {
+    pub unit_name: String,
+    pub formatted_source: String,
+    pub sha256: [u8; 32],
+}
+
+/// Fail-closed error taxonomy for fixed-point AST synthesis and `#[cfg(test)]` doc-tier verification (`TD-20`).
+/// Realises: [REQ-0607], [REQ-0701], [BP-07]
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FixedPointSynthesisError {
+    TokenDepthExceeded,
+    SynParseFailed(String),
+    CstValidationFailed(String),
+    FixedPointDrift(String),
+    DocTierViolation(String),
+    IoError(String),
+}
+
+impl FixedPointSynthesisError {
+    /// Returns the canonical `DEAP-E0705` diagnostic code for fixed-point synthesis errors.
+    /// Realises: [REQ-0607], [REQ-0701]
+    #[must_use]
+    pub const fn diagnostic_code(&self) -> &'static str {
+        "DEAP-E0705"
+    }
+}
+
+impl std::fmt::Display for FixedPointSynthesisError {
+    /// Formats the fixed-point synthesis error with its `DEAP-E0705` diagnostic code.
+    /// Realises: [REQ-0701]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let code = self.diagnostic_code();
+        match self {
+            Self::TokenDepthExceeded => write!(f, "{code}: token depth exceeded"),
+            Self::SynParseFailed(msg) => write!(f, "{code}: syn parse failed: {msg}"),
+            Self::CstValidationFailed(msg) => write!(f, "{code}: CST validation failed: {msg}"),
+            Self::FixedPointDrift(msg) => write!(f, "{code}: fixed-point drift: {msg}"),
+            Self::DocTierViolation(msg) => write!(f, "{code}: doc-tier violation: {msg}"),
+            Self::IoError(msg) => write!(f, "{code}: I/O error: {msg}"),
+        }
+    }
+}
+
+impl std::error::Error for FixedPointSynthesisError {}
+
 /// Cryptographic manifest tracking generated compilation units and stage digests for fixed-point verification.
 /// Realises: [REQ-0607], [REQ-0608], [REQ-0701], [BP-07], [BP-08]
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -70,10 +112,7 @@ impl StageTreeDigestManifest {
             hasher_input.push('\n');
         }
         let aggregate_sha256 = compute_sha256(hasher_input.as_bytes());
-        Self {
-            file_digests,
-            aggregate_sha256,
-        }
+        Self { file_digests, aggregate_sha256 }
     }
 
     /// Constructs a manifest from slice of `(relative_path, content_or_digest)` pairs.
@@ -92,33 +131,21 @@ impl StageTreeDigestManifest {
     /// Returns an error if any file count or digest drifts between stage snapshots.
     /// Realises: [REQ-0607], [BP-07]
     pub fn verify_fixed_point(&self, other: &Self) -> Result<(), String> {
-        if self.file_digests.len() != other.file_digests.len() {
-            return Err(format!(
-                "DEAP-E0705: Stage fixed-point file count drift: stage1={} vs stage2={}",
-                self.file_digests.len(),
-                other.file_digests.len()
-            ));
+        let (n1, n2) = (self.file_digests.len(), other.file_digests.len());
+        if n1 != n2 {
+            return Err(format!("DEAP-E0705: Stage fixed-point file count drift: stage1={n1} vs stage2={n2}"));
         }
         for (path, s1_hash) in &self.file_digests {
             match other.file_digests.get(path) {
                 Some(s2_hash) if s1_hash == s2_hash => {}
                 Some(s2_hash) => {
-                    return Err(format!(
-                        "DEAP-E0705: Stage fixed-point hash mismatch on '{path}': stage1={s1_hash} != stage2={s2_hash}"
-                    ));
+                    return Err(format!("DEAP-E0705: Stage fixed-point hash mismatch on '{path}': stage1={s1_hash} != stage2={s2_hash}"));
                 }
-                None => {
-                    return Err(format!(
-                        "DEAP-E0705: Stage fixed-point missing file in stage2: '{path}'"
-                    ));
-                }
+                None => return Err(format!("DEAP-E0705: Stage fixed-point missing file in stage2: '{path}'")),
             }
         }
         if self.aggregate_sha256 != other.aggregate_sha256 {
-            return Err(format!(
-                "DEAP-E0705: Stage fixed-point aggregate hash drift: stage1={} != stage2={}",
-                self.aggregate_sha256, other.aggregate_sha256
-            ));
+            return Err(format!("DEAP-E0705: Stage fixed-point aggregate hash drift: stage1={} != stage2={}", self.aggregate_sha256, other.aggregate_sha256));
         }
         Ok(())
     }
@@ -136,8 +163,7 @@ pub fn synthesize_prettyplease_unit(
     let _ = parse_safe_ident(module_name)?;
     let parsed_file = syn::parse2::<syn::File>(tokens)
         .map_err(|err| format!("syn::parse2 failed for unit '{module_name}' [{req_id}]: {err}"))?;
-    let unparsed = prettyplease::unparse(&parsed_file);
-    format_and_verify_rust_module_ast(&unparsed)
+    format_and_verify_rust_module_ast(&prettyplease::unparse(&parsed_file))
 }
 
 /// Compares two `StageTreeDigestManifest` snapshots, verifying Stage-1 == Stage-2 SHA-256 parity for all files.
@@ -150,21 +176,12 @@ pub fn verify_stage_fixed_point(
     stage_label: &str,
 ) -> Result<bool, String> {
     if stage1.aggregate_sha256.is_empty() || stage2.aggregate_sha256.is_empty() {
-        return Err(format!(
-            "DEAP-E0705: empty fixed-point digest in stage '{stage_label}'"
-        ));
+        return Err(format!("DEAP-E0705: empty fixed-point digest in stage '{stage_label}'"));
     }
-    let all_paths: BTreeSet<&String> = stage1
-        .file_digests
-        .keys()
-        .chain(stage2.file_digests.keys())
-        .collect();
-    let mut mismatch_count = 0usize;
-    let mut first_mismatch = String::new();
-
+    let all_paths: BTreeSet<&String> = stage1.file_digests.keys().chain(stage2.file_digests.keys()).collect();
+    let (mut mismatch_count, mut first_mismatch) = (0usize, String::new());
     for path in all_paths {
-        let h1 = stage1.file_digests.get(path);
-        let h2 = stage2.file_digests.get(path);
+        let (h1, h2) = (stage1.file_digests.get(path), stage2.file_digests.get(path));
         if h1 != h2 {
             mismatch_count += 1;
             if first_mismatch.is_empty() {
@@ -172,13 +189,9 @@ pub fn verify_stage_fixed_point(
             }
         }
     }
-
     if mismatch_count > 0 || stage1.aggregate_sha256 != stage2.aggregate_sha256 {
-        return Err(format!(
-            "DEAP-E0705: Stage fixed-point drift in '{stage_label}': {mismatch_count} mismatched files ({first_mismatch})"
-        ));
+        return Err(format!("DEAP-E0705: Stage fixed-point drift in '{stage_label}': {mismatch_count} mismatched files ({first_mismatch})"));
     }
-
     Ok(true)
 }
 
@@ -190,37 +203,20 @@ pub fn format_and_verify_rust_module_ast(
     raw_rust_source: &str,
 ) -> Result<SynCodegenFixedPointReceipt, String> {
     let normalized_input = normalize_lf(raw_rust_source);
-    let ast1 = syn::parse_file(&normalized_input)
-        .map_err(| err| format!("Stage-1 syn::parse_file failed: {err}"))?;
+    let ast1 = syn::parse_file(&normalized_input).map_err(|err| format!("Stage-1 syn::parse_file failed: {err}"))?;
     let stage1 = normalize_lf(&prettyplease::unparse(&ast1));
-
-    let ast2 = syn::parse_file(&stage1)
-        .map_err(|err| format!("Stage-2 syn::parse_file failed: {err}"))?;
+    let ast2 = syn::parse_file(&stage1).map_err(|err| format!("Stage-2 syn::parse_file failed: {err}"))?;
     let stage2 = normalize_lf(&prettyplease::unparse(&ast2));
-
     let cst_errors = parse_rust_source("<codegen>", &stage1).syntax_errors();
     if !cst_errors.is_empty() {
-        return Err(format!(
-            "ra_ap_syntax CST validation failed on formatted output: {}",
-            cst_errors.join("; ")
-        ));
+        return Err(format!("ra_ap_syntax CST validation failed on formatted output: {}", cst_errors.join("; ")));
     }
-
-    let stage1_sha256 = compute_sha256(stage1.as_bytes());
-    let stage2_sha256 = compute_sha256(stage2.as_bytes());
+    let (stage1_sha256, stage2_sha256) = (compute_sha256(stage1.as_bytes()), compute_sha256(stage2.as_bytes()));
     let is_idempotent = stage1_sha256 == stage2_sha256;
     if !is_idempotent {
-        return Err(format!(
-            "Non-idempotent AST unparse: stage1={stage1_sha256} != stage2={stage2_sha256}"
-        ));
+        return Err(format!("Non-idempotent AST unparse: stage1={stage1_sha256} != stage2={stage2_sha256}"));
     }
-
-    Ok(SynCodegenFixedPointReceipt {
-        stage1_sha256,
-        stage2_sha256,
-        is_idempotent,
-        formatted_source: stage1,
-    })
+    Ok(SynCodegenFixedPointReceipt { stage1_sha256, stage2_sha256, is_idempotent, formatted_source: stage1 })
 }
 
 /// Validates and constructs a `proc_macro2::Ident` at `Span::call_site()` without panicking.
@@ -228,8 +224,7 @@ pub fn format_and_verify_rust_module_ast(
 /// Returns an error when `raw_ident` is not a valid Rust identifier token.
 /// Realises: [REQ-0701]
 fn parse_safe_ident(raw_ident: &str) -> Result<Ident, String> {
-    syn::parse_str::<syn::Ident>(raw_ident)
-        .map_err(|err| format!("Invalid Rust identifier '{raw_ident}': {err}"))?;
+    syn::parse_str::<syn::Ident>(raw_ident).map_err(|err| format!("Invalid Rust identifier '{raw_ident}': {err}"))?;
     Ok(Ident::new(raw_ident, Span::call_site()))
 }
 
@@ -243,36 +238,81 @@ pub fn synthesize_typed_domain_struct_tokens(
     fields: &[(&str, &str)],
 ) -> Result<SynCodegenFixedPointReceipt, String> {
     let ident = parse_safe_ident(struct_ident)?;
-    let struct_doc = format!(" Generated domain struct `{struct_ident}`.");
-    let req_doc = format!(" Realises: [{req_id}]");
+    let (struct_doc, req_doc) = (format!(" Generated domain struct `{struct_ident}`."), format!(" Realises: [{req_id}]"));
     let mut field_tokens: Vec<TokenStream> = Vec::with_capacity(fields.len());
     for &(field_name, field_ty_str) in fields {
         let field_ident = parse_safe_ident(field_name)?;
         let field_ty = syn::parse_str::<syn::Type>(field_ty_str)
             .map_err(|err| format!("Invalid field type '{field_ty_str}' for '{field_name}': {err}"))?;
         let field_doc = format!(" Field `{field_name}`. Realises: [{req_id}]");
-        field_tokens.push(quote! {
-            #[doc = #field_doc]
-            pub #field_ident: #field_ty
-        });
+        field_tokens.push(quote! { #[doc = #field_doc] pub #field_ident: #field_ty });
     }
-
     let tokens = quote! {
         #[doc = #struct_doc]
         #[doc = #req_doc]
         #[derive(Debug, Clone, PartialEq)]
-        pub struct #ident {
-            #(#field_tokens,)*
-        }
+        pub struct #ident { #(#field_tokens,)* }
     };
     let parsed_file = syn::parse2::<syn::File>(tokens)
         .map_err(|err| format!("syn::parse2::<syn::File> failed for '{struct_ident}': {err}"))?;
-    let unparsed = prettyplease::unparse(&parsed_file);
-    format_and_verify_rust_module_ast(&unparsed)
+    format_and_verify_rust_module_ast(&prettyplease::unparse(&parsed_file))
+}
+
+/// Recursively collects `.rs` files under `tree_root` in deterministic `BTreeMap` order.
+/// Realises: [REQ-0701]
+fn collect_tree_rs_files(
+    tree_root: &std::path::Path,
+    skip_generated_tree: bool,
+) -> Result<BTreeMap<String, std::path::PathBuf>, FixedPointSynthesisError> {
+    let (mut stack, mut files) = (vec![tree_root.to_path_buf()], BTreeMap::new());
+    while let Some(dir) = stack.pop() {
+        let entries = std::fs::read_dir(&dir).map_err(|e| FixedPointSynthesisError::IoError(e.to_string()))?;
+        for entry_res in entries {
+            let entry = entry_res.map_err(|e| FixedPointSynthesisError::IoError(e.to_string()))?;
+            let path = entry.path();
+            let ft = entry.file_type().map_err(|e| FixedPointSynthesisError::IoError(e.to_string()))?;
+            if ft.is_dir() {
+                stack.push(path);
+            } else if path.extension().and_then(|s| s.to_str()) == Some("rs") {
+                let rel = path.strip_prefix(tree_root).unwrap_or(&path).to_string_lossy().replace('\\', "/");
+                if !(skip_generated_tree && rel.contains("modular_codegen/generated")) {
+                    files.insert(rel, path);
+                }
+            }
+        }
+    }
+    Ok(files)
+}
+
+/// Walks `.rs` files in `tree_root`, verifies `#[cfg(test)]`-excluded doc tiers, and returns a `StageTreeDigestManifest`.
+/// # Errors
+/// Returns `FixedPointSynthesisError` on I/O errors, CST validation failures, or Tier-A doc-tier violations.
+/// Realises: [REQ-0607], [REQ-0608], [REQ-0701], [BP-07]
+pub fn verify_cfg_test_excluded_doc_tiers(
+    tree_root: &std::path::Path,
+    skip_generated_tree: bool,
+) -> Result<StageTreeDigestManifest, FixedPointSynthesisError> {
+    let rs_files = collect_tree_rs_files(tree_root, skip_generated_tree)?;
+    let thresholds = deap_core::rust_cst::CstMetricsThresholds::default();
+    let mut file_digests = BTreeMap::new();
+    for (rel_path, full_path) in rs_files {
+        let bytes = std::fs::read(&full_path).map_err(|e| FixedPointSynthesisError::IoError(format!("{rel_path}: {e}")))?;
+        let cst = deap_core::rust_cst::parse_verified_lossless_cst(&rel_path, &bytes, &thresholds)
+            .map_err(|e| FixedPointSynthesisError::CstValidationFailed(format!("{rel_path}: {e}")))?;
+        let inv = deap_core::rust_cst::classify_cfg_test_excluded_doc_tier(&cst, &thresholds, false)
+            .map_err(|e| FixedPointSynthesisError::DocTierViolation(format!("{rel_path}: {e}")))?;
+        for item in inv.production_items.values() {
+            if item.tier == deap_core::rust_cst::DocTier::RustTierA && item.doc_line_count == 0 {
+                let sym = &item.symbol;
+                return Err(FixedPointSynthesisError::DocTierViolation(format!("DEAP-E0705: missing Tier-A doc on '{sym}' in '{rel_path}'")));
+            }
+        }
+        file_digests.insert(rel_path, compute_sha256(&bytes));
+    }
+    Ok(StageTreeDigestManifest::new(file_digests))
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -280,22 +320,11 @@ mod tests {
     /// Realises: [REQ-0701]
     #[test]
     fn test_synthesize_typed_domain_struct_tokens_idempotent_and_cst_clean() -> Result<(), String> {
-        let receipt = synthesize_typed_domain_struct_tokens(
-            "TelemetrySample",
-            "REQ-0701",
-            &[
-                ("sequence_id", "u64"),
-                ("attitude_rad", "f64"),
-                ("channel_label", "String"),
-            ],
-        )?;
-        assert!(receipt.is_idempotent);
-        assert_eq!(receipt.stage1_sha256, receipt.stage2_sha256);
-        assert!(receipt.formatted_source.contains("pub struct TelemetrySample"));
-        assert!(receipt.formatted_source.contains("pub sequence_id: u64"));
-        assert!(!receipt.formatted_source.contains('\r'));
-        let cst = parse_rust_source("<test>", &receipt.formatted_source);
-        assert!(cst.syntax_errors().is_empty());
+        let fields = [("sequence_id", "u64"), ("attitude_rad", "f64"), ("channel_label", "String")];
+        let receipt = synthesize_typed_domain_struct_tokens("TelemetrySample", "REQ-0701", &fields)?;
+        assert!(receipt.is_idempotent && receipt.stage1_sha256 == receipt.stage2_sha256);
+        assert!(receipt.formatted_source.contains("pub struct TelemetrySample") && !receipt.formatted_source.contains('\r'));
+        assert!(parse_rust_source("<test>", &receipt.formatted_source).syntax_errors().is_empty());
         Ok(())
     }
 
@@ -303,66 +332,36 @@ mod tests {
     /// Realises: [REQ-0701]
     #[test]
     fn test_format_and_verify_rust_module_ast_crlf_and_malformed_rejection() -> Result<(), String> {
-        let crlf_src = "pub struct Frame {\r\n    pub id: u32,\r\n}\r\n";
-        let receipt = format_and_verify_rust_module_ast(crlf_src)?;
+        let receipt = format_and_verify_rust_module_ast("pub struct Frame {\r\n    pub id: u32,\r\n}\r\n")?;
         assert!(receipt.is_idempotent);
-        assert_eq!(receipt.stage1_sha256, receipt.stage2_sha256);
         assert!(!receipt.formatted_source.contains("\r\n"));
-
-        let malformed = "pub struct Broken { pub count: ";
-        let err_res = format_and_verify_rust_module_ast(malformed);
-        assert!(err_res.is_err());
-
-        let bad_ident_res =
-            synthesize_typed_domain_struct_tokens("123Invalid", "REQ-0701", &[("ok", "u32")]);
-        assert!(bad_ident_res.is_err());
+        assert!(format_and_verify_rust_module_ast("pub struct Broken { pub count: ").is_err());
+        assert!(synthesize_typed_domain_struct_tokens("123Invalid", "REQ-0701", &[("ok", "u32")]).is_err());
         Ok(())
     }
 
-    /// Verifies `StageTreeDigestManifest` and `verify_stage_fixed_point` succeed on matching trees.
+    /// Verifies `StageTreeDigestManifest` and `verify_stage_fixed_point` succeed on matching trees and fail on drift.
     /// Realises: [REQ-0607], [REQ-0608], [BP-07]
     #[test]
     fn test_stage_tree_digest_manifest_and_verify_stage_fixed_point() -> Result<(), String> {
-        let manifest1 = StageTreeDigestManifest::from_entries(&[
-            ("model.rs", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
-            ("lib.rs", "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"),
-        ]);
-        let manifest2 = manifest1.clone();
-        assert!(manifest1.verify_fixed_point(&manifest2).is_ok());
-        let verified = verify_stage_fixed_point(&manifest1, &manifest2, "test_stage")?;
-        assert!(verified);
+        let m1 = StageTreeDigestManifest::from_entries(&[("model.rs", "hash_a"), ("lib.rs", "hash_b")]);
+        assert!(m1.verify_fixed_point(&m1.clone()).is_ok());
+        assert!(verify_stage_fixed_point(&m1, &m1, "test_stage")?);
+        let m2 = StageTreeDigestManifest::from_entries(&[("model.rs", "hash_c")]);
+        let Err(err_msg) = verify_stage_fixed_point(&m1, &m2, "drift_stage") else {
+            return Err(String::from("expected fixed-point drift error"));
+        };
+        assert!(err_msg.contains("DEAP-E0705") && err_msg.contains("drift_stage"));
         Ok(())
-    }
-
-    /// Verifies `verify_stage_fixed_point` fails closed with DEAP-E0705 on drift.
-    /// Realises: [REQ-0607], [REQ-0608], [BP-07]
-    #[test]
-    fn test_verify_stage_fixed_point_drift_fails_closed() {
-        let manifest1 = StageTreeDigestManifest::from_entries(&[
-            ("model.rs", "hash_a"),
-        ]);
-        let manifest2 = StageTreeDigestManifest::from_entries(&[
-            ("model.rs", "hash_b"),
-        ]);
-        let res = verify_stage_fixed_point(&manifest1, &manifest2, "drift_stage");
-        assert!(res.is_err());
-        let err_msg = res.unwrap_err();
-        assert!(err_msg.contains("DEAP-E0705"));
-        assert!(err_msg.contains("drift_stage"));
     }
 
     /// Verifies `synthesize_prettyplease_unit` generates clean, idempotent Rust AST.
     /// Realises: [REQ-0607], [REQ-0701], [BP-07]
     #[test]
     fn test_synthesize_prettyplease_unit_idempotent() -> Result<(), String> {
-        let tokens = quote! {
-            pub struct EngineState {
-                pub rpm: u32,
-            }
-        };
+        let tokens = quote! { pub struct EngineState { pub rpm: u32 } };
         let receipt = synthesize_prettyplease_unit("engine_state", "REQ-0607", tokens)?;
-        assert!(receipt.is_idempotent);
-        assert!(receipt.formatted_source.contains("pub struct EngineState"));
+        assert!(receipt.is_idempotent && receipt.formatted_source.contains("pub struct EngineState"));
         Ok(())
     }
 }

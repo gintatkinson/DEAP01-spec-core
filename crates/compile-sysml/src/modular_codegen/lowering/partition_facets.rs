@@ -80,6 +80,60 @@ fn extract_part_field_names(part: &PartDef) -> BTreeSet<String> {
         .collect()
 }
 
+/// Computes the single or 1-based sharded facet module stem (`<prefix>` or `<prefix>_NN`).
+///
+/// Realises: [REQ-0607]
+fn shard_facet_name(prefix: &str, total: usize, limit: usize, idx: usize) -> String {
+    if total <= limit {
+        prefix.to_string()
+    } else {
+        format!("{prefix}_{:02}", idx.saturating_add(1))
+    }
+}
+
+/// Lowers `PartDef` constraints into ANF predicates and appends sharded `invariants` facet units.
+///
+/// Realises: [REQ-0607]
+fn emit_part_invariants_facets(
+    part: &PartDef,
+    ctx: &PackageFacetCtx<'_>,
+    (base_id, part_dir): (&str, &str),
+    units: &mut Vec<CompilationUnit>,
+) -> Vec<String> {
+    let layer = LayerRole::resolve_part_layer(part.layer.as_deref(), ctx.pkg_path);
+    let (fields, ctx_ty) = (extract_part_field_names(part), to_pascal_ident(&part.name));
+    let preds: Vec<_> = part
+        .constraints
+        .iter()
+        .flat_map(|c| {
+            hoist_constraint_anf_with_params(
+                (&to_snake_slug(&c.name), &ctx_ty),
+                &fields,
+                &c.parameters,
+                &c.expression,
+                ctx.bounds.max_cyclomatic_complexity,
+            )
+        })
+        .collect();
+    let mut names = Vec::new();
+    for (i, chunk) in preds.chunks(6).enumerate() {
+        let m = shard_facet_name("invariants", preds.len(), 6, i);
+        units.push(CompilationUnit {
+            part_def: Some(part.clone()),
+            hoisted_predicates: chunk.to_vec(),
+            ..empty_unit(
+                format!("{base_id}::{m}"),
+                join_rel(part_dir, &format!("{m}.rs")),
+                ctx.pkg_path.to_vec(),
+                layer,
+                UnitKind::PartInvariantsFacet,
+            )
+        });
+        names.push(m);
+    }
+    names
+}
+
 /// Decomposes a `PartDef` into Level-2 model, sharded invariant/port/calc facets, and a barrel.
 ///
 /// Realises: [REQ-0607]
@@ -93,11 +147,8 @@ pub(super) fn partition_part_facets(
         to_snake_slug(&part.name),
         format!("{}::{}", ctx.pkg_path.join("::"), part.name),
     );
-    let (part_dir, pkg_vec, mut children) = (
-        join_rel(ctx.pkg_dir, &part_slug),
-        ctx.pkg_path.to_vec(),
-        vec!["model".to_string()],
-    );
+    let (part_dir, pkg_vec) = (join_rel(ctx.pkg_dir, &part_slug), ctx.pkg_path.to_vec());
+    let mut children = vec!["model".to_string()];
     units.push(CompilationUnit {
         part_def: Some(part.clone()),
         ..empty_unit(
@@ -108,46 +159,9 @@ pub(super) fn partition_part_facets(
             UnitKind::PartModelFacet,
         )
     });
-    let (fields, ctx_ty) = (extract_part_field_names(part), to_pascal_ident(&part.name));
-    let preds: Vec<_> = part
-        .constraints
-        .iter()
-        .flat_map(|c| {
-            hoist_constraint_anf_with_params(
-                &to_snake_slug(&c.name),
-                &ctx_ty,
-                &fields,
-                &c.parameters,
-                &c.expression,
-                ctx.bounds.max_cyclomatic_complexity,
-            )
-        })
-        .collect();
-    for (i, chunk) in preds.chunks(6).enumerate() {
-        let m = if preds.len() <= 6 {
-            "invariants".to_string()
-        } else {
-            format!("invariants_{:02}", i.saturating_add(1))
-        };
-        units.push(CompilationUnit {
-            part_def: Some(part.clone()),
-            hoisted_predicates: chunk.to_vec(),
-            ..empty_unit(
-                format!("{base_id}::{m}"),
-                join_rel(&part_dir, &format!("{m}.rs")),
-                pkg_vec.clone(),
-                layer,
-                UnitKind::PartInvariantsFacet,
-            )
-        });
-        children.push(m);
-    }
+    children.extend(emit_part_invariants_facets(part, ctx, (&base_id, &part_dir), units));
     for (i, chunk) in part.ports.chunks(4).enumerate() {
-        let m = if part.ports.len() <= 4 {
-            "ports".to_string()
-        } else {
-            format!("ports_{:02}", i.saturating_add(1))
-        };
+        let m = shard_facet_name("ports", part.ports.len(), 4, i);
         units.push(CompilationUnit {
             port_defs: chunk.to_vec(),
             ..empty_unit(
@@ -161,11 +175,7 @@ pub(super) fn partition_part_facets(
         children.push(m);
     }
     for (i, chunk) in part.calcs.chunks(5).enumerate() {
-        let m = if part.calcs.len() <= 5 {
-            "calcs".to_string()
-        } else {
-            format!("calcs_{:02}", i.saturating_add(1))
-        };
+        let m = shard_facet_name("calcs", part.calcs.len(), 5, i);
         units.push(CompilationUnit {
             calc_defs: chunk.to_vec(),
             ..empty_unit(
@@ -181,13 +191,7 @@ pub(super) fn partition_part_facets(
     units.push(CompilationUnit {
         child_modules: children,
         reexport_children: true,
-        ..empty_unit(
-            base_id,
-            join_rel(&part_dir, "mod.rs"),
-            pkg_vec,
-            layer,
-            UnitKind::BarrelFacade,
-        )
+        ..empty_unit(base_id, join_rel(&part_dir, "mod.rs"), pkg_vec, layer, UnitKind::BarrelFacade)
     });
     part_slug
 }

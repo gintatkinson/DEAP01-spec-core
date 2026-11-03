@@ -34,4 +34,5 @@
 
 pub mod code_ingestion_tests;
 pub mod code_realization_scoping_tests;
+pub mod markdown_translator_tests;
 pub mod reproducer_tests;

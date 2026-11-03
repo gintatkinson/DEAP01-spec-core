@@ -1,8 +1,35 @@
-//! Feature JSON Schema synthesis, constraint obligation deduplication, and BDD Acceptance Criteria rendering.
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
+//! # Feature Layer 2/3 Renderers and BDD Acceptance Criteria Synthesis
 //!
-//! Safety & Traceability: Realises: [REQ-SYNC-FORWARD-GENERATE-FEATURE-BDD]
-//! Contract: Projects SysML v2 `PartDef` attributes, ports, defaults, constraints, and `RequirementDef` bindings into Draft 2020-12 JSON Schemas and lossless `3..=10` positive/negative BDD Acceptance Criteria (`AC-01`..`AC-10`), and re-exports Feature class diagram and operation bullet codecs.
-//! Bounds & Faults: Enforces RFC 8259 string escaping, `BTreeMap`-ordered obligation deduplication without truncation, bounds-checked slice accessors, and saturating index arithmetic with zero runtime panics.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-FEATURE-BDD]
+//! Projects SysML v2 `PartDef` states, ports, operations, actions, constraints, and
+//! `RequirementDef` bindings into Feature Layers 2..=3 and lossless `3..=10` positive/negative
+//! BDD Acceptance Criteria (`AC-01`..`AC-10`).
+//!
+//! ## 2. Preconditions, Postconditions & Mathematical Invariants
+//! - **Preconditions**: Input `PartDef` and `RequirementDef` slices are valid AST nodes.
+//! - **Postconditions**: Emits 3-layer architectural prose and `3..=10` BDD criteria lines.
+//! - **Invariants**: When obligations exceed 4, remaining obligations are folded into a composite guard without truncation.
+//!
+//! ## 3. Failure Modes, Degraded Operation & Recovery
+//! - Classifiers with zero obligations emit 4 structural state/interface BDD criteria.
+//!
+//! ## 4. Concurrency, Memory & Resource Bounds
+//! - Pure single-threaded `O(N)` formatting over obligations and interface members.
+//!
+//! ## 5. Dependencies & Integration Contracts
+//! - Consumes `feature_schema` and re-exports `feature_diagrams` operation codecs.
+//!
+//! ## 6. Verification & Acceptance Criteria
+//! - Verified by Feature BDD and obligation tests in `sync/forward/tests*.rs`.
+//!
+//! ## 7. Realization & Traceability
+//! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-FEATURE-BDD]
 
 pub use super::feature_diagrams::{
     format_markdown_operation_bullet, format_mermaid_operation_signature,
@@ -10,252 +37,97 @@ pub use super::feature_diagrams::{
 };
 use super::*;
 
-/// Formats a single `AttributeDef` into a JSON Schema property block, recording non-defaulted attributes in `required`.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-JSON-SCHEMA]
-fn render_json_schema_attribute_prop(attr: &AttributeDef, required: &mut Vec<String>) -> String {
-    let raw_type = attr.type_name.trim();
-    let json_type = match raw_type {
-        "Integer" | "int" | "Nat" | "usize" | "u64" | "u32" | "i64" | "i32" => "integer",
-        "Real" | "Float" | "float" | "double" | "f64" | "f32" => "number",
-        "Boolean" | "bool" => "boolean",
-        _ => "string",
-    };
-    let escaped_attr_name = escape_json_string(&attr.name);
-    let display_sysml_type = if raw_type.is_empty() {
-        "String"
+/// Projects `PartDef` states, constraints, and requirements into `FEAT-*.md` `### Layer 2: Logic & Safety State Management`.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-RENDER-FEAT-LAYER2]
+pub(crate) fn render_feature_layer2_logic_management(
+    part: &PartDef,
+    reqs: &[&RequirementDef],
+) -> String {
+    let obligations = collect_feature_constraint_obligations(part, reqs);
+    let states_desc = if part.states.is_empty() {
+        "stateless structural transition evaluation".to_string()
     } else {
-        raw_type
+        let items: Vec<String> = part
+            .states
+            .iter()
+            .map(|st| {
+                let transitions: Vec<String> = st
+                    .transitions
+                    .iter()
+                    .filter_map(|tr| match (tr.source.as_deref(), tr.target.as_deref()) {
+                        (Some(s), Some(t)) if !s.trim().is_empty() && !t.trim().is_empty() => {
+                            Some(format!("{} -> {}", s.trim(), t.trim()))
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                if transitions.is_empty() {
+                    format!("`{}`", st.name.trim())
+                } else {
+                    format!("`{}` (`{}`)", st.name.trim(), transitions.join(", "))
+                }
+            })
+            .collect();
+        format!("lifecycle state machines {}", items.join(", "))
     };
-    let escaped_sysml_type = escape_json_string(display_sysml_type);
-    let desc_raw = attr
-        .doc
-        .as_deref()
-        .map(str::trim)
-        .filter(|d| !d.is_empty())
-        .map(str::to_string)
-        .unwrap_or_else(|| {
-            format!(
-                "Declared attribute {} ({})",
-                attr.name.trim(),
-                display_sysml_type
-            )
-        });
-    let escaped_desc = escape_json_string(&desc_raw);
 
-    let mut fields = vec![
-        format!("      \"type\": \"{json_type}\""),
-        format!("      \"x-sysml-type\": \"{escaped_sysml_type}\""),
-        format!("      \"description\": \"{escaped_desc}\""),
-    ];
-
-    let default_opt = attr
-        .default_value
-        .as_deref()
-        .map(str::trim)
-        .filter(|d| !d.is_empty());
-    if let Some(dv) = default_opt {
-        let default_lit = format_json_default_literal(dv, json_type);
-        fields.push(format!("      \"default\": {default_lit}"));
+    let inv_desc = if obligations.is_empty() {
+        "no additional invariant guards declared in schema".to_string()
     } else {
-        required.push(format!("\"{escaped_attr_name}\""));
-    }
+        let names: Vec<String> = obligations
+            .iter()
+            .map(|ob| format!("`{}`", ob.name))
+            .collect();
+        format!("invariant obligations {}", names.join(", "))
+    };
 
     format!(
-        "    \"{escaped_attr_name}\": {{\n{}\n    }}",
-        fields.join(",\n")
+        "Classifier `{}` governs {} enforcing {}.",
+        part.name, states_desc, inv_desc
     )
 }
 
-/// Generates a Draft 2020-12 JSON Schema from `PartDef` attributes, ports, defaults, and constraints.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-JSON-SCHEMA]
-pub(crate) fn generate_json_schema(part: &PartDef) -> String {
-    let mut props = Vec::new();
-    let mut required = Vec::new();
-    let escaped_part_name = escape_json_string(&part.name);
-
-    props.push(format!(
-        "    \"part\": {{\n      \"type\": \"string\",\n      \"const\": \"{escaped_part_name}\"\n    }}"
-    ));
-    required.push("\"part\"".to_string());
-
-    props.push(
-        "    \"status\": {\n      \"type\": \"string\",\n      \"enum\": [\"nominal\", \"degraded\", \"fault\"]\n    }".to_string(),
-    );
-    required.push("\"status\"".to_string());
-
-    for attr in &part.attributes {
-        props.push(render_json_schema_attribute_prop(attr, &mut required));
-    }
-
+/// Projects `PartDef` ports, operations, and actions into `FEAT-*.md` `### Layer 3: Presentation & Actuator Interface Binding`.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-RENDER-FEAT-LAYER3]
+pub(crate) fn render_feature_layer3_interface_binding(part: &PartDef) -> String {
+    let mut bindings: Vec<String> = Vec::new();
     for port in &part.ports {
-        let escaped_port_name = escape_json_string(&port.name);
-        let escaped_dir = escape_json_string(if port.direction.trim().is_empty() {
+        let dir = if port.direction.trim().is_empty() {
             "inout"
         } else {
             port.direction.trim()
-        });
-        let escaped_port_type = escape_json_string(if port.type_name.trim().is_empty() {
+        };
+        let pt = if port.type_name.trim().is_empty() {
             "Port"
         } else {
             port.type_name.trim()
-        });
-        props.push(format!(
-            "    \"{escaped_port_name}\": {{\n      \"type\": \"object\",\n      \"properties\": {{\n        \"direction\": {{ \"type\": \"string\", \"const\": \"{escaped_dir}\" }},\n        \"port_type\": {{ \"type\": \"string\", \"const\": \"{escaped_port_type}\" }}\n      }},\n      \"required\": [\"direction\", \"port_type\"]\n    }}"
-        ));
-        required.push(format!("\"{escaped_port_name}\""));
-    }
-
-    let constraints_extension = if part.constraints.is_empty() {
-        String::new()
-    } else {
-        let entries: Vec<String> = part
-            .constraints
-            .iter()
-            .filter(|c| !c.name.trim().is_empty())
-            .map(|c| {
-                format!(
-                    "    {{ \"name\": \"{}\", \"expression\": \"{}\" }}",
-                    escape_json_string(c.name.trim()),
-                    escape_json_string(c.expression.trim())
-                )
-            })
-            .collect();
-        if entries.is_empty() {
-            String::new()
-        } else {
-            format!(
-                ",\n  \"x-sysml-constraints\": [\n{}\n  ]",
-                entries.join(",\n")
-            )
-        }
-    };
-
-    format!(
-        "{{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"title\": \"{name}PayloadSchema\",\n  \"type\": \"object\",\n  \"properties\": {{\n{props}\n  }},\n  \"required\": [\n    {reqs}\n  ]{constraints_ext},\n  \"additionalProperties\": false\n}}",
-        name = escaped_part_name,
-        props = props.join(",\n"),
-        reqs = required.join(",\n    "),
-        constraints_ext = constraints_extension,
-    )
-}
-
-/// Deduplicated AST invariant or requirement obligation bound to a `PartDef` Feature specification.
-/// Realises: [REQ-SYNC-FORWARD-FEATURE-CONSTRAINT-OBLIGATION]
-#[derive(Debug, Clone)]
-pub(crate) struct FeatureConstraintObligation {
-    pub(crate) name: String,
-    pub(crate) safe_expr: Option<String>,
-    pub(crate) req_trace: Option<String>,
-}
-
-/// Inserts or enriches a `RequirementDef`-scoped `ConstraintDef` obligation in `obligations` using `index_by_name`.
-/// Realises: [REQ-SYNC-FORWARD-COLLECT-FEATURE-OBLIGATIONS]
-fn upsert_scoped_constraint_obligation(
-    c: &ConstraintDef,
-    req_trace: &Option<String>,
-    obligations: &mut Vec<FeatureConstraintObligation>,
-    index_by_name: &mut BTreeMap<String, usize>,
-) {
-    let name = c.name.trim();
-    if name.is_empty() {
-        return;
-    }
-    if let Some(&existing_idx) = index_by_name.get(name) {
-        if let Some(existing) = obligations.get_mut(existing_idx) {
-            if existing.req_trace.is_none() {
-                existing.req_trace.clone_from(req_trace);
-            }
-            if existing.safe_expr.is_none() {
-                let expr = c.expression.trim();
-                if is_provenance_safe_constraint_expr(expr) {
-                    existing.safe_expr = Some(expr.to_string());
-                }
-            }
-        }
-        return;
-    }
-    let expr = c.expression.trim();
-    let safe_expr = if is_provenance_safe_constraint_expr(expr) {
-        Some(expr.to_string())
-    } else {
-        None
-    };
-    let idx = obligations.len();
-    obligations.push(FeatureConstraintObligation {
-        name: name.to_string(),
-        safe_expr,
-        req_trace: req_trace.clone(),
-    });
-    index_by_name.insert(name.to_string(), idx);
-}
-
-/// Collects 100% of deduplicated constraint and requirement obligations for a `PartDef` without truncation loss.
-/// Realises: [REQ-SYNC-FORWARD-COLLECT-FEATURE-OBLIGATIONS]
-pub(crate) fn collect_feature_constraint_obligations(
-    part: &PartDef,
-    reqs: &[&RequirementDef],
-) -> Vec<FeatureConstraintObligation> {
-    let mut obligations: Vec<FeatureConstraintObligation> = Vec::new();
-    let mut index_by_name: BTreeMap<String, usize> = BTreeMap::new();
-
-    for c in &part.constraints {
-        let name = c.name.trim();
-        if name.is_empty() || index_by_name.contains_key(name) {
-            continue;
-        }
-        let expr = c.expression.trim();
-        let safe_expr = if is_provenance_safe_constraint_expr(expr) {
-            Some(expr.to_string())
-        } else {
-            None
         };
-        let idx = obligations.len();
-        obligations.push(FeatureConstraintObligation {
-            name: name.to_string(),
-            safe_expr,
-            req_trace: None,
-        });
-        index_by_name.insert(name.to_string(), idx);
+        bindings.push(format!("port `{} {} : {}`", dir, port.name.trim(), pt));
+    }
+    for op in &part.operations {
+        let ret = op.return_type.as_deref().unwrap_or("void");
+        bindings.push(format!("operation `{}() : {}`", op.name.trim(), ret));
+    }
+    for act in &part.actions {
+        bindings.push(format!("action `{}`", act.name.trim()));
     }
 
-    for req in part.requirements.iter().chain(reqs.iter().copied()) {
-        let req_label = format_requirement_label(req);
-        let req_trace = if req_label.is_empty() {
-            None
-        } else {
-            Some(req_label.clone())
-        };
-
-        if !req.constraints.is_empty() {
-            for c in &req.constraints {
-                upsert_scoped_constraint_obligation(
-                    c,
-                    &req_trace,
-                    &mut obligations,
-                    &mut index_by_name,
-                );
-            }
-        } else if !req_label.is_empty() && !index_by_name.contains_key(&req_label) {
-            let safe_expr = if is_provenance_safe_constraint_expr(&req.text) {
-                Some(req.text.trim().to_string())
-            } else {
-                None
-            };
-            let idx = obligations.len();
-            obligations.push(FeatureConstraintObligation {
-                name: req_label.clone(),
-                safe_expr,
-                req_trace,
-            });
-            index_by_name.insert(req_label, idx);
-        }
+    if bindings.is_empty() {
+        format!(
+            "Classifier `{}` exposes an internal structural boundary with no external ports, operations, or actions declared in schema.",
+            part.name
+        )
+    } else {
+        format!(
+            "Classifier `{}` binds external and behavioral interfaces across {}.",
+            part.name,
+            bindings.join(", ")
+        )
     }
-
-    obligations
 }
 
 /// Formats a `FeatureConstraintObligation` into a provenance-safe inline clause for Feature BDD criteria.
-/// Realises: [REQ-SYNC-FORWARD-FORMAT-FEATURE-OBLIGATION]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-FORMAT-FEATURE-OBLIGATION]
 pub(crate) fn format_feature_obligation_clause(ob: &FeatureConstraintObligation) -> String {
     let base = match &ob.safe_expr {
         Some(expr) => format!("`{}` (`{}`)", ob.name, sanitize_prose_links(expr)),
@@ -268,7 +140,7 @@ pub(crate) fn format_feature_obligation_clause(ob: &FeatureConstraintObligation)
 }
 
 /// Summarizes a `PartDef`'s declared attributes, ports, and diagnostic rejection channel for Feature BDD prose.
-/// Realises: [REQ-SYNC-FORWARD-SUMMARIZE-PART-INTERFACES]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-SUMMARIZE-PART-INTERFACES]
 pub(crate) fn summarize_part_interface_identifiers(part: &PartDef) -> (String, String, String) {
     let attr_summary = if part.attributes.is_empty() {
         format!("`{}` state representation", part.name)
@@ -322,7 +194,7 @@ pub(crate) fn summarize_part_interface_identifiers(part: &PartDef) -> (String, S
 }
 
 /// Appends paired positive satisfaction and negative boundary-violation BDD criteria for `ob` to `criteria`.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-FEATURE-BDD]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-FEATURE-BDD]
 fn push_invariant_bdd_pair(
     criteria: &mut Vec<String>,
     part_name: &str,
@@ -343,7 +215,7 @@ fn push_invariant_bdd_pair(
 }
 
 /// Appends positive and (when below the 10-AC ceiling) negative structural interface BDD criteria to `criteria`.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-FEATURE-BDD]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-FEATURE-BDD]
 fn push_interface_bdd_criteria(
     criteria: &mut Vec<String>,
     part_name: &str,
@@ -364,7 +236,7 @@ fn push_interface_bdd_criteria(
 }
 
 /// Generates lossless `3..=10` positive/negative BDD Acceptance Criteria from `PartDef` obligations and interfaces.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-FEATURE-BDD]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-FEATURE-BDD]
 pub(crate) fn generate_feature_bdd(part: &PartDef, reqs: &[&RequirementDef]) -> String {
     let obligations = collect_feature_constraint_obligations(part, reqs);
     let (attr_summary, port_summary, rejection_channel) =
@@ -403,7 +275,6 @@ pub(crate) fn generate_feature_bdd(part: &PartDef, reqs: &[&RequirementDef]) -> 
         for ob in obligations.iter().take(3) {
             push_invariant_bdd_pair(&mut criteria, &part.name, ob, &rejection_channel);
         }
-
         let remaining_clauses: Vec<String> = obligations
             .iter()
             .skip(3)

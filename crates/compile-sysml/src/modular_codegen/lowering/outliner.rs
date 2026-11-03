@@ -43,14 +43,14 @@ use crate::modular_codegen::domain::{
 #[must_use]
 pub fn to_snake_slug(name: &str) -> String {
     let mut raw = String::with_capacity(name.len().saturating_add(4));
-    let mut chars = name.chars().peekable();
+    let mut chars = name.chars();
     let mut prev_kind = 0u8;
     while let Some(c) = chars.next() {
         if !c.is_ascii_alphanumeric() {
             raw.push('_');
             prev_kind = 0;
         } else if c.is_ascii_uppercase() {
-            let next_lower = chars.peek().is_some_and(char::is_ascii_lowercase);
+            let next_lower = chars.as_str().starts_with(|n: char| n.is_ascii_lowercase());
             if prev_kind.saturating_add(u8::from(next_lower)) >= 2 {
                 raw.push('_');
             }

@@ -35,20 +35,11 @@ package StateMachinePkg {
         let state_def = part.states.first().ok_or("missing FlightMode")?;
         assert_eq!(state_def.transitions.len(), 4);
 
-        let tr0 = state_def
-            .transitions
-            .first()
-            .ok_or("missing transition 0")?;
-        assert!(
-            tr0.name.is_none(),
-            "unnamed transition must have name == None, got {:?}",
-            tr0.name
-        );
+        let tr0 = state_def.transitions.first().ok_or("missing transition 0")?;
+        assert!(tr0.name.is_none(), "unnamed transition must have name == None, got {:?}", tr0.name);
         assert_eq!(tr0.source.as_deref(), Some("Init"));
         assert_eq!(tr0.target.as_deref(), Some("Standby"));
-        assert_eq!(tr0.trigger, None);
-        assert_eq!(tr0.guard, None);
-        assert_eq!(tr0.effect, None);
+        assert_eq!((&tr0.trigger, &tr0.guard, &tr0.effect), (&None, &None, &None));
 
         let tr1 = state_def.transitions.get(1).ok_or("missing transition 1")?;
         assert_eq!(tr1.name.as_deref(), Some("t_arm"));
@@ -59,16 +50,10 @@ package StateMachinePkg {
         assert_eq!(tr1.effect.as_deref(), Some("EnableServos"));
 
         let tr2 = state_def.transitions.get(2).ok_or("missing transition 2")?;
-        assert!(
-            tr2.name.is_none(),
-            "unnamed transition must have name == None, got {:?}",
-            tr2.name
-        );
+        assert!(tr2.name.is_none(), "unnamed transition must have name == None, got {:?}", tr2.name);
         assert_eq!(tr2.source.as_deref(), Some("Armed"));
         assert_eq!(tr2.target.as_deref(), Some("Active"));
-        assert_eq!(tr2.trigger, None);
-        assert_eq!(tr2.guard, None);
-        assert_eq!(tr2.effect, None);
+        assert_eq!((&tr2.trigger, &tr2.guard, &tr2.effect), (&None, &None, &None));
 
         let tr3 = state_def.transitions.get(3).ok_or("missing transition 3")?;
         assert_eq!(tr3.name.as_deref(), Some("t_fault"));
@@ -77,7 +62,6 @@ package StateMachinePkg {
         assert_eq!(tr3.trigger.as_deref(), Some("FaultSignal"));
         assert_eq!(tr3.guard.as_deref(), Some("pitch_deg > 15.0"));
         assert_eq!(tr3.effect.as_deref(), Some("EngageBackup"));
-
         Ok(())
     }
 
@@ -87,154 +71,58 @@ package StateMachinePkg {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let src = "package P {\n    attribute r : &T?;\n    attribute x : Integer;\n}\n";
         let tokens = SysmlParser::tokenize_source(src)?;
-
-        let amp_tok = tokens
-            .iter()
-            .find(|t| t.kind == TokenKind::Ident("&".to_string()))
-            .ok_or("missing '&' token")?;
-        assert_eq!(
-            amp_tok.span,
-            Span {
-                start: 30,
-                end: 31,
-                line: 2,
-                col: 19,
-            },
-            "standalone '&' sigil must have exact 1-byte span"
-        );
-
-        let t_tok = tokens
-            .iter()
-            .find(|t| t.kind == TokenKind::Ident("T".to_string()))
-            .ok_or("missing 'T' token")?;
-        assert_eq!(
-            t_tok.span,
-            Span {
-                start: 31,
-                end: 32,
-                line: 2,
-                col: 20,
-            },
-            "token immediately following '&' must not have shifted column or byte offset"
-        );
-
-        let q_tok = tokens
-            .iter()
-            .find(|t| t.kind == TokenKind::Ident("?".to_string()))
-            .ok_or("missing '?' token")?;
-        assert_eq!(
-            q_tok.span,
-            Span {
-                start: 32,
-                end: 33,
-                line: 2,
-                col: 21,
-            },
-            "standalone '?' sigil must have exact 1-byte span"
-        );
-
-        let x_tok = tokens
-            .iter()
-            .find(|t| t.kind == TokenKind::Ident("x".to_string()))
-            .ok_or("missing 'x' token on line 3")?;
-        assert_eq!(
-            x_tok.span,
-            Span {
-                start: 49,
-                end: 50,
-                line: 3,
-                col: 15,
-            },
-            "tokens on subsequent lines after '&' and '?' must preserve exact byte offsets"
-        );
+        for (ident, expected_span) in [
+            ("&", Span { start: 30, end: 31, line: 2, col: 19 }),
+            ("T", Span { start: 31, end: 32, line: 2, col: 20 }),
+            ("?", Span { start: 32, end: 33, line: 2, col: 21 }),
+            ("x", Span { start: 49, end: 50, line: 3, col: 15 }),
+        ] {
+            let tok = tokens
+                .iter()
+                .find(|t| t.kind == TokenKind::Ident(ident.to_string()))
+                .ok_or("missing expected token")?;
+            assert_eq!(tok.span, expected_span);
+        }
 
         let bad_same_line = "package P {\n    part a : &T; part b : <>;\n}\n";
         let expected_lt_start = bad_same_line.find('<').ok_or("missing '<'")?;
-        let err_same = SysmlParser::parse_source(bad_same_line, "P")
-            .err()
-            .ok_or("empty generic '<>' after '&T' must fail")?;
-        assert_eq!(
-            err_same.span,
-            Span {
-                start: expected_lt_start,
-                end: expected_lt_start + 1,
-                line: 2,
-                col: 27,
-            },
-            "same-line ParseError after '&' must report unshifted column and byte span"
-        );
+        let err_same = SysmlParser::parse_source(bad_same_line, "P").err().ok_or("empty '<>' must fail")?;
+        assert_eq!(err_same.span, Span { start: expected_lt_start, end: expected_lt_start + 1, line: 2, col: 27 });
 
         let bad_cross_line = "package P {\n    attribute a : &T?;\n    atribute b : Integer;\n}\n";
         let expected_typo_start = bad_cross_line.find("atribute").ok_or("missing typo")?;
-        let err_cross = SysmlParser::parse_source(bad_cross_line, "P")
-            .err()
-            .ok_or("typo 'atribute' on line 3 must fail")?;
+        let err_cross = SysmlParser::parse_source(bad_cross_line, "P").err().ok_or("typo must fail")?;
         assert_eq!(
             err_cross.span,
-            Span {
-                start: expected_typo_start,
-                end: expected_typo_start + "atribute".len(),
-                line: 3,
-                col: 5,
-            },
-            "cross-line ParseError after '&' and '?' must report exact byte span"
+            Span { start: expected_typo_start, end: expected_typo_start + "atribute".len(), line: 3, col: 5 }
         );
 
-        let quoted_ident_src =
-            "package P {\n    part def '&' {\n        attribute '?' : '&';\n    }\n}\n";
+        let quoted_ident_src = "package P {\n    part def '&' {\n        attribute '?' : '&';\n    }\n}\n";
         let quoted_pkg = SysmlParser::parse_source(quoted_ident_src, "P")?;
         let quoted_part = quoted_pkg.part_defs.first().ok_or("missing part def '&'")?;
         assert_eq!(quoted_part.name, "&");
-        let quoted_attr = quoted_part
-            .attributes
-            .first()
-            .ok_or("missing attribute '?'")?;
+        let quoted_attr = quoted_part.attributes.first().ok_or("missing attribute '?'")?;
         assert_eq!(quoted_attr.name, "?");
         assert_eq!(quoted_attr.type_name, "&");
 
-        assert!(
-            SysmlParser::parse_source("package P { part def &; }", "P").is_err(),
-            "raw unquoted '&' must be rejected as a declaration identifier"
-        );
-        assert!(
-            SysmlParser::parse_source("package P { part def ?; }", "P").is_err(),
-            "raw unquoted '?' must be rejected as a declaration identifier"
-        );
-        assert!(
-            SysmlParser::parse_source("package P { attribute x : ?; }", "P").is_err(),
-            "standalone '?' without a base type must be rejected as a type expression"
-        );
+        assert!(SysmlParser::parse_source("package P { part def &; }", "P").is_err());
+        assert!(SysmlParser::parse_source("package P { part def ?; }", "P").is_err());
+        assert!(SysmlParser::parse_source("package P { attribute x : ?; }", "P").is_err());
 
         let expr_and_escape_src = "package P {\n    part def 'a\\'&b' {\n        attribute mask : Integer = a & b;\n        constraint def C {\n            (x > 0) ? a : b;\n        }\n    }\n}\n";
         let expr_pkg = SysmlParser::parse_source(expr_and_escape_src, "P")?;
         let escaped_part = expr_pkg.part_defs.first().ok_or("missing escaped part")?;
         assert_eq!(escaped_part.name, "a'&b");
-        assert_eq!(
-            escaped_part
-                .attributes
-                .first()
-                .and_then(|a| a.default_value.as_deref()),
-            Some("a & b")
-        );
-        assert_eq!(
-            escaped_part
-                .constraints
-                .first()
-                .map(|c| c.expression.as_str()),
-            Some("( x > 0 ) ? a : b")
-        );
+        assert_eq!(escaped_part.attributes.first().and_then(|a| a.default_value.as_deref()), Some("a & b"));
+        assert_eq!(escaped_part.constraints.first().map(|c| c.expression.as_str()), Some("( x > 0 ) ? a : b"));
 
-        let expr_err_src = format!(
-            "{}\npackage Bad {{\n    atribute z : Integer;\n}}\n",
-            expr_and_escape_src
-        );
+        let expr_err_src = format!("{expr_and_escape_src}\npackage Bad {{\n    atribute z : Integer;\n}}\n");
         let z_typo_start = expr_err_src.find("atribute").ok_or("missing atribute")?;
         let expr_err = SysmlParser::parse_source(&expr_err_src, "P")
             .err()
             .ok_or("expected error on trailing package typo")?;
         assert_eq!(expr_err.span.start, z_typo_start);
         assert_eq!(expr_err.span.end, z_typo_start + "atribute".len());
-
         Ok(())
     }
 
@@ -251,49 +139,20 @@ package StateMachinePkg {
             .iter()
             .find(|t| t.kind == TokenKind::Ident("?".to_string()))
             .ok_or("missing '?' token after lifetime reference &'a T")?;
-        assert_eq!(
-            q_tok.span,
-            Span {
-                start: 35,
-                end: 36,
-                line: 2,
-                col: 24,
-            },
-            "'?' after &'a T must be normalized and preserve exact 1-byte span"
-        );
+        assert_eq!(q_tok.span, Span { start: 35, end: 36, line: 2, col: 24 });
 
         let pkg = SysmlParser::parse_source(lifetime_src, "P")?;
-        assert_eq!(
-            pkg.attribute_defs.first().map(|a| a.type_name.as_str()),
-            Some("&'a T?")
-        );
-        assert_eq!(
-            pkg.attribute_defs.get(1).map(|a| a.type_name.as_str()),
-            Some("&'static mut [u8]")
-        );
+        assert_eq!(pkg.attribute_defs.first().map(|a| a.type_name.as_str()), Some("&'a T?"));
+        assert_eq!(pkg.attribute_defs.get(1).map(|a| a.type_name.as_str()), Some("&'static mut [u8]"));
 
         let multi_lifetime_src = "package P {\n    attribute pair : (&'a T, &'b mut U?);\n}\n";
         let multi_pkg = SysmlParser::parse_source(multi_lifetime_src, "P")?;
-        assert_eq!(
-            multi_pkg
-                .attribute_defs
-                .first()
-                .map(|a| a.type_name.as_str()),
-            Some("(&'a T, &'b mut U?)")
-        );
-
-        assert!(
-            SysmlParser::parse_source("package P { part def 'a; }", "P").is_err(),
-            "unclosed single quote in identifier position must fail closed"
-        );
+        assert_eq!(multi_pkg.attribute_defs.first().map(|a| a.type_name.as_str()), Some("(&'a T, &'b mut U?)"));
+        assert!(SysmlParser::parse_source("package P { part def 'a; }", "P").is_err());
 
         let state_src = "package ModePkg {\n    state def OperatingMode {\n        state Idle;\n        state Active;\n        transition first Idle accept EngageCmd if is_ready do init_actuators then Active;\n    }\n}\n";
         let state_pkg1 = SysmlParser::parse_source(state_src, "ModePkg")?;
-        let t1 = state_pkg1
-            .state_defs
-            .first()
-            .and_then(|s| s.transitions.first())
-            .ok_or("missing transition in state_pkg1")?;
+        let t1 = state_pkg1.state_defs.first().and_then(|s| s.transitions.first()).ok_or("missing t1")?;
         assert_eq!(t1.source.as_deref(), Some("Idle"));
         assert_eq!(t1.target.as_deref(), Some("Active"));
         assert_eq!(t1.trigger.as_deref(), Some("EngageCmd"));
@@ -302,11 +161,7 @@ package StateMachinePkg {
 
         let emitted = state_pkg1.to_sysml(0);
         let state_pkg2 = SysmlParser::parse_source(&emitted, "ModePkg")?;
-        let t2 = state_pkg2
-            .state_defs
-            .first()
-            .and_then(|s| s.transitions.first())
-            .ok_or("missing transition in round-tripped state_pkg2")?;
+        let t2 = state_pkg2.state_defs.first().and_then(|s| s.transitions.first()).ok_or("missing t2")?;
         assert_eq!(t2.source.as_deref(), Some("Idle"));
         assert_eq!(t2.target.as_deref(), Some("Active"));
         assert_eq!(t2.trigger.as_deref(), Some("EngageCmd"));
@@ -323,7 +178,6 @@ package StateMachinePkg {
             let reparsed = SysmlParser::parse_transition_clause(&formatted);
             assert_eq!(parsed, reparsed);
         }
-
         Ok(())
     }
 
@@ -354,9 +208,7 @@ package Issue496Pkg {
         assert_eq!(t0.name, None);
         assert_eq!(t0.source.as_deref(), Some("Init"));
         assert_eq!(t0.target.as_deref(), Some("Mode::Standby"));
-        assert_eq!(t0.trigger, None);
-        assert_eq!(t0.guard, None);
-        assert_eq!(t0.effect, None);
+        assert_eq!((&t0.trigger, &t0.guard, &t0.effect), (&None, &None, &None));
 
         let t1 = st.transitions.get(1).ok_or("missing transition 1")?;
         assert_eq!(t1.name, None);
@@ -375,25 +227,12 @@ package Issue496Pkg {
         assert_eq!(t2.effect.as_deref(), Some("resetState(then)"));
 
         let serialized = pkg.to_sysml(0);
-        assert!(
-            serialized.contains("transition first Init then Mode::Standby;"),
-            "serialized output missing t0: {}",
-            serialized
-        );
-        assert!(
-            serialized.contains("transition first Mode::Standby accept Sig::Arm(from) if check(to, speed > 0) do sendCmd(x, y) then Sub.Armed;"),
-            "serialized output missing t1: {}",
-            serialized
-        );
-        assert!(
-            serialized.contains("transition t_named first Sub.Armed accept Nav::Disarm if isSafe(first) do resetState(then) then Init;"),
-            "serialized output missing full named transition t2: {}",
-            serialized
-        );
+        assert!(serialized.contains("transition first Init then Mode::Standby;"));
+        assert!(serialized.contains("transition first Mode::Standby accept Sig::Arm(from) if check(to, speed > 0) do sendCmd(x, y) then Sub.Armed;"));
+        assert!(serialized.contains("transition t_named first Sub.Armed accept Nav::Disarm if isSafe(first) do resetState(then) then Init;"));
 
         let reparsed = SysmlParser::parse_source(&serialized, "Issue496Pkg")?;
         assert_eq!(reparsed, pkg);
-
         Ok(())
     }
 
@@ -447,10 +286,7 @@ package Issue509Pkg {
         assert_eq!(sub1.do_action.as_deref(), Some("action::step(1)"));
 
         assert_eq!(st.transitions.len(), 1);
-        let tr = st
-            .transitions
-            .first()
-            .ok_or("missing transition t_engage")?;
+        let tr = st.transitions.first().ok_or("missing transition t_engage")?;
         assert_eq!(tr.name.as_deref(), Some("t_engage"));
         assert_eq!(tr.doc.as_deref(), Some("Transition from Standby to Active"));
         assert_eq!(tr.source.as_deref(), Some("Standby"));
@@ -460,30 +296,13 @@ package Issue509Pkg {
         assert_eq!(tr.effect.as_deref(), Some("EnableServos(1, 2)"));
 
         let serialized = pkg.to_sysml(0);
-        assert!(
-            serialized.contains("entry Nav::initFilter(x, y);"),
-            "serialized output missing formatted entry action: {}",
-            serialized
-        );
-        assert!(
-            serialized.contains("do ctrl.runStep(a[0], b);"),
-            "serialized output missing formatted do action: {}",
-            serialized
-        );
-        assert!(
-            serialized.contains("exit Actuator::shutdown();"),
-            "serialized output missing formatted exit action: {}",
-            serialized
-        );
-        assert!(
-            serialized.contains("doc /* Transition from Standby to Active */"),
-            "serialized output missing transition doc comment: {}",
-            serialized
-        );
+        assert!(serialized.contains("entry Nav::initFilter(x, y);"));
+        assert!(serialized.contains("do ctrl.runStep(a[0], b);"));
+        assert!(serialized.contains("exit Actuator::shutdown();"));
+        assert!(serialized.contains("doc /* Transition from Standby to Active */"));
 
         let reparsed = SysmlParser::parse_source(&serialized, "Issue509Pkg")?;
         assert_eq!(reparsed, pkg);
-
         Ok(())
     }
 }

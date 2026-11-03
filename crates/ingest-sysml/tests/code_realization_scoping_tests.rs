@@ -1,38 +1,6 @@
 //! Integration tests for Issue #472: Deterministic realization package naming and architectural
 //! `part def` scoping during Rust (`src/`) and Dart/Flutter (`lib/`) source code ingestion.
 //!
-//! ## 1. Safety Intent & Regulatory Scope
-//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C software
-//! architecture extraction and traceability verification rules. Verifies that ingesting
-//! `<component>/src` or `<component>/lib` produces parent-qualified `<Parent>_<src|lib>_Realization`
-//! package names instead of raw `package src` / `package lib`, supports `--package <NAME>`
-//! overrides, scopes code `part def` extraction when combined with `--schema <DOMAIN_SCHEMA>`,
-//! and preserves Check 17 Pillar 7 FMECA bidirectional closure across realization schemas.
-//!
-//! ## 2. Invariants & Mathematical Properties
-//! - Ingesting `<parent>/src` or `<parent>/lib` without `--package` never emits `package src`
-//!   or `package lib`.
-//! - Combining `--source <DIR>` with `--schema <DOMAIN_SCHEMA>` retains only `PartDef` items
-//!   matching declared architectural `part def` components or carrying explicit `Realises:`
-//!   traceability bindings.
-//! - Check 17 (`check_safety_integrity`) Pillar 7 FMECA closure evaluates architectural domain
-//!   `part def` declarations without failing on realization-only code structs in `*_realization.sysml`.
-//!
-//! ## 3. Preconditions
-//! - Temporary test workspaces are created in the OS temporary directory and cleaned up on drop.
-//!
-//! ## 4. Postconditions
-//! - Asserts deterministic package naming, realization `PartDef` scoping, and Check 17 Pillar 7
-//!   FMECA closure compliance.
-//!
-//! ## 5. Algorithmic Complexity Bounds
-//! - Time Complexity: $O(N \log N)$ bounded by temporary fixture size $N$.
-//! - Space Complexity: $O(N)$ for parsed SysML v2 AST structures and temporary test files.
-//!
-//! ## 6. Failure Modes & Fault Tolerance
-//! - Temporary directories are unconditionally removed in `Drop` even if an assertion panics.
-//!
-//! ## 7. Realization & Traceability
 //! Realises: [REQ-ISSUE-472-REALIZATION-SCOPING-TESTS]
 
 use compile_sysml::docstring::run_extract_source;
@@ -44,138 +12,33 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// RAII temporary workspace guard for Issue #472 realization scoping tests.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Ensures isolated filesystem fixtures in `std::env::temp_dir()` for deterministic testing
-/// without polluting the repository workspace.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Each instance receives a unique directory path combining process ID, nanosecond timestamp,
-///   and an atomic counter.
-///
-/// ## 3. Preconditions
-/// - OS temporary directory is writable.
-///
-/// ## 4. Postconditions
-/// - `self.root` exists on disk during test execution and is recursively deleted on drop.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$ creation, $O(F)$ cleanup for $F$ created files.
-/// - Space Complexity: $O(1)$ heap path allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Ignores cleanup errors on drop to prevent double-panic abort during unwinding.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ISSUE-472-TEMP-DIR-GUARD]
+/// RAII temporary workspace guard for Issue #472 realization scoping tests. Realises: [REQ-ISSUE-472-TEMP-DIR-GUARD]
 struct ScopedTempDir {
     root: PathBuf,
 }
 
 impl ScopedTempDir {
-    /// Creates a new isolated temporary workspace directory with the given `label`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Provides deterministic test isolation for filesystem-backed CLI and AST verification tests.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Monotonically incrementing atomic counter prevents collisions across parallel test threads.
-    ///
-    /// ## 3. Preconditions
-    /// - `label` is a valid path segment string.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns a `ScopedTempDir` whose `root` directory exists on disk.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(1)$ directory creation.
-    /// - Space Complexity: $O(1)$ `PathBuf` allocation.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Panics with a diagnostic message if the OS temporary directory is unwritable.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-ISSUE-472-TEMP-DIR-NEW]
+    /// Creates a new isolated temporary workspace directory with the given `label`. Realises: [REQ-ISSUE-472-TEMP-DIR-NEW]
     fn new(label: &str) -> Self {
         static COUNTER: AtomicU64 = AtomicU64::new(0);
         let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
-        let root = std::env::temp_dir().join(format!(
-            "deap_issue472_{}_{}_{}_{}",
-            label,
-            std::process::id(),
-            nanos,
-            seq
-        ));
+        let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+        let root = std::env::temp_dir().join(format!("deap_issue472_{label}_{}_{nanos}_{seq}", std::process::id()));
         let _ = fs::create_dir_all(&root);
         Self { root }
     }
 }
 
 impl Drop for ScopedTempDir {
-    /// Recursively removes the temporary workspace directory when the guard leaves scope.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Enforces zero leftover temporary test artifacts on the host filesystem.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Unconditionally invokes `fs::remove_dir_all(&self.root)`.
-    ///
-    /// ## 3. Preconditions
-    /// - `self` is being dropped.
-    ///
-    /// ## 4. Postconditions
-    /// - Temporary directory `self.root` is removed from disk.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(F)$ where $F$ is the number of files created inside `self.root`.
-    /// - Space Complexity: $O(1)$ auxiliary stack space.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Swallows `io::Error` during drop so test failure panics are never masked.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-ISSUE-472-TEMP-DIR-DROP]
+    /// Recursively removes the temporary workspace directory when the guard leaves scope. Realises: [REQ-ISSUE-472-TEMP-DIR-DROP]
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.root);
     }
 }
 
-/// Verifies that ingesting `<component>/src` and `<component>/lib` derives parent-qualified
-/// `<Parent>_<src|lib>_Realization` package names instead of raw `package src` / `package lib`,
-/// and that `--package <NAME>` explicitly overrides the target package identifier.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Prevents root namespace pollution (`package src`, `package lib`) across multi-component
-/// Rust and Flutter workspaces during Ground 0.0 source ingestion and docstring extraction.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `crates/solver/src` -> `solver_src_Realization`
-/// - `app_flutter/lib` -> `app_flutter_lib_Realization`
-/// - `--package CustomSolverPkg` -> `CustomSolverPkg`
-///
-/// ## 3. Preconditions
-/// - `CARGO_BIN_EXE_ingest-sysml` binary is built and accessible.
-///
-/// ## 4. Postconditions
-/// - Emitted SysML v2 packages match expected parent-qualified realization names or explicit overrides.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ over fixture source files.
-/// - Space Complexity: $O(N)$ for parsed `PackageDef` AST.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Fails with explicit diagnostic output if raw `package src` or `package lib` is emitted.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ISSUE-472-PACKAGE-QUALIFICATION]
+/// Verifies parent-qualified `<Parent>_<src|lib>_Realization` package naming and `--package` override. Realises: [REQ-ISSUE-472-PACKAGE-QUALIFICATION]
 #[test]
-fn test_issue_472_parent_qualified_realization_package_naming_and_override(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn test_issue_472_parent_qualified_realization_package_naming_and_override() -> Result<(), Box<dyn std::error::Error>> {
     let ws = ScopedTempDir::new("pkg_naming");
     let solver_src = ws.root.join("crates").join("solver").join("src");
     let flutter_lib = ws.root.join("app_flutter").join("lib");
@@ -188,7 +51,6 @@ fn test_issue_472_parent_qualified_realization_package_naming_and_override(
         solver_src.join("lib.rs"),
         "/// Realises: [REQ-SOLVER-01]\npub struct TacticalSolver {\n    pub horizon_sec: u32,\n}\n",
     )?;
-
     fs::write(
         flutter_lib.join("cockpit_hud.dart"),
         "/// Realises: [REQ-HUD-01]\nclass CockpitHud {\n  final String mode;\n  CockpitHud(this.mode);\n}\n",
@@ -196,85 +58,37 @@ fn test_issue_472_parent_qualified_realization_package_naming_and_override(
 
     let bin = env!("CARGO_BIN_EXE_ingest-sysml");
 
-    // 1. Ingest crates/solver/src without --package -> solver_src_Realization
     let solver_out = schema_dir.join("solver_realization.sysml");
     let solver_digest = schema_dir.join("solver_digest.json");
     let status_solver = Command::new(bin)
-        .arg("--source")
-        .arg(&solver_src)
-        .arg("--out")
-        .arg(&solver_out)
-        .arg("--digest")
-        .arg(&solver_digest)
+        .args(["--source", &solver_src.to_string_lossy(), "--out", &solver_out.to_string_lossy(), "--digest", &solver_digest.to_string_lossy()])
         .output()?;
-    assert!(
-        status_solver.status.success(),
-        "ingest-sysml failed on crates/solver/src: {}",
-        String::from_utf8_lossy(&status_solver.stderr)
-    );
+    assert!(status_solver.status.success(), "{}", String::from_utf8_lossy(&status_solver.stderr));
     let solver_sysml = fs::read_to_string(&solver_out)?;
     let solver_pkg = parse_sysml(&solver_sysml)?;
-    assert_eq!(
-        solver_pkg.name, "solver_src_Realization",
-        "Expected parent-qualified 'solver_src_Realization' instead of raw 'src', got:\n{}",
-        solver_sysml
-    );
-    assert!(
-        !solver_sysml.contains("package src "),
-        "Emitted SysML must never contain unscoped 'package src'"
-    );
+    assert_eq!(solver_pkg.name, "solver_src_Realization");
+    assert!(!solver_sysml.contains("package src "));
 
-    // 2. Ingest app_flutter/lib without --package -> app_flutter_lib_Realization
     let cockpit_out = schema_dir.join("cockpit_realization.sysml");
     let cockpit_digest = schema_dir.join("cockpit_digest.json");
     let status_cockpit = Command::new(bin)
-        .arg("--source")
-        .arg(&flutter_lib)
-        .arg("--out")
-        .arg(&cockpit_out)
-        .arg("--digest")
-        .arg(&cockpit_digest)
+        .args(["--source", &flutter_lib.to_string_lossy(), "--out", &cockpit_out.to_string_lossy(), "--digest", &cockpit_digest.to_string_lossy()])
         .output()?;
-    assert!(
-        status_cockpit.status.success(),
-        "ingest-sysml failed on app_flutter/lib: {}",
-        String::from_utf8_lossy(&status_cockpit.stderr)
-    );
+    assert!(status_cockpit.status.success(), "{}", String::from_utf8_lossy(&status_cockpit.stderr));
     let cockpit_sysml = fs::read_to_string(&cockpit_out)?;
     let cockpit_pkg = parse_sysml(&cockpit_sysml)?;
-    assert_eq!(
-        cockpit_pkg.name, "app_flutter_lib_Realization",
-        "Expected parent-qualified 'app_flutter_lib_Realization' instead of raw 'lib', got:\n{}",
-        cockpit_sysml
-    );
-    assert!(
-        !cockpit_sysml.contains("package lib "),
-        "Emitted SysML must never contain unscoped 'package lib'"
-    );
+    assert_eq!(cockpit_pkg.name, "app_flutter_lib_Realization");
+    assert!(!cockpit_sysml.contains("package lib "));
 
-    // 3. Explicit --package CustomSolverPkg overrides default derivation
     let custom_out = schema_dir.join("custom_solver.sysml");
     let custom_digest = schema_dir.join("custom_digest.json");
     let status_custom = Command::new(bin)
-        .arg("--source")
-        .arg(&solver_src)
-        .arg("--package")
-        .arg("CustomSolverPkg")
-        .arg("--out")
-        .arg(&custom_out)
-        .arg("--digest")
-        .arg(&custom_digest)
+        .args(["--source", &solver_src.to_string_lossy(), "--package", "CustomSolverPkg", "--out", &custom_out.to_string_lossy(), "--digest", &custom_digest.to_string_lossy()])
         .output()?;
-    assert!(
-        status_custom.status.success(),
-        "ingest-sysml --package failed: {}",
-        String::from_utf8_lossy(&status_custom.stderr)
-    );
-    let custom_sysml = fs::read_to_string(&custom_out)?;
-    let custom_pkg = parse_sysml(&custom_sysml)?;
+    assert!(status_custom.status.success(), "{}", String::from_utf8_lossy(&status_custom.stderr));
+    let custom_pkg = parse_sysml(&fs::read_to_string(&custom_out)?)?;
     assert_eq!(custom_pkg.name, "CustomSolverPkg");
 
-    // 4. Verify run_extract_source and ingest_source_directory also qualify raw "src" / "lib"
     let extracted_pkg = run_extract_source(
         &solver_src,
         &schema_dir.join("extract.sysml"),
@@ -289,39 +103,9 @@ fn test_issue_472_parent_qualified_realization_package_naming_and_override(
     Ok(())
 }
 
-/// Verifies that combining `--source <DIR>` with `--schema <DOMAIN_SCHEMA>` (without manual
-/// `--allowed-parts`) automatically scopes extracted code `PartDef` items to architectural
-/// `part def` components declared in `--schema` or source items carrying explicit `Realises:`
-/// requirement bindings, pruning unannotated internal UI/helper structs.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Prevents 140+ internal implementation helper structs, DTOs, and private widget state classes
-/// from polluting architectural `part def` namespaces when extracting code realization models.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Retains `PartDef` $P$ iff $P.\text{name} \in \text{SchemaParts} \lor P.\text{satisfied\_requirements} \neq \emptyset$.
-/// - Prunes unannotated internal helper structs and enums not present in the reference domain schema.
-///
-/// ## 3. Preconditions
-/// - Domain schema and multi-item source tree exist in the temporary workspace.
-///
-/// ## 4. Postconditions
-/// - Output realization package contains `TacticalSolver` and `RealizedTrackFilter`, and excludes
-///   `InternalScratchBuffer` and `PrivateUiHelperEnum`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N \log N)$ in source and schema file size.
-/// - Space Complexity: $O(P)$ where $P$ is the number of AST part definitions.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Fails closed if `--source` and `--schema` are rejected as mutually exclusive or if unannotated
-///   helper types leak into `pkg.part_defs`.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ISSUE-472-SCHEMA-SCOPED-CODE-INGESTION]
+/// Verifies `--source <DIR> --schema <DOMAIN_SCHEMA>` scopes extracted `PartDef` items to architectural and realized parts. Realises: [REQ-ISSUE-472-SCHEMA-SCOPED-CODE-INGESTION]
 #[test]
-fn test_issue_472_source_with_reference_schema_scopes_to_architectural_and_realized_parts(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn test_issue_472_source_with_reference_schema_scopes_to_architectural_and_realized_parts() -> Result<(), Box<dyn std::error::Error>> {
     let ws = ScopedTempDir::new("schema_scoping");
     let solver_src = ws.root.join("crates").join("solver").join("src");
     let schema_dir = ws.root.join("schema");
@@ -329,39 +113,10 @@ fn test_issue_472_source_with_reference_schema_scopes_to_architectural_and_reali
     fs::create_dir_all(&schema_dir)?;
 
     let domain_schema_path = schema_dir.join("domain.sysml");
-    let domain_sysml = r#"package TacticalDomain {
-    requirement def REQ_SOLVER_01 {
-        doc /* Real-time track correlation */
-    }
-    part def TacticalSolver;
-    part def CockpitHud;
-}
-"#;
+    let domain_sysml = "package TacticalDomain {\n    requirement def REQ_SOLVER_01 {\n        doc /* Real-time track correlation */\n    }\n    part def TacticalSolver;\n    part def CockpitHud;\n}\n";
     fs::write(&domain_schema_path, domain_sysml)?;
 
-    // Source file contains:
-    // 1. TacticalSolver (matches domain schema part def)
-    // 2. RealizedTrackFilter (carries explicit Realises: [REQ-SOLVER-01])
-    // 3. InternalScratchBuffer (unannotated internal helper struct -> must be pruned)
-    // 4. PrivateUiHelperEnum (unannotated internal helper enum -> must be pruned from part_defs)
-    let rust_source = r#"pub struct TacticalSolver {
-    pub cycle_ms: u32,
-}
-
-/// Realises: [REQ-SOLVER-01]
-pub struct RealizedTrackFilter {
-    pub alpha_gain: f64,
-}
-
-pub struct InternalScratchBuffer {
-    pub capacity: usize,
-}
-
-pub enum PrivateUiHelperEnum {
-    Hidden,
-    Visible,
-}
-"#;
+    let rust_source = "pub struct TacticalSolver {\n    pub cycle_ms: u32,\n}\n\n/// Realises: [REQ-SOLVER-01]\npub struct RealizedTrackFilter {\n    pub alpha_gain: f64,\n}\n\npub struct InternalScratchBuffer {\n    pub capacity: usize,\n}\n\npub enum PrivateUiHelperEnum {\n    Hidden,\n    Visible,\n}\n";
     fs::write(solver_src.join("lib.rs"), rust_source)?;
 
     let out_sysml_path = schema_dir.join("solver_realization.sysml");
@@ -369,45 +124,20 @@ pub enum PrivateUiHelperEnum {
 
     let bin = env!("CARGO_BIN_EXE_ingest-sysml");
     let output = Command::new(bin)
-        .arg("--source")
-        .arg(&solver_src)
-        .arg("--schema")
-        .arg(&domain_schema_path)
-        .arg("--out")
-        .arg(&out_sysml_path)
-        .arg("--digest")
-        .arg(&out_digest_path)
+        .args([
+            "--source", &solver_src.to_string_lossy(),
+            "--schema", &domain_schema_path.to_string_lossy(),
+            "--out", &out_sysml_path.to_string_lossy(),
+            "--digest", &out_digest_path.to_string_lossy(),
+        ])
         .output()?;
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
 
-    assert!(
-        output.status.success(),
-        "Expected ingest-sysml --source <DIR> --schema <SCHEMA> to succeed, stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    let generated = fs::read_to_string(&out_sysml_path)?;
-    let pkg = parse_sysml(&generated)?;
+    let pkg = parse_sysml(&fs::read_to_string(&out_sysml_path)?)?;
     let part_names: Vec<&str> = pkg.part_defs.iter().map(|p| p.name.as_str()).collect();
-
-    assert!(
-        part_names.contains(&"TacticalSolver"),
-        "Expected architectural part 'TacticalSolver' to be retained, got: {:?}",
-        part_names
-    );
-    assert!(
-        part_names.contains(&"RealizedTrackFilter"),
-        "Expected realized part 'RealizedTrackFilter' to be retained, got: {:?}",
-        part_names
-    );
-    assert!(
-        !part_names.contains(&"InternalScratchBuffer"),
-        "Expected unannotated helper 'InternalScratchBuffer' to be pruned, got: {:?}",
-        part_names
-    );
-    assert!(
-        !part_names.contains(&"PrivateUiHelperEnum"),
-        "Expected unannotated helper enum 'PrivateUiHelperEnum' to be pruned from part_defs, got: {:?}",
-        part_names
-    );
+    assert!(part_names.contains(&"TacticalSolver"));
+    assert!(part_names.contains(&"RealizedTrackFilter"));
+    assert!(!part_names.contains(&"InternalScratchBuffer"));
+    assert!(!part_names.contains(&"PrivateUiHelperEnum"));
     Ok(())
 }

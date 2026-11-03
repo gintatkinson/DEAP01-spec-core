@@ -130,6 +130,51 @@ fn resolve_slice_reqs_and_hazards(
     (ctx.ports, ctx.interfaces, requirements, hazards)
 }
 
+/// Matches parts and initial ports for the requested target package or part identifier.
+/// Realises: [REQ-SYSML-AST-SLICE-PACKAGE-SUBSYSTEM]
+fn select_matched_parts_and_ports(
+    model: &SysmlModel,
+    target: &str,
+) -> Result<(Vec<PartDef>, Vec<PortDef>), CoreError> {
+    let pkg_matches = model
+        .package_name
+        .as_deref()
+        .is_some_and(|pkg_name| pkg_name == target || pkg_name.eq_ignore_ascii_case(target));
+
+    let matched_parts: Vec<PartDef> = if pkg_matches {
+        model.parts.clone()
+    } else {
+        model
+            .parts
+            .iter()
+            .filter(|p| {
+                p.name == target
+                    || p.name.starts_with(target)
+                    || p.name.eq_ignore_ascii_case(target)
+            })
+            .cloned()
+            .collect()
+    };
+
+    if !pkg_matches && matched_parts.is_empty() {
+        return Err(CoreError::validation(format!(
+            "No package or part matching '{}' found in SysmlModel",
+            target
+        )));
+    }
+
+    let mut initial_ports: Vec<PortDef> = Vec::new();
+    if pkg_matches {
+        for port in &model.ports {
+            if !initial_ports.iter().any(|existing| existing.name == port.name) {
+                initial_ports.push(port.clone());
+            }
+        }
+    }
+
+    Ok((matched_parts, initial_ports))
+}
+
 impl SysmlModel {
     /// Extracts a deterministic, token-budgeted `AstSlice` for `target_package` from this `SysmlModel`.
     ///
@@ -148,41 +193,7 @@ impl SysmlModel {
             return Err(CoreError::validation("max_tokens must be greater than zero"));
         }
 
-        let pkg_matches = self
-            .package_name
-            .as_deref()
-            .is_some_and(|pkg_name| pkg_name == target || pkg_name.eq_ignore_ascii_case(target));
-
-        let matched_parts: Vec<PartDef> = if pkg_matches {
-            self.parts.clone()
-        } else {
-            self.parts
-                .iter()
-                .filter(|p| {
-                    p.name == target
-                        || p.name.starts_with(target)
-                        || p.name.eq_ignore_ascii_case(target)
-                })
-                .cloned()
-                .collect()
-        };
-
-        if !pkg_matches && matched_parts.is_empty() {
-            return Err(CoreError::validation(format!(
-                "No package or part matching '{}' found in SysmlModel",
-                target
-            )));
-        }
-
-        let mut initial_ports: Vec<PortDef> = Vec::new();
-        if pkg_matches {
-            for port in &self.ports {
-                if !initial_ports.iter().any(|existing| existing.name == port.name) {
-                    initial_ports.push(port.clone());
-                }
-            }
-        }
-
+        let (matched_parts, initial_ports) = select_matched_parts_and_ports(self, target)?;
         let ctx = extract_part_context(&matched_parts, initial_ports);
         let (ports, interfaces, requirements, hazards) =
             resolve_slice_reqs_and_hazards(&self.requirements, ctx);

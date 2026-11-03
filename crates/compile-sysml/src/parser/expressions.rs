@@ -1,29 +1,27 @@
 //! Mathematical, logical, and formal KaTeX expression parser for SysML v2 constraints.
+//! [DOC-TIER: A]
+//!
+//! Safety & Traceability: Realises: [REQ-PARSER-EXPRESSIONS-EXPR], [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER]
+//! Contract: Parses token streams into precedence-climbed `Expr` trees bounded by `MAX_EXPR_DEPTH` (64).
+//! Bounds & Faults: Rejects deep nesting and malformed syntax with deterministic `Err(String)` diagnostics.
 
 use crate::lexer::token::{Span, Token, TokenKind};
 
 // Sentinel returned when the token stream is empty; never indexed, never mutated.
 static EXPR_EOF_TOKEN: Token = Token {
     kind: TokenKind::Eof,
-    span: Span {
-        start: 0,
-        end: 0,
-        line: 0,
-        col: 0,
-    },
+    span: Span { start: 0, end: 0, line: 0, col: 0 },
 };
 
 /// Maximum recursion and nesting depth permitted when parsing or formatting expressions.
 /// Realises: [REQ-PARSER-EXPRESSIONS-MAX-EXPR-DEPTH]
-const MAX_EXPR_DEPTH: usize = 64;
+pub(super) const MAX_EXPR_DEPTH: usize = 64;
 
 /// Validates that `depth < MAX_EXPR_DEPTH`.
 /// Realises: [REQ-PARSER-EXPRESSIONS-MAX-EXPR-DEPTH]
 fn ensure_expr_depth(depth: usize) -> Result<(), String> {
     if depth >= MAX_EXPR_DEPTH {
-        Err(format!(
-            "Expression recursion depth exceeds maximum limit of {MAX_EXPR_DEPTH}"
-        ))
+        Err(format!("Expression recursion depth exceeds maximum limit of {MAX_EXPR_DEPTH}"))
     } else {
         Ok(())
     }
@@ -33,20 +31,7 @@ fn ensure_expr_depth(depth: usize) -> Result<(), String> {
 /// Realises: [REQ-PARSER-EXPRESSIONS-BINARYOP]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BinaryOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    Pow,
-    Eq,
-    NotEq,
-    Lt,
-    LtEq,
-    Gt,
-    GtEq,
-    And,
-    Or,
+    Add, Sub, Mul, Div, Mod, Pow, Eq, NotEq, Lt, LtEq, Gt, GtEq, And, Or,
 }
 
 impl BinaryOp {
@@ -54,20 +39,10 @@ impl BinaryOp {
     /// Realises: [REQ-PARSER-EXPRESSIONS-BINARYOP-AS-STR]
     pub fn as_str(&self) -> &'static str {
         match self {
-            BinaryOp::Add => "+",
-            BinaryOp::Sub => "-",
-            BinaryOp::Mul => "*",
-            BinaryOp::Div => "/",
-            BinaryOp::Mod => "%",
-            BinaryOp::Pow => "^",
-            BinaryOp::Eq => "==",
-            BinaryOp::NotEq => "!=",
-            BinaryOp::Lt => "<",
-            BinaryOp::LtEq => "<=",
-            BinaryOp::Gt => ">",
-            BinaryOp::GtEq => ">=",
-            BinaryOp::And => "and",
-            BinaryOp::Or => "or",
+            Self::Add => "+", Self::Sub => "-", Self::Mul => "*", Self::Div => "/",
+            Self::Mod => "%", Self::Pow => "^", Self::Eq => "==", Self::NotEq => "!=",
+            Self::Lt => "<", Self::LtEq => "<=", Self::Gt => ">", Self::GtEq => ">=",
+            Self::And => "and", Self::Or => "or",
         }
     }
 }
@@ -85,8 +60,8 @@ impl UnaryOp {
     /// Realises: [REQ-PARSER-EXPRESSIONS-UNARYOP-AS-STR]
     pub fn as_str(&self) -> &'static str {
         match self {
-            UnaryOp::Neg => "-",
-            UnaryOp::Not => "not ",
+            Self::Neg => "-",
+            Self::Not => "not ",
         }
     }
 }
@@ -99,23 +74,10 @@ pub enum Expr {
     Number(f64),
     StringLit(String),
     BoolLit(bool),
-    Unary {
-        op: UnaryOp,
-        expr: Box<Expr>,
-    },
-    Binary {
-        op: BinaryOp,
-        left: Box<Expr>,
-        right: Box<Expr>,
-    },
-    Call {
-        func: String,
-        args: Vec<Expr>,
-    },
-    Member {
-        object: Box<Expr>,
-        member: String,
-    },
+    Unary { op: UnaryOp, expr: Box<Expr> },
+    Binary { op: BinaryOp, left: Box<Expr>, right: Box<Expr> },
+    Call { func: String, args: Vec<Expr> },
+    Member { object: Box<Expr>, member: String },
     Raw(String),
 }
 
@@ -134,36 +96,24 @@ impl Expr {
         }
         let next_depth = depth.saturating_add(1);
         match self {
-            Expr::Ident(name) => name.clone(),
-            Expr::Number(val) => {
-                if val.fract() == 0.0 {
-                    format!("{val:.1}")
-                } else {
-                    format!("{val}")
-                }
-            }
-            Expr::StringLit(s) => format!("\"{s}\""),
-            Expr::BoolLit(b) => format!("{b}"),
-            Expr::Unary { op, expr } => {
-                format!("{}{}", op.as_str(), expr.to_string_repr_bounded(next_depth))
-            }
-            Expr::Binary { op, left, right } => format!(
+            Self::Ident(name) => name.clone(),
+            Self::Number(val) if val.fract() == 0.0 => format!("{val:.1}"),
+            Self::Number(val) => format!("{val}"),
+            Self::StringLit(s) => format!("\"{s}\""),
+            Self::BoolLit(b) => format!("{b}"),
+            Self::Unary { op, expr } => format!("{}{}", op.as_str(), expr.to_string_repr_bounded(next_depth)),
+            Self::Binary { op, left, right } => format!(
                 "{} {} {}",
                 left.to_string_repr_bounded(next_depth),
                 op.as_str(),
                 right.to_string_repr_bounded(next_depth)
             ),
-            Expr::Call { func, args } => {
-                let arg_strs: Vec<String> = args
-                    .iter()
-                    .map(|a| a.to_string_repr_bounded(next_depth))
-                    .collect();
-                format!("{}({})", func, arg_strs.join(", "))
+            Self::Call { func, args } => {
+                let arg_strs: Vec<String> = args.iter().map(|a| a.to_string_repr_bounded(next_depth)).collect();
+                format!("{func}({})", arg_strs.join(", "))
             }
-            Expr::Member { object, member } => {
-                format!("{}.{}", object.to_string_repr_bounded(next_depth), member)
-            }
-            Expr::Raw(text) => text.clone(),
+            Self::Member { object, member } => format!("{}.{member}", object.to_string_repr_bounded(next_depth)),
+            Self::Raw(text) => text.clone(),
         }
     }
 }
@@ -202,17 +152,9 @@ impl<'a> ExpressionParser<'a> {
             chain_depth = chain_depth.saturating_add(1);
             ensure_expr_depth(chain_depth)?;
             self.advance();
-            let next_prec = if assoc_right {
-                prec
-            } else {
-                prec.saturating_add(1)
-            };
+            let next_prec = if assoc_right { prec } else { prec.saturating_add(1) };
             let right = self.parse_binary_expr(next_prec, chain_depth)?;
-            left = Expr::Binary {
-                op,
-                left: Box::new(left),
-                right: Box::new(right),
-            };
+            left = Expr::Binary { op, left: Box::new(left), right: Box::new(right) };
         }
         Ok(left)
     }
@@ -232,10 +174,7 @@ impl<'a> ExpressionParser<'a> {
         if let Some(op) = unary_op {
             self.advance();
             let expr = self.parse_unary_or_primary(depth.saturating_add(1))?;
-            Ok(Expr::Unary {
-                op,
-                expr: Box::new(expr),
-            })
+            Ok(Expr::Unary { op, expr: Box::new(expr) })
         } else {
             self.parse_primary(depth)
         }
@@ -308,10 +247,7 @@ impl<'a> ExpressionParser<'a> {
             self.advance();
             if let Some(TokenKind::Ident(field_name)) = self.peek_kind().cloned() {
                 self.advance();
-                expr = Expr::Member {
-                    object: Box::new(expr),
-                    member: field_name,
-                };
+                expr = Expr::Member { object: Box::new(expr), member: field_name };
             } else {
                 return Err("Expected field identifier following '.'".to_string());
             }
@@ -322,20 +258,13 @@ impl<'a> ExpressionParser<'a> {
     /// Peeks the current token or returns `EXPR_EOF_TOKEN`.
     /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PEEK]
     fn peek(&self) -> &Token {
-        self.tokens
-            .get(self.pos)
-            .or_else(|| self.tokens.last())
-            .unwrap_or(&EXPR_EOF_TOKEN)
+        self.tokens.get(self.pos).or_else(|| self.tokens.last()).unwrap_or(&EXPR_EOF_TOKEN)
     }
 
     /// Peeks the current `TokenKind` when not at EOF.
     /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PEEK-KIND]
     fn peek_kind(&self) -> Option<&TokenKind> {
-        if self.is_at_end() {
-            None
-        } else {
-            self.tokens.get(self.pos).map(|t| &t.kind)
-        }
+        (!self.is_at_end()).then(|| self.tokens.get(self.pos).map(|t| &t.kind)).flatten()
     }
 
     /// Advances the cursor and returns the consumed token.
@@ -345,38 +274,26 @@ impl<'a> ExpressionParser<'a> {
         if self.pos < self.tokens.len() {
             self.pos = self.pos.saturating_add(1);
         }
-        self.tokens
-            .get(idx)
-            .or_else(|| self.tokens.last())
-            .unwrap_or(&EXPR_EOF_TOKEN)
+        self.tokens.get(idx).or_else(|| self.tokens.last()).unwrap_or(&EXPR_EOF_TOKEN)
     }
 
     /// Returns `true` when the cursor is at or past `TokenKind::Eof`.
     /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-IS-AT-END]
     fn is_at_end(&self) -> bool {
-        self.tokens
-            .get(self.pos)
-            .is_none_or(|t| t.kind == TokenKind::Eof)
+        self.tokens.get(self.pos).is_none_or(|t| t.kind == TokenKind::Eof)
     }
 
     /// Maps the current lookahead token to a `BinaryOp` if applicable.
     /// Realises: [REQ-PARSER-EXPRESSIONS-EXPRESSIONPARSER-PEEK-BINARY-OP]
     fn peek_binary_op(&self) -> Option<BinaryOp> {
         Some(match self.peek_kind()? {
-            TokenKind::Plus => BinaryOp::Add,
-            TokenKind::Minus => BinaryOp::Sub,
-            TokenKind::Star => BinaryOp::Mul,
-            TokenKind::Slash => BinaryOp::Div,
-            TokenKind::Percent => BinaryOp::Mod,
-            TokenKind::Caret => BinaryOp::Pow,
-            TokenKind::EqEq => BinaryOp::Eq,
-            TokenKind::NotEq => BinaryOp::NotEq,
-            TokenKind::Lt => BinaryOp::Lt,
-            TokenKind::LtEq => BinaryOp::LtEq,
-            TokenKind::Gt => BinaryOp::Gt,
-            TokenKind::GtEq => BinaryOp::GtEq,
-            TokenKind::AmpAmp => BinaryOp::And,
-            TokenKind::PipePipe => BinaryOp::Or,
+            TokenKind::Plus => BinaryOp::Add, TokenKind::Minus => BinaryOp::Sub,
+            TokenKind::Star => BinaryOp::Mul, TokenKind::Slash => BinaryOp::Div,
+            TokenKind::Percent => BinaryOp::Mod, TokenKind::Caret => BinaryOp::Pow,
+            TokenKind::EqEq => BinaryOp::Eq, TokenKind::NotEq => BinaryOp::NotEq,
+            TokenKind::Lt => BinaryOp::Lt, TokenKind::LtEq => BinaryOp::LtEq,
+            TokenKind::Gt => BinaryOp::Gt, TokenKind::GtEq => BinaryOp::GtEq,
+            TokenKind::AmpAmp => BinaryOp::And, TokenKind::PipePipe => BinaryOp::Or,
             TokenKind::Ident(s) if s == "and" => BinaryOp::And,
             TokenKind::Ident(s) if s == "or" => BinaryOp::Or,
             _ => return None,
@@ -402,108 +319,4 @@ fn binary_precedence(op: &BinaryOp) -> (u8, bool) {
 /// Realises: [REQ-PARSER-EXPRESSIONS-PARSE-EXPRESSION]
 pub fn parse_expression(tokens: &[Token]) -> Result<Expr, String> {
     ExpressionParser::new(tokens).parse()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::lexer::scanner::Scanner;
-
-    #[test]
-    fn test_parse_inequality_constraint() -> Result<(), Box<dyn std::error::Error>> {
-        let tokens = Scanner::new("v <= 60.0").scan_all()?;
-        let expr = parse_expression(&tokens)?;
-        assert_eq!(expr.to_string_repr(), "v <= 60.0");
-        Ok(())
-    }
-
-    #[test]
-    fn test_parse_nested_logical_expression() -> Result<(), Box<dyn std::error::Error>> {
-        let tokens = Scanner::new("alt >= 10.0 && alt <= 120.0").scan_all()?;
-        let expr = parse_expression(&tokens)?;
-        assert_eq!(expr.to_string_repr(), "alt >= 10.0 and alt <= 120.0");
-        Ok(())
-    }
-
-    #[test]
-    fn test_parse_member_and_function_call() -> Result<(), Box<dyn std::error::Error>> {
-        let tokens = Scanner::new("abs(fcc.speed) <= limits.max").scan_all()?;
-        let expr = parse_expression(&tokens)?;
-        assert_eq!(expr.to_string_repr(), "abs(fcc.speed) <= limits.max");
-        Ok(())
-    }
-
-    #[test]
-    fn test_parse_parenthesized_depth_bounds() -> Result<(), Box<dyn std::error::Error>> {
-        let max_valid = MAX_EXPR_DEPTH - 1;
-        let valid_src = format!("{}x{}", "(".repeat(max_valid), ")".repeat(max_valid));
-        assert_eq!(
-            parse_expression(&Scanner::new(&valid_src).scan_all()?)?.to_string_repr(),
-            "x"
-        );
-        let exceeded = format!(
-            "{}x{}",
-            "(".repeat(MAX_EXPR_DEPTH),
-            ")".repeat(MAX_EXPR_DEPTH)
-        );
-        assert!(parse_expression(&Scanner::new(&exceeded).scan_all()?).is_err());
-        Ok(())
-    }
-
-    #[test]
-    fn test_parse_unary_call_binary_and_member_depth_bounds(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let max_ops = MAX_EXPR_DEPTH - 1;
-        let valid_unary = format!("{}x", "-".repeat(max_ops));
-        assert!(parse_expression(&Scanner::new(&valid_unary).scan_all()?).is_ok());
-        let deep_unary = format!("{}x", "-".repeat(MAX_EXPR_DEPTH));
-        assert!(parse_expression(&Scanner::new(&deep_unary).scan_all()?).is_err());
-        let valid_calls = format!("{}x{}", "f(".repeat(max_ops), ")".repeat(max_ops));
-        assert!(parse_expression(&Scanner::new(&valid_calls).scan_all()?).is_ok());
-        let deep_calls = format!(
-            "{}x{}",
-            "f(".repeat(MAX_EXPR_DEPTH),
-            ")".repeat(MAX_EXPR_DEPTH)
-        );
-        assert!(parse_expression(&Scanner::new(&deep_calls).scan_all()?).is_err());
-        let valid_pow = std::iter::repeat_n("x", MAX_EXPR_DEPTH)
-            .collect::<Vec<_>>()
-            .join(" ^ ");
-        assert!(parse_expression(&Scanner::new(&valid_pow).scan_all()?).is_ok());
-        let deep_pow = std::iter::repeat_n("x", MAX_EXPR_DEPTH + 1)
-            .collect::<Vec<_>>()
-            .join(" ^ ");
-        assert!(parse_expression(&Scanner::new(&deep_pow).scan_all()?).is_err());
-        let valid_member = format!("x{}", ".a".repeat(max_ops));
-        assert!(parse_expression(&Scanner::new(&valid_member).scan_all()?).is_ok());
-        let deep_member = format!("x{}", ".a".repeat(MAX_EXPR_DEPTH));
-        assert!(parse_expression(&Scanner::new(&deep_member).scan_all()?).is_err());
-        Ok(())
-    }
-
-    #[test]
-    fn test_to_string_repr_depth_bounds() {
-        let mut at_bound = Expr::Ident("x".to_string());
-        for _ in 0..(MAX_EXPR_DEPTH - 1) {
-            at_bound = Expr::Unary {
-                op: UnaryOp::Neg,
-                expr: Box::new(at_bound),
-            };
-        }
-        assert_eq!(
-            at_bound.to_string_repr(),
-            format!("{}x", "-".repeat(MAX_EXPR_DEPTH - 1))
-        );
-        let mut beyond_bound = Expr::Ident("x".to_string());
-        for _ in 0..(MAX_EXPR_DEPTH + 8) {
-            beyond_bound = Expr::Unary {
-                op: UnaryOp::Neg,
-                expr: Box::new(beyond_bound),
-            };
-        }
-        assert_eq!(
-            beyond_bound.to_string_repr(),
-            format!("{}...", "-".repeat(MAX_EXPR_DEPTH))
-        );
-    }
 }

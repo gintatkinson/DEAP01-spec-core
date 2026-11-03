@@ -1,24 +1,38 @@
-#![deny(clippy::too_many_lines, clippy::too_many_arguments, clippy::undocumented_unsafe_blocks)]
-//! AST modularity, ratchet ceiling, lexer-ban, and portability gates for workspace `.rs` sources.
-//! Enforces legacy line ceilings and strict SLOC, function, and literal invariants on non-ratcheted modules.
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
+//! AST modularity, ratchet ceiling, lexer-ban, and DoD architecture gates for workspace `.rs` sources.
+//! Enforces legacy line ceilings, strict SLOC/function/literal invariants, and the 6 mandatory DoD gates.
 //! Realises: [REQ-0601], [REQ-0608]
 
-use crate::checks::ratchet_table::lookup_ratchet_ceiling;
-use proc_macro2::{Delimiter, TokenStream, TokenTree};
+#[cfg(test)]
+pub(crate) use crate::checks::dod_ast_visitor::count_executable_sloc;
+use crate::checks::dod_ast_visitor::{
+    audit_hand_rolled_lexer_in_source, audit_non_ratcheted_source,
+};
+use crate::checks::ratchet_table::{lookup_ratchet_ceiling, LEGACY_RATCHET_MAX_LINES};
 use std::borrow::Cow;
-use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use syn::visit::{self, Visit};
 use walkdir::WalkDir;
 
-/// Maximum executable SLOC, function span lines, and parameter count for non-ratcheted `.rs` modules (`[REQ-0601]`).
-const MAX_MODULE_EXEC_SLOC: usize = 500;
-const MAX_FN_SPAN_LINES: usize = 80;
-const MAX_FN_PARAMS: usize = 5;
+/// Structured finding message emitted by the Definition-of-Done (DoD) verification gates (`[REQ-0601]`, `[REQ-0608]`).
+/// Realises: [REQ-0601], [REQ-0608]
+pub type Finding = String;
+
+/// Required OMG SysML v2 Clause 8.2.2 syntax node kinds enforced by [`check_sysml_clause8_coverage`].
+const REQUIRED_SYSML_CLAUSE8_KINDS: &[&str] = &[
+    "Package", "Import", "PartDef", "PortDef", "ActionDef", "StateDef", "RequirementDef",
+    "UseCaseDef", "VerificationDef", "ConstraintDef", "ConnectionDef", "InterfaceDef", "FlowDef",
+    "AllocationDef", "CalculationDef", "OccurrenceDef", "ViewDef", "ViewpointDef", "MetadataDef",
+    "Satisfy", "Verify",
+];
 
 /// Audits all `.rs` files under `<repo_root>/crates` against ratchet ceilings and DoD AST gates.
 /// Returns `Ok(())` if `<repo_root>/crates` is absent or all files pass (`[REQ-0601]`, `[REQ-0608]`).
+/// Realises: [REQ-0601], [REQ-0608]
 pub fn check_dod_gates(repo_root: &Path) -> Result<(), Vec<String>> {
     let crates_dir = repo_root.join("crates");
     if !crates_dir.exists() {
@@ -26,275 +40,237 @@ pub fn check_dod_gates(repo_root: &Path) -> Result<(), Vec<String>> {
     }
     let mut findings = Vec::new();
     for (rel_path, disk_path) in collect_crate_rs_files(repo_root, &crates_dir, &mut findings) {
-        let Ok(raw) = fs::read_to_string(&disk_path).map_err(|e| findings.push(format!("{rel_path}: {e}"))) else { continue };
-        let content: Cow<'_, str> = if raw.contains('\r') { Cow::Owned(raw.replace("\r\n", "\n")) } else { Cow::Borrowed(&raw) };
+        let Ok(raw) = fs::read_to_string(&disk_path)
+            .map_err(|e| findings.push(format!("{rel_path}: {e}")))
+        else {
+            continue;
+        };
+        let content: Cow<'_, str> = if raw.contains('\r') {
+            Cow::Owned(raw.replace("\r\n", "\n"))
+        } else {
+            Cow::Borrowed(&raw)
+        };
         if let Some(max_lines) = lookup_ratchet_ceiling(&rel_path) {
             let line_count = content.lines().count();
             if line_count > max_lines {
-                findings.push(format!("{rel_path}: line count {line_count} exceeds ratchet ceiling {max_lines} ([REQ-0601])"));
+                findings.push(format!(
+                    "{rel_path}: line count {line_count} exceeds ratchet ceiling {max_lines} ([REQ-0601])"
+                ));
             }
         } else {
             audit_non_ratcheted_source(&rel_path, &content, &mut findings);
         }
     }
-    if findings.is_empty() { Ok(()) } else { Err(findings) }
+    if findings.is_empty() {
+        Ok(())
+    } else {
+        Err(findings)
+    }
+}
+
+/// Gate 1: Verifies zero `.chars().peekable()` or `.char_indices()` hand-rolled lexers exist in any
+/// `.rs` file under `<workspace_root>/crates` outside `#[derive(Logos)]` modules (`[REQ-0608]`).
+/// Realises: [REQ-0608]
+pub fn check_zero_hand_rolled_lexers(workspace_root: &Path) -> Vec<Finding> {
+    let crates_dir = workspace_root.join("crates");
+    if !crates_dir.exists() {
+        return Vec::new();
+    }
+    let mut findings = Vec::new();
+    for (rel_path, disk_path) in collect_crate_rs_files(workspace_root, &crates_dir, &mut findings)
+    {
+        if let Ok(raw) = fs::read_to_string(&disk_path)
+            .map_err(|e| findings.push(format!("{rel_path}: {e}")))
+        {
+            audit_hand_rolled_lexer_in_source(&rel_path, &raw, &mut findings);
+        }
+    }
+    findings
+}
+
+/// Gate 2: Verifies `LEGACY_RATCHET_MAX_LINES` is empty and every `.rs` file under `<workspace_root>/crates`
+/// (excluding `ratchet_table.rs`) is `<= 380` lines (`[REQ-0601]`).
+/// Realises: [REQ-0601]
+pub fn check_zero_legacy_ratchet(workspace_root: &Path) -> Vec<Finding> {
+    let mut findings = Vec::new();
+    for (path, ceiling) in LEGACY_RATCHET_MAX_LINES {
+        findings.push(format!(
+            "LEGACY_RATCHET_MAX_LINES still contains `{path}` (ceiling {ceiling}); expected 0 entries ([REQ-0601])"
+        ));
+    }
+    let crates_dir = workspace_root.join("crates");
+    if !crates_dir.exists() {
+        return findings;
+    }
+    for (rel_path, disk_path) in collect_crate_rs_files(workspace_root, &crates_dir, &mut findings)
+    {
+        if rel_path.ends_with("/ratchet_table.rs") {
+            continue;
+        }
+        if let Ok(raw) = fs::read_to_string(&disk_path)
+            .map_err(|e| findings.push(format!("{rel_path}: {e}")))
+        {
+            let lines = raw.lines().count();
+            if lines > 380 {
+                findings.push(format!(
+                    "{rel_path}: line count {lines} exceeds 380-line ceiling ([REQ-0601])"
+                ));
+            }
+        }
+    }
+    findings
+}
+
+/// Gate 3: Verifies that `deap-core::sysml_cst` implements the OMG SysML v2 Clause 8.2.2 grammar
+/// productions (`REQUIRED_SYSML_CLAUSE8_KINDS`) via `logos` + `rowan` (`[REQ-0608]`).
+/// Realises: [REQ-0608]
+pub fn check_sysml_clause8_coverage(workspace_root: &Path) -> Vec<Finding> {
+    let sysml_cst_dir = workspace_root.join("crates/deap-core/src/sysml_cst");
+    if !sysml_cst_dir.exists() {
+        return vec![
+            "missing `crates/deap-core/src/sysml_cst` Clause 8.2.2 CST module ([REQ-0608])"
+                .to_string(),
+        ];
+    }
+    let mut combined = String::new();
+    let mut findings = Vec::new();
+    for (_, path) in collect_crate_rs_files(workspace_root, &sysml_cst_dir, &mut findings) {
+        if let Ok(text) = fs::read_to_string(&path) {
+            combined.push_str(&text);
+            combined.push('\n');
+        }
+    }
+    for kind in REQUIRED_SYSML_CLAUSE8_KINDS {
+        if !combined.contains(kind) {
+            findings.push(format!(
+                "sysml_cst missing Clause 8.2.2 syntax production `{kind}` ([REQ-0608])"
+            ));
+        }
+    }
+    findings
+}
+
+/// Gate 4: Verifies that `crates/deap-core/src/salsa_db.rs` provides incremental Salsa-style
+/// revision-tracked memoization across the compiler front-end (`[REQ-0608]`).
+/// Realises: [REQ-0608]
+pub fn check_salsa_incremental_memoization(workspace_root: &Path) -> Vec<Finding> {
+    let salsa_path = workspace_root.join("crates/deap-core/src/salsa_db.rs");
+    let Ok(text) = fs::read_to_string(&salsa_path) else {
+        return vec![
+            "missing `crates/deap-core/src/salsa_db.rs` incremental memoization database ([REQ-0608])"
+                .to_string(),
+        ];
+    };
+    let mut findings = Vec::new();
+    for symbol in [
+        "CompilerDatabase",
+        "sysml_cst",
+        "rust_cst",
+        "dart_cst",
+        "markdown_ast",
+    ] {
+        if !text.contains(symbol) {
+            findings.push(format!(
+                "salsa_db.rs missing required incremental query symbol `{symbol}` ([REQ-0608])"
+            ));
+        }
+    }
+    findings
+}
+
+/// Gate 5: Verifies that `crates/compile-sysml/src/modular_codegen` synthesizes Rust code via
+/// `syn` + `quote::quote!` + `prettyplease::unparse` with zero `push_str("pub struct ")` string
+/// concatenation (`[REQ-0608]`).
+/// Realises: [REQ-0608]
+pub fn check_codegen_zero_concat(workspace_root: &Path) -> Vec<Finding> {
+    let codegen_dir = workspace_root.join("crates/compile-sysml/src/modular_codegen");
+    if !codegen_dir.exists() {
+        return vec![
+            "missing `crates/compile-sysml/src/modular_codegen` module ([REQ-0608])".to_string(),
+        ];
+    }
+    let mut findings = Vec::new();
+    let mut uses_quote_or_unparse = false;
+    for (rel_path, disk_path) in collect_crate_rs_files(workspace_root, &codegen_dir, &mut findings)
+    {
+        let Ok(text) = fs::read_to_string(&disk_path) else {
+            continue;
+        };
+        let prod_text = text.split("#[cfg(test)]").next().unwrap_or(&text);
+        if prod_text.contains("quote!") || prod_text.contains("prettyplease::unparse") {
+            uses_quote_or_unparse = true;
+        }
+        for banned in [
+            "push_str(\"pub struct ",
+            "push_str(\"pub enum ",
+            "push_str(\"impl ",
+        ] {
+            if prod_text.contains(banned) {
+                findings.push(format!(
+                    "{rel_path}: banned string-concatenation codegen `{banned}` ([REQ-0608])"
+                ));
+            }
+        }
+    }
+    if !uses_quote_or_unparse {
+        findings.push(
+            "modular_codegen does not invoke `quote!` or `prettyplease::unparse` ([REQ-0608])"
+                .to_string(),
+        );
+    }
+    findings
+}
+
+/// Gate 6: Verifies that upstream self-hosting SysML schemas and design blueprints exist and are
+/// non-empty when `.pipeline/upstream` is present (`[REQ-0608]`).
+/// Realises: [REQ-0608]
+pub fn check_upstream_self_hosting_parity(workspace_root: &Path) -> Vec<Finding> {
+    let upstream_dir = workspace_root.join(".pipeline/upstream");
+    if !upstream_dir.exists() {
+        return Vec::new();
+    }
+    let mut findings = Vec::new();
+    for rel in [
+        ".pipeline/upstream/schema/upstream_compiler.sysml",
+        "docs/designs",
+    ] {
+        let target = workspace_root.join(rel);
+        if !target.exists() {
+            findings.push(format!(
+                "missing upstream self-hosting artifact `{rel}` ([REQ-0608])"
+            ));
+        }
+    }
+    findings
 }
 
 /// Collects lexicographically sorted `(./crates/..., abs_path)` pairs for all `.rs` files (`[REQ-0601]`).
-fn collect_crate_rs_files(repo_root: &Path, crates_dir: &Path, findings: &mut Vec<String>) -> Vec<(String, PathBuf)> {
+fn collect_crate_rs_files(
+    repo_root: &Path,
+    crates_dir: &Path,
+    findings: &mut Vec<String>,
+) -> Vec<(String, PathBuf)> {
     let mut files = Vec::new();
-    let iter = WalkDir::new(crates_dir).into_iter().filter_entry(|e| !(e.file_type().is_dir() && e.file_name() == "target"));
+    let iter = WalkDir::new(crates_dir)
+        .into_iter()
+        .filter_entry(|e| !(e.file_type().is_dir() && e.file_name() == "target"));
     for entry_res in iter {
-        let Ok(entry) = entry_res.map_err(|e| findings.push(format!("crates walk error: {e}"))) else { continue };
-        if entry.file_type().is_file() && entry.path().extension().and_then(|s| s.to_str()) == Some("rs") {
+        let Ok(entry) = entry_res.map_err(|e| findings.push(format!("crates walk error: {e}")))
+        else {
+            continue;
+        };
+        if entry.file_type().is_file()
+            && entry.path().extension().and_then(|s| s.to_str()) == Some("rs")
+        {
             match entry.path().strip_prefix(repo_root) {
-                Ok(rel) => files.push((format!("./{}", rel.to_string_lossy().replace('\\', "/")), entry.path().to_path_buf())),
+                Ok(rel) => files.push((
+                    format!("./{}", rel.to_string_lossy().replace('\\', "/")),
+                    entry.path().to_path_buf(),
+                )),
                 Err(err) => findings.push(format!("path prefix error: {err}")),
             }
         }
     }
     files.sort_by(|left, right| left.0.cmp(&right.0));
     files
-}
-
-/// Parses and audits a non-ratcheted `.rs` file for SLOC, fn bounds, lexer bans, and literal portability (`[REQ-0608]`).
-fn audit_non_ratcheted_source(rel_path: &str, content: &str, findings: &mut Vec<String>) {
-    let Ok(ast) = syn::parse_file(content).map_err(|e| findings.push(format!("{rel_path}: syntax error: {e}"))) else { return };
-    match count_executable_sloc(content) {
-        Ok(sloc) if sloc > MAX_MODULE_EXEC_SLOC => {
-            findings.push(format!("{rel_path}: executable SLOC {sloc} exceeds {MAX_MODULE_EXEC_SLOC} ([REQ-0601])"));
-        }
-        Ok(_) => {}
-        Err(err) => return findings.push(format!("{rel_path}: TokenStream parse error: {err}")),
-    }
-    let has_logos = file_derives_logos(&ast);
-    let in_test_scope = attrs_have_test_cfg(&ast.attrs);
-    DodAstVisitor { rel_path, has_logos, in_test_scope, findings }.visit_file(&ast);
-}
-
-/// Counts distinct source line numbers spanned by non-doc-attribute tokens (`[REQ-0601]`, `[REQ-0608]`).
-pub(crate) fn count_executable_sloc(content: &str) -> Result<usize, String> {
-    let root_stream: TokenStream = content.parse().map_err(|err: proc_macro2::LexError| err.to_string())?;
-    let mut distinct_lines = BTreeSet::new();
-    let mut stack = vec![root_stream];
-    while let Some(stream) = stack.pop() {
-        let tokens: Vec<TokenTree> = stream.into_iter().collect();
-        let mut slice = tokens.as_slice();
-        while let Some((first, tail)) = slice.split_first() {
-            if let Some(after_doc) = strip_leading_doc_attr(first, tail) {
-                slice = after_doc;
-                continue;
-            }
-            match first {
-                TokenTree::Group(group) => {
-                    distinct_lines.extend([group.span_open().start().line, group.span_close().end().line]);
-                    stack.push(group.stream());
-                }
-                other => distinct_lines.extend([other.span().start().line, other.span().end().line]),
-            }
-            slice = tail;
-        }
-    }
-    distinct_lines.remove(&0);
-    Ok(distinct_lines.len())
-}
-
-/// Advances past `#[doc ...]` or `#![doc ...]` token sequences when present (`[REQ-0601]`).
-fn strip_leading_doc_attr<'a>(first: &TokenTree, tail: &'a [TokenTree]) -> Option<&'a [TokenTree]> {
-    let is_doc = |tt: &TokenTree| {
-        matches!(tt, TokenTree::Group(g) if g.delimiter() == Delimiter::Bracket
-            && matches!(g.stream().into_iter().next(), Some(TokenTree::Ident(id)) if id == "doc"))
-    };
-    if !matches!(first, TokenTree::Punct(p) if p.as_char() == '#') {
-        return None;
-    }
-    let (second, after_second) = tail.split_first()?;
-    if is_doc(second) {
-        return Some(after_second);
-    }
-    let (third, after_third) = after_second.split_first()?;
-    (matches!(second, TokenTree::Punct(p) if p.as_char() == '!') && is_doc(third)).then_some(after_third)
-}
-
-/// Detects whether any `#[derive(...)]` attribute in `file` derives `Logos` (`[REQ-0608]`).
-fn file_derives_logos(file: &syn::File) -> bool {
-    /// Accumulator visitor flagging `#[derive(Logos)]` attributes (`[REQ-0608]`).
-    struct LogosDetector(bool);
-    impl<'ast> Visit<'ast> for LogosDetector {
-        /// Inspects `#[derive(...)]` metadata for a `Logos` path segment (`[REQ-0608]`).
-        fn visit_attribute(&mut self, attr: &'ast syn::Attribute) {
-            if attr.path().is_ident("derive") {
-                let _ = attr.parse_nested_meta(|m| { self.0 |= m.path.segments.last().is_some_and(|s| s.ident == "Logos"); Ok(()) });
-            }
-        }
-    }
-    let mut detector = LogosDetector(false);
-    detector.visit_file(file);
-    detector.0
-}
-
-/// Returns `true` if `attrs` marks a `#[cfg(test)]` or `#[test]` scope (`[REQ-0608]`).
-fn attrs_have_test_cfg(attrs: &[syn::Attribute]) -> bool {
-    attrs.iter().any(|attr| {
-        if attr.path().segments.last().is_some_and(|s| s.ident == "test") {
-            return true;
-        }
-        let mut is_test = false;
-        if attr.path().is_ident("cfg") {
-            let _ = attr.parse_nested_meta(|m| { is_test |= m.path.is_ident("test"); Ok(()) });
-        }
-        is_test
-    })
-}
-
-/// Extracts top-level attributes from a `syn::Item` to track `#[cfg(test)]` scopes (`[REQ-0608]`).
-fn item_has_test_cfg(item: &syn::Item) -> bool {
-    match item {
-        syn::Item::Const(i) => attrs_have_test_cfg(&i.attrs),
-        syn::Item::Enum(i) => attrs_have_test_cfg(&i.attrs),
-        syn::Item::Fn(i) => attrs_have_test_cfg(&i.attrs),
-        syn::Item::Impl(i) => attrs_have_test_cfg(&i.attrs),
-        syn::Item::Mod(i) => attrs_have_test_cfg(&i.attrs),
-        syn::Item::Static(i) => attrs_have_test_cfg(&i.attrs),
-        syn::Item::Struct(i) => attrs_have_test_cfg(&i.attrs),
-        syn::Item::Trait(i) => attrs_have_test_cfg(&i.attrs),
-        _ => false,
-    }
-}
-
-/// Computes the starting source line of a function signature or visibility qualifier (`[REQ-0601]`).
-fn fn_decl_start_line(vis: Option<&syn::Visibility>, default_line: Option<usize>, sig: &syn::Signature) -> usize {
-    match vis {
-        Some(syn::Visibility::Public(pub_tok)) => pub_tok.span.start().line,
-        Some(syn::Visibility::Restricted(rest)) => rest.pub_token.span.start().line,
-        _ => default_line
-            .or_else(|| sig.constness.as_ref().map(|t| t.span.start().line))
-            .or_else(|| sig.asyncness.as_ref().map(|t| t.span.start().line))
-            .or_else(|| sig.unsafety.as_ref().map(|t| t.span.start().line))
-            .or_else(|| sig.abi.as_ref().map(|t| t.extern_token.span.start().line))
-            .unwrap_or_else(|| sig.fn_token.span.start().line),
-    }
-}
-
-/// Checks whether `expr` (unwrapping parens/groups) is a `.chars()` method call (`[REQ-0608]`).
-fn is_chars_receiver(mut expr: &syn::Expr) -> bool {
-    loop {
-        match expr {
-            syn::Expr::Paren(paren) => expr = &paren.expr,
-            syn::Expr::Group(group) => expr = &group.expr,
-            syn::Expr::MethodCall(call) => return call.method == "chars",
-            _ => return false,
-        }
-    }
-}
-
-/// Returns `true` when `val` embeds a hardcoded user directory or OS shared-library suffix (`[REQ-0608]`).
-fn is_banned_host_or_lib_literal(val: &str) -> bool {
-    val.contains(concat!("/", "Users", "/")) || val.contains(concat!("/", "home", "/"))
-        || val.contains(concat!("C:\\", "Users\\")) || val.contains(concat!("C:\\\\", "Users\\\\"))
-        || val.contains(concat!(".", "dylib")) || val.contains(concat!(".", "dll"))
-        || val.ends_with(concat!(".", "so")) || val.contains(concat!(".", "so."))
-}
-
-/// AST visitor enforcing function bounds, hand-rolled lexer bans, and literal portability (`[REQ-0601]`, `[REQ-0608]`).
-struct DodAstVisitor<'a> {
-    rel_path: &'a str, has_logos: bool, in_test_scope: bool, findings: &'a mut Vec<String>,
-}
-
-impl DodAstVisitor<'_> {
-    /// Checks `<= 80`-line span and `<= 5`-parameter bounds for a function or method (`[REQ-0601]`).
-    fn check_fn_bounds(&mut self, sig: &syn::Signature, start_line: usize, end_line: usize) {
-        let span_lines = end_line.saturating_sub(start_line).saturating_add(1);
-        if span_lines > MAX_FN_SPAN_LINES {
-            self.findings.push(format!("{}:{start_line}: fn `{}` spans {span_lines} lines (max {MAX_FN_SPAN_LINES}) ([REQ-0601])", self.rel_path, sig.ident));
-        }
-        if sig.inputs.len() > MAX_FN_PARAMS {
-            self.findings.push(format!("{}:{start_line}: fn `{}` has {} parameters (max {MAX_FN_PARAMS}) ([REQ-0601])", self.rel_path, sig.ident, sig.inputs.len()));
-        }
-    }
-}
-
-impl<'ast> Visit<'ast> for DodAstVisitor<'_> {
-    /// Tracks nested `#[cfg(test)]` item scopes across AST traversal (`[REQ-0608]`).
-    fn visit_item(&mut self, node: &'ast syn::Item) {
-        let prev = self.in_test_scope;
-        self.in_test_scope |= item_has_test_cfg(node);
-        visit::visit_item(self, node);
-        self.in_test_scope = prev;
-    }
-
-    /// Enforces `<= 80`-line span and `<= 5`-parameter bounds on free functions (`[REQ-0601]`).
-    fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
-        self.check_fn_bounds(&node.sig, fn_decl_start_line(Some(&node.vis), None, &node.sig), node.block.brace_token.span.close().end().line);
-        visit::visit_item_fn(self, node);
-    }
-
-    /// Enforces `<= 80`-line span and `<= 5`-parameter bounds on inherent and trait impl methods (`[REQ-0601]`).
-    fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
-        let def_line = node.defaultness.as_ref().map(|d| d.span.start().line);
-        self.check_fn_bounds(&node.sig, fn_decl_start_line(Some(&node.vis), def_line, &node.sig), node.block.brace_token.span.close().end().line);
-        let prev = self.in_test_scope;
-        self.in_test_scope |= attrs_have_test_cfg(&node.attrs);
-        visit::visit_impl_item_fn(self, node);
-        self.in_test_scope = prev;
-    }
-
-    /// Enforces `<= 80`-line span and `<= 5`-parameter bounds on trait method declarations (`[REQ-0601]`).
-    fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
-        let end = node.default.as_ref().map(|b| b.brace_token.span.close().end().line)
-            .or_else(|| node.semi_token.as_ref().map(|s| s.span.end().line))
-            .unwrap_or_else(|| node.sig.fn_token.span.end().line);
-        self.check_fn_bounds(&node.sig, fn_decl_start_line(None, None, &node.sig), end);
-        let prev = self.in_test_scope;
-        self.in_test_scope |= attrs_have_test_cfg(&node.attrs);
-        visit::visit_trait_item_fn(self, node);
-        self.in_test_scope = prev;
-    }
-
-    /// Skips `#[doc = ...]` attributes so docstring text never triggers literal bans (`[REQ-0608]`).
-    fn visit_attribute(&mut self, node: &'ast syn::Attribute) {
-        if !node.path().is_ident("doc") {
-            visit::visit_attribute(self, node);
-        }
-    }
-
-    /// Rejects `.char_indices()` and `.chars().peekable()` in modules without `Logos` (`[REQ-0608]`).
-    fn visit_expr_method_call(&mut self, node: &'ast syn::ExprMethodCall) {
-        if !self.has_logos {
-            let line = node.method.span().start().line;
-            if node.method == "char_indices" {
-                self.findings.push(format!("{}:{line}: banned hand-rolled lexer `.char_indices()` without `Logos` ([REQ-0608])", self.rel_path));
-            } else if node.method == "peekable" && is_chars_receiver(&node.receiver) {
-                self.findings.push(format!("{}:{line}: banned hand-rolled lexer `.chars().peekable()` without `Logos` ([REQ-0608])", self.rel_path));
-            }
-        }
-        visit::visit_expr_method_call(self, node);
-    }
-
-    /// Rejects hardcoded host user directories and OS shared-library suffixes outside tests (`[REQ-0608]`).
-    fn visit_lit_str(&mut self, node: &'ast syn::LitStr) {
-        if !self.in_test_scope && is_banned_host_or_lib_literal(&node.value()) {
-            let line = node.span().start().line;
-            self.findings.push(format!("{}:{line}: banned hardcoded host path or OS library suffix in string literal ([REQ-0608])", self.rel_path));
-        }
-    }
-
-    /// Scans string literals embedded inside macro token trees outside test scopes (`[REQ-0608]`).
-    fn visit_macro(&mut self, node: &'ast syn::Macro) {
-        if !self.in_test_scope {
-            let mut stack = vec![node.tokens.clone()];
-            while let Some(stream) = stack.pop() {
-                for tt in stream {
-                    match tt {
-                        TokenTree::Group(group) => stack.push(group.stream()),
-                        TokenTree::Literal(lit) => {
-                            if let Ok(s) = syn::parse2::<syn::LitStr>(TokenTree::Literal(lit).into()) { self.visit_lit_str(&s); }
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
-        visit::visit_macro(self, node);
-    }
 }

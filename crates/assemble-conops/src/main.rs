@@ -298,8 +298,7 @@ fn main() -> ExitCode {
         &output_dir,
         args.verify,
         args.params.as_deref(),
-        args.domain.as_deref(),
-        workspace.as_deref(),
+        (args.domain.as_deref(), workspace.as_deref()),
     ) {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,

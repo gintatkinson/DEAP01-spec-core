@@ -33,8 +33,24 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-VERIFY-BASELINE-UNIFIED-INTEGRATION-HARNESS]
 
+pub mod blueprint_gate_b_tests;
+pub mod blueprint_gate_c_tests;
+pub mod blueprint_gate_d_tests;
+pub mod blueprint_gate_e_tests;
+pub mod blueprint_gate_f_tests;
+pub mod blueprint_gate_g_tests;
+pub mod blueprint_gate_h_tests;
 pub mod blueprint_gate_tests;
 pub mod check_33_zero_python_tests;
+pub mod check_36_docstring_gate_b_tests;
+pub mod check_36_docstring_gate_c_tests;
+pub mod check_36_docstring_gate_d_tests;
 pub mod check_36_docstring_gate_tests;
+pub mod check_36_tier_bc_cap_tests;
+pub mod codebase_checks_b_tests;
+pub mod codebase_checks_c_tests;
 pub mod codebase_checks_tests;
+pub mod defect_dossier_b_tests;
+pub mod defect_dossier_c_tests;
+pub mod defect_dossier_d_tests;
 pub mod defect_dossier_tests;

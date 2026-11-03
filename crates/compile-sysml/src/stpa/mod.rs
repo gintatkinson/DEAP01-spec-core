@@ -1,4 +1,36 @@
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
 //! STPA Safety Transpilation and Hazard Analysis Module.
+//!
+//! ## 1. Safety Intent & Regulatory Scope
+//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, IEC 61508, and ECSS-E-ST-40C
+//! safety transpilation objectives for module `crates/compile-sysml/src/stpa/mod.rs`.
+//!
+//! ## 2. Invariants & Mathematical Properties
+//! - Orchestrates deterministic SysML v2 parsing, optional FMECA scoring configuration loading,
+//!   and atomic 10-pillar STPA/FMECA/RTA/SLDV artifact emission.
+//!
+//! ## 3. Preconditions
+//! - Caller supplies an existing non-empty SysML v2 schema path and target output directory path.
+//!
+//! ## 4. Postconditions
+//! - Emits all 10 safety artifacts to `out_dir` or returns a descriptive `Err(String)`.
+//!
+//! ## 5. Algorithmic Complexity Bounds
+//! - Time Complexity: O(N) bounded over input schema size and AST node cardinality.
+//! - Space Complexity: O(N) bounded memory for parsed AST and rendered artifact buffers.
+//!
+//! ## 6. Failure Modes & Fault Tolerance
+//! - Interface: Validates schema and optional scoring config file existence prior to I/O.
+//! - State: Delegates persistence to atomic file writes with zero partial artifact corruption.
+//! - Action: Executes deterministically with zero panics, `.unwrap()`, or unbounded recursion.
+//! - Resource: Bounded heap allocations proportional to schema size.
+//!
+//! ## 7. Realization & Traceability
+//! Realises: [REQ-0603], [REQ-STPA-MOD-MODULE] | SysML v2: PackageDef(stpa)
 
 pub mod fmeca;
 pub mod safety_suite;

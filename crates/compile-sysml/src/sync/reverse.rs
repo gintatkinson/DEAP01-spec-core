@@ -1,8 +1,13 @@
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
 //! Markdown Specifications to SysML v2 Reverse Synchronization Engine.
 //!
 //! ## 1. Safety Intent & Regulatory Scope
-//! Conforms to DO-178C Level A, ISO 26262 ASIL D, and ECSS-E-ST-40C safety-critical software
-//! engineering standards. Mitigates dual-schema AST drift hazards (HAZ-SCHEMA-DRIFT-GATE31)
+//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety-critical
+//! software engineering standards. Mitigates dual-schema AST drift hazards (HAZ-SCHEMA-DRIFT-GATE31)
 //! and specification-model desynchronization (HAZ-SPEC-MODEL-DESYNC).
 //!
 //! ## 2. Invariants & Mathematical Properties
@@ -31,46 +36,30 @@
 //! - Returns `Err(String)` if `docs_dir` is missing, in-place overwrite is unauthorized, or filesystem writes fail.
 //!
 //! ## 7. Realization & Traceability
-//! Realises: [REQ-SYSML-REVERSE-SYNC-ENGINE]
+//! Realises: [REQ-0604] [REQ-SYSML-REVERSE-SYNC-ENGINE]
 
-use std::collections::BTreeMap;
+pub mod extractor;
+pub mod frontmatter;
+
+#[cfg(test)]
+mod tests;
+#[cfg(test)]
+mod tests_manifest_and_utf8;
+
 use std::fs;
 use std::path::PathBuf;
 
-use deap_core::sysml_ast::{
-    ActionDef, CapabilityDef, ConstraintDef, InteractionDef, PackageDef, PartDef, UseCaseDef,
-};
-use walkdir::WalkDir;
+use deap_core::sysml_ast::PackageDef;
+pub use frontmatter::*;
 
 use crate::semantic::digest::{generate_digest, write_atomic, write_digest_atomic, SchemaDigest};
 use crate::semantic::serializer::to_sysml;
 
 /// Options for reverse synchronization.
 ///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `ReverseSyncOptions` in `crates/compile-sysml/src/sync/reverse.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `ReverseSyncOptions` across member set `[docs_dir: PathBuf, schema_path: Option<PathBuf>, output_path: PathBuf, digest_path: PathBuf, allow_overwrite: bool]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `ReverseSyncOptions` members (`docs_dir: PathBuf, schema_path: Option<PathBuf>, output_path: PathBuf, digest_path: PathBuf, allow_overwrite: bool`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `ReverseSyncOptions` representation for struct `ReverseSyncOptions`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(5)) bounded over input/member dimension of `ReverseSyncOptions`.
-/// - Space Complexity: O(M(5)) bounded auxiliary memory for `ReverseSyncOptions`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `ReverseSyncOptions` (`ReverseSyncOptions`).
-/// - State: Maintains consistent state invariants across `ReverseSyncOptions` without partial mutation on error.
-/// - Action: Executes `ReverseSyncOptions` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `ReverseSyncOptions` (`SYNC-REVERSE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYNC-REVERSE-REVERSESYNCOPTIONS] | SysML v2: PartDef(ReverseSyncOptions)
+/// Safety & Traceability: Realises: [REQ-0604] [REQ-SYNC-REVERSE-REVERSESYNCOPTIONS]
+/// Contract: Specifies input `docs_dir`, optional base `schema_path`, target `output_path` and `digest_path`, and `allow_overwrite` guard.
+/// Bounds & Faults: Pure value struct holding owned `PathBuf` paths and boolean overwrite permission flag.
 #[derive(Debug, Clone)]
 pub struct ReverseSyncOptions {
     pub docs_dir: PathBuf,
@@ -80,566 +69,12 @@ pub struct ReverseSyncOptions {
     pub allow_overwrite: bool,
 }
 
-/// Helper to parse metadata from YAML frontmatter or CommonMark table from a markdown string.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `parse_frontmatter` in `crates/compile-sysml/src/sync/reverse.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `parse_frontmatter` (declaration #2) within `SYNC-REVERSE`.
-///
-/// ## 3. Preconditions
-/// - `content: &str` must satisfy domain and type-safety constraints prior to invoking `parse_frontmatter`.
-///
-/// ## 4. Postconditions
-/// - Returns `(BTreeMap<String, String>, &str)` from `parse_frontmatter` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(content)) bounded over input/member dimension of `parse_frontmatter`.
-/// - Space Complexity: O(N(content)) bounded auxiliary memory for `parse_frontmatter`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `parse_frontmatter` (`(BTreeMap<String, String>, &str)`).
-/// - State: Maintains consistent state invariants across `parse_frontmatter` without partial mutation on error.
-/// - Action: Executes `parse_frontmatter` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `parse_frontmatter` (`SYNC-REVERSE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYNC-REVERSE-PARSE-FRONTMATTER] | SysML v2: ActionDef(parse_frontmatter)
-fn parse_frontmatter(content: &str) -> (BTreeMap<String, String>, &str) {
-    let mut fm = BTreeMap::new();
-    let trimmed = content.trim_start();
-    if let Some(rest) = trimmed.strip_prefix("---") {
-        if let Some((fm_block, body)) = rest.split_once("\n---") {
-            for line in fm_block.lines() {
-                let line = line.trim();
-                if let Some((raw_key, raw_val)) = line.split_once(':') {
-                    let key = raw_key.trim().to_string();
-                    let val = raw_val.trim();
-                    let unquoted = val
-                        .strip_prefix('"')
-                        .and_then(|inner| inner.strip_suffix('"'))
-                        .or_else(|| {
-                            val.strip_prefix('\'')
-                                .and_then(|inner| inner.strip_suffix('\''))
-                        })
-                        .unwrap_or(val);
-                    fm.insert(key, unquoted.to_string());
-                }
-            }
-            return (fm, body);
-        }
-    }
-
-    // CommonMark 2-column metadata table fallback
-    for line in content.lines().take(20) {
-        let line_trimmed = line.trim();
-        if line_trimmed.starts_with('|') && line_trimmed.ends_with('|') {
-            let inner = line_trimmed.trim_matches('|');
-            let parts: Vec<&str> = inner.split('|').map(|s| s.trim()).collect();
-            if let [key_cell, value_cell, ..] = parts.as_slice() {
-                let mut key = String::new();
-                for c in key_cell.chars() {
-                    if !matches!(c, '*' | '`' | '_' | ':' | '#') {
-                        key.push(c);
-                    }
-                }
-                let key = key.trim().to_lowercase().replace([' ', '-'], "_");
-                if !key.is_empty() && key != "attribute" && key != "key" {
-                    let val = value_cell
-                        .trim()
-                        .trim_matches(|c| c == '`' || c == '"' || c == '\'');
-                    fm.insert(key.clone(), val.to_string());
-                    if key == "sysml_interaction" {
-                        fm.insert("interaction".to_string(), val.to_string());
-                    } else if key == "scope" {
-                        fm.insert("subject".to_string(), val.to_string());
-                    } else if key == "primary_actor" {
-                        fm.insert("actors".to_string(), val.to_string());
-                    } else if key == "schema_containers" {
-                        let part = val.split("::").last().unwrap_or(val).trim();
-                        fm.insert("part".to_string(), part.to_string());
-                    }
-                }
-            }
-        }
-    }
-
-    (fm, content)
-}
-
-/// Helper to convert a string into clean PascalCase, prepending an underscore if leading with a digit.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, ISO 26262 ASIL D, and ECSS-E-ST-40C safety-critical software
-/// engineering standards. Mitigates invalid identifier generation (HAZ-INVALID-KERML-IDENTIFIER)
-/// where digit-leading section names (e.g. `1_Normative_Statement`) would violate KerML grammar
-/// and cause dual-schema parity validation failure (Check 31).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - KerML Grammar Conformance: Produced string $S$ satisfies $(S[0] \in \{'\_'\} \cup \text{Alpha}) \land \forall c \in S, c \in \text{Alphanumeric} \cup \{'\_'\}$.
-/// - Digit Prefixing Invariant: If input trimmed text begins with a digit, output is guaranteed to start with `_`.
-///
-/// ## 3. Preconditions
-/// - `text` may be any arbitrary ASCII / UTF-8 string slice.
-///
-/// ## 4. Postconditions
-/// - Returns a PascalCase string conforming to KerML identifier syntax rules.
-/// - Preserves leading digit semantics by prepending `_`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(L)$ where $L$ is the byte length of `text`.
-/// - Space Complexity: $O(L)$ allocated for the resulting `String`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Empty input returns empty string; all non-alphanumeric characters act as word boundaries.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-SYNC-REVERSE/PASCAL-CASE-IDENTIFIER]
-fn to_pascal_case(text: &str) -> String {
-    let has_leading_digit = text
-        .trim_start_matches(|c: char| !c.is_alphanumeric())
-        .chars()
-        .next()
-        .map(|c| c.is_ascii_digit())
-        .unwrap_or(false);
-    let words: Vec<&str> = text
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| !w.is_empty())
-        .collect();
-    let pascal: String = words
-        .iter()
-        .map(|w| {
-            let mut c = w.chars();
-            match c.next() {
-                None => String::new(),
-                Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
-            }
-        })
-        .collect();
-    if has_leading_digit
-        || pascal
-            .chars()
-            .next()
-            .map(|c| c.is_ascii_digit())
-            .unwrap_or(false)
-    {
-        format!("_{}", pascal)
-    } else {
-        pascal
-    }
-}
-
-/// Reverse synchronizes markdown documents under `docs_dir` into the SysML AST SSOT.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, ISO 26262 ASIL D, and ECSS-E-ST-40C safety-critical software
-/// engineering standards. Mitigates dual-schema AST drift hazards (HAZ-SCHEMA-DRIFT-GATE31)
-/// and ensures complete bidirectional traceability between downstream markdown requirements
-/// and formal SysML v2 architectural models.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - AST SSOT Parity Invariant: Structural part definitions present in multi-file subsystem schemas
-///   are located via `pkg.find_part_mut` and updated in-place without generating root-level duplicate definitions.
-/// - Cryptographic Digest Invariant: Emits SHA-256 digest capturing normalized AST structure and serialized text.
-///
-/// ## 3. Preconditions
-/// - `opts.docs_dir` must point to an accessible directory containing markdown specifications.
-/// - If `opts.allow_overwrite` is false, `opts.output_path` must not collide with `opts.schema_path`.
-///
-/// ## 4. Postconditions
-/// - Emits atomically written `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`.
-/// - Returns `Ok((PackageDef, SchemaDigest))` on success.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N_{files} \cdot S_{file} + V_{ast})$ where $N_{files}$ is the count of scanned markdown files.
-/// - Space Complexity: $O(V_{ast})$ proportional to AST entity count.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Returns descriptive `Err(String)` if filesystem operations fail or invalid paths are supplied.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-SYNC-REVERSE/ENGINE-SYNC]
-pub fn reverse_sync_specs_to_sysml(
-    base_pkg: Option<&PackageDef>,
-    opts: &ReverseSyncOptions,
-) -> Result<(PackageDef, SchemaDigest), String> {
-    reverse_sync_specs_to_sysml_with_dry_run(base_pkg, opts, false)
-}
-
-/// Synchronizes Markdown specifications into a SysML v2 AST package and cryptographic digest,
-/// optionally suppressing disk writes when `dry_run` is `true`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `reverse_sync_specs_to_sysml_with_dry_run` in `crates/compile-sysml/src/sync/reverse.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - AST SSOT Parity Invariant: Structural part definitions present in multi-file subsystem schemas
-///   are located via `pkg.find_part_mut` and updated in-place without generating root-level duplicate definitions.
-/// - Atomic Persistence Invariant (`ARCH-04`): When `dry_run` is `false`, emits `.pipeline/schema.sysml` and `.pipeline/schema-digest.json` via `write_atomic` and `write_digest_atomic`. When `dry_run` is `true`, performs zero disk writes.
-///
-/// ## 3. Preconditions
-/// - `opts.docs_dir` must point to an accessible directory containing markdown specifications.
-/// - If `opts.allow_overwrite` is false, `opts.output_path` must not collide with `opts.schema_path`.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok((PackageDef, SchemaDigest))` on success.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N_{files} \cdot S_{file} + V_{ast})$ where $N_{files}$ is the count of scanned markdown files.
-/// - Space Complexity: $O(V_{ast})$ proportional to AST entity count.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Returns descriptive `Err(String)` if filesystem operations fail or invalid paths are supplied.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-SYSML-SYNC-REVERSE/ENGINE-SYNC] | SysML v2: ActionDef(reverse_sync_specs_to_sysml_with_dry_run)
-pub fn reverse_sync_specs_to_sysml_with_dry_run(
-    base_pkg: Option<&PackageDef>,
+/// Discovers `.sysml` files under `schema_path` and `docs/designs/`, refreshing sidecar `.digest.json` files when `!dry_run`.
+/// Realises: [REQ-0604] [REQ-SYNC-REVERSE-REVERSE-SYNC-SPECS-TO-SYSML]
+fn collect_and_refresh_manifest_files(
     opts: &ReverseSyncOptions,
     dry_run: bool,
-) -> Result<(PackageDef, SchemaDigest), String> {
-    if !opts.docs_dir.exists() {
-        return Err(format!(
-            "Docs directory does not exist: {}",
-            opts.docs_dir.display()
-        ));
-    }
-
-    if !opts.allow_overwrite && opts.schema_path.as_ref() == Some(&opts.output_path) {
-        return Err(format!(
-            "In-place overwrite of base input schema '{}' is prohibited when allow_overwrite=false.",
-            opts.output_path.display()
-        ));
-    }
-
-    let mut pkg = base_pkg.cloned().unwrap_or_else(|| PackageDef {
-        name: "System_SSOT".to_string(),
-        doc: Some("Single Source of Truth for System Architecture and Safety Model".to_string()),
-        ..Default::default()
-    });
-
-    let mut extracted_capabilities = Vec::new();
-    let mut extracted_parts: BTreeMap<String, PartDef> = BTreeMap::new();
-    let mut extracted_interactions = Vec::new();
-    let mut extracted_use_cases = Vec::new();
-    let mut extracted_constraints = Vec::new();
-
-    // Populate existing parts into the map for merge
-    for part in pkg.get_all_parts() {
-        extracted_parts.insert(part.name.clone(), part);
-    }
-
-    for entry in WalkDir::new(&opts.docs_dir)
-        .sort_by_file_name()
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
-    {
-        let path = entry.path();
-        if path.extension().map(|e| e == "md").unwrap_or(false) {
-            let content = fs::read_to_string(path)
-                .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
-
-            let (fm, body) = parse_frontmatter(&content);
-            let doc_type = fm.get("type").map(|s| s.as_str()).unwrap_or("");
-            let rel_subdir = path
-                .strip_prefix(&opts.docs_dir)
-                .ok()
-                .and_then(|rel| {
-                    let mut comps = rel.components();
-                    let first = comps.next()?.as_os_str().to_str()?;
-                    comps.next().map(|_| first)
-                })
-                .unwrap_or("");
-
-            match doc_type {
-                "epic" if rel_subdir == "epics" => {
-                    let title = fm.get("title").cloned().unwrap_or_else(|| {
-                        path.file_stem()
-                            .unwrap_or_default()
-                            .to_string_lossy()
-                            .to_string()
-                    });
-                    let subsys = fm.get("subsystem").cloned().unwrap_or_default();
-                    let name = to_pascal_case(&title);
-                    extracted_capabilities.push(CapabilityDef {
-                        name: if name.is_empty() {
-                            "OperationalCapability".to_string()
-                        } else {
-                            name
-                        },
-                        doc: Some(format!("Capability extracted from {}", path.display())),
-                        subsystem: Some(subsys),
-                        description: Some(title),
-                        ..Default::default()
-                    });
-                }
-                "feature" if rel_subdir == "features" => {
-                    let part_name = fm
-                        .get("part")
-                        .or_else(|| fm.get("part_def"))
-                        .map(|s| {
-                            // If already a valid KerML identifier, preserve it directly
-                            if !s.is_empty()
-                                && (s.starts_with('_')
-                                    || s.chars().next().is_some_and(|c| c.is_alphabetic()))
-                                && s.chars().all(|c| c.is_alphanumeric() || c == '_')
-                            {
-                                s.clone()
-                            } else {
-                                to_pascal_case(s)
-                            }
-                        })
-                        .unwrap_or_else(|| {
-                            to_pascal_case(&path.file_stem().unwrap_or_default().to_string_lossy())
-                        });
-
-                    if !part_name.is_empty() {
-                        let entry =
-                            extracted_parts
-                                .entry(part_name.clone())
-                                .or_insert_with(|| PartDef {
-                                    name: part_name.clone(),
-                                    ..Default::default()
-                                });
-
-                        // Extract operations/actions from markdown lists: - `+ActionName() : void`
-                        let default_act = format!("execute_{}", part_name.to_lowercase());
-                        for line in body.lines() {
-                            let trimmed = line.trim();
-                            if let Some(after_dash) = trimmed.strip_prefix('-') {
-                                let after_dash = after_dash.trim_start();
-                                if let Some(rest) = after_dash.strip_prefix("`+") {
-                                    if let Some((raw_act_name, after_open)) = rest.split_once('(') {
-                                        let act_name = raw_act_name.trim();
-                                        if !act_name.is_empty()
-                                            && act_name
-                                                .chars()
-                                                .all(|c| c.is_ascii_alphanumeric() || c == '_')
-                                        {
-                                            if let Some((_params, raw_after_paren)) =
-                                                after_open.split_once(')')
-                                            {
-                                                let after_paren = raw_after_paren.trim_start();
-                                                if let Some(after_colon) =
-                                                    after_paren.strip_prefix(':')
-                                                {
-                                                    let after_colon = after_colon.trim();
-                                                    if after_colon.ends_with('`') {
-                                                        let ret_type = after_colon
-                                                            .trim_end_matches('`')
-                                                            .trim();
-                                                        if !ret_type.is_empty()
-                                                            && ret_type.chars().all(|c| {
-                                                                c.is_ascii_alphanumeric()
-                                                                    || c == '_'
-                                                            })
-                                                        {
-                                                            let act_name_str = act_name.to_string();
-                                                            // Skip forward-sync synthetic placeholder actions (execute_<part_name>) to preserve SSOT parity
-                                                            if act_name_str.to_lowercase()
-                                                                == default_act.to_lowercase()
-                                                            {
-                                                                continue;
-                                                            }
-                                                            if !entry
-                                                                .actions
-                                                                .iter()
-                                                                .any(|a| a.name == act_name_str)
-                                                            {
-                                                                entry.actions.push(ActionDef {
-                                                                    name: act_name_str,
-                                                                    ..Default::default()
-                                                                });
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                "user-story" if rel_subdir == "user-stories" => {
-                    let inter_name = fm
-                        .get("interaction")
-                        .or_else(|| fm.get("interaction_def"))
-                        .map(|s| to_pascal_case(s))
-                        .unwrap_or_else(|| {
-                            to_pascal_case(&path.file_stem().unwrap_or_default().to_string_lossy())
-                        });
-                    let default_actor = fm
-                        .get("actors")
-                        .or_else(|| fm.get("primary_actor"))
-                        .map(|s| to_pascal_case(s))
-                        .or_else(|| {
-                            pkg.use_case_defs
-                                .first()
-                                .and_then(|u| u.actors.first().cloned())
-                        })
-                        .unwrap_or_else(|| "SystemActor".to_string());
-                    let default_subject = fm
-                        .get("subject")
-                        .or_else(|| fm.get("subsystem"))
-                        .or_else(|| fm.get("part"))
-                        .map(|s| to_pascal_case(s))
-                        .filter(|s| !s.is_empty())
-                        .or_else(|| pkg.part_defs.first().map(|p| p.name.clone()))
-                        .unwrap_or_else(|| to_pascal_case(&pkg.name));
-
-                    extracted_interactions.push(InteractionDef {
-                        name: inter_name,
-                        doc: Some(format!("Interaction from {}", path.display())),
-                        lifelines: vec![default_actor, default_subject],
-                        messages: vec!["ExecuteTask".to_string()],
-                        triggers: vec!["OperationalTrigger".to_string()],
-                    });
-                }
-                "use-case" if rel_subdir == "use-cases" => {
-                    let uc_name = fm
-                        .get("use_case")
-                        .or_else(|| fm.get("use_case_def"))
-                        .map(|s| to_pascal_case(s))
-                        .unwrap_or_else(|| {
-                            to_pascal_case(&path.file_stem().unwrap_or_default().to_string_lossy())
-                        });
-                    let default_actor = fm
-                        .get("actors")
-                        .or_else(|| fm.get("primary_actor"))
-                        .map(|s| to_pascal_case(s))
-                        .or_else(|| {
-                            pkg.use_case_defs
-                                .first()
-                                .and_then(|u| u.actors.first().cloned())
-                        })
-                        .unwrap_or_else(|| "SystemActor".to_string());
-                    let subject = fm
-                        .get("subject")
-                        .or_else(|| fm.get("subsystem"))
-                        .or_else(|| fm.get("part"))
-                        .map(|s| to_pascal_case(s))
-                        .filter(|s| !s.is_empty())
-                        .or_else(|| pkg.part_defs.first().map(|p| p.name.clone()))
-                        .unwrap_or_else(|| to_pascal_case(&pkg.name));
-                    let objective = fm.get("objective").cloned().unwrap_or_default();
-
-                    extracted_use_cases.push(UseCaseDef {
-                        name: uc_name,
-                        doc: Some(objective.clone()),
-                        actors: vec![default_actor],
-                        subject: Some(subject),
-                        objective: Some(objective),
-                        ..Default::default()
-                    });
-                }
-                _ => {
-                    // Check if file is STPA_MATRIX.md or an engineering design blueprint
-                    let is_stpa_or_blueprint = doc_type == "blueprint"
-                        || path
-                            .file_name()
-                            .and_then(|f| f.to_str())
-                            .map(|name| {
-                                name == "STPA_MATRIX.md"
-                                    || (name.starts_with("blueprint-") && name.ends_with(".md"))
-                            })
-                            .unwrap_or(false);
-                    if is_stpa_or_blueprint {
-                        for line in content.lines() {
-                            let trimmed = line.trim();
-                            if !trimmed.starts_with('|') {
-                                continue;
-                            }
-                            let cols: Vec<&str> = trimmed.split('|').map(|s| s.trim()).collect();
-                            if let &[_, sc_cell, stmt_cell, _, ..] = cols.as_slice() {
-                                let raw_sc = sc_cell.trim_matches(|c: char| {
-                                    c == '*' || c == '`' || c.is_whitespace()
-                                });
-                                if raw_sc.strip_prefix("SC-").is_some_and(|digits| {
-                                    !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
-                                }) {
-                                    let stmt = stmt_cell.trim();
-                                    if !stmt.is_empty() {
-                                        let sc_id = raw_sc.replace('-', "_");
-                                        let constraint_name = format!("{}_SafetyConstraint", sc_id);
-                                        if !extracted_constraints
-                                            .iter()
-                                            .any(|c: &ConstraintDef| c.name == constraint_name)
-                                        {
-                                            extracted_constraints.push(ConstraintDef {
-                                                name: constraint_name,
-                                                doc: Some(stmt.to_string()),
-                                                expression: format!("{} == true", sc_id),
-                                                is_assertion: true,
-                                                ..Default::default()
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Merge into PackageDef
-    for cap in extracted_capabilities {
-        if !pkg.capability_defs.iter().any(|c| c.name == cap.name) {
-            pkg.capability_defs.push(cap);
-        }
-    }
-
-    // Update part defs
-    for (_, part) in extracted_parts {
-        if let Some(existing) = pkg.find_part_mut(&part.name) {
-            for act in part.actions {
-                if !existing.actions.iter().any(|a| a.name == act.name) {
-                    existing.actions.push(act);
-                }
-            }
-        } else {
-            pkg.part_defs.push(part);
-        }
-    }
-
-    for inter in extracted_interactions {
-        if !pkg.interaction_defs.iter().any(|i| i.name == inter.name) {
-            pkg.interaction_defs.push(inter);
-        }
-    }
-
-    for uc in extracted_use_cases {
-        if !pkg.use_case_defs.iter().any(|u| u.name == uc.name) {
-            pkg.use_case_defs.push(uc);
-        }
-    }
-
-    for con in extracted_constraints {
-        if !pkg.constraint_defs.iter().any(|c| c.name == con.name) {
-            pkg.constraint_defs.push(con);
-        }
-    }
-
-    // Serialize to SysML
-    let sysml_code = to_sysml(&pkg);
-
-    // When !dry_run, write schema atomically before computing file_manifest so self-referential
-    // schema_path reflects updated content.
-    if !dry_run {
-        if let Some(parent) = opts.output_path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create directory '{}': {}", parent.display(), e))?;
-        }
-        write_atomic(&opts.output_path, &sysml_code).map_err(|e| e.to_string())?;
-    }
-
-    // Compute digest and collect manifest files across schema_dir and docs/designs/
-    let mut digest = generate_digest(&pkg, &sysml_code);
+) -> Result<Vec<PathBuf>, String> {
     let mut manifest_files: Vec<PathBuf> = Vec::new();
     let schema_dir = opts
         .schema_path
@@ -679,6 +114,64 @@ pub fn reverse_sync_specs_to_sysml_with_dry_run(
 
     manifest_files.sort();
     manifest_files.dedup();
+    Ok(manifest_files)
+}
+
+/// Reverse synchronizes markdown documents under `docs_dir` into the SysML AST SSOT.
+///
+/// Safety & Traceability: Realises: [REQ-0604] [REQ-SYSML-SYNC-REVERSE/ENGINE-SYNC]
+/// Contract: Extracts Markdown specifications under `opts.docs_dir` into `base_pkg` and atomically writes `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`.
+/// Bounds & Faults: Delegates to `reverse_sync_specs_to_sysml_with_dry_run(..., false)`.
+pub fn reverse_sync_specs_to_sysml(
+    base_pkg: Option<&PackageDef>,
+    opts: &ReverseSyncOptions,
+) -> Result<(PackageDef, SchemaDigest), String> {
+    reverse_sync_specs_to_sysml_with_dry_run(base_pkg, opts, false)
+}
+
+/// Synchronizes Markdown specifications into a SysML v2 AST package and cryptographic digest,
+/// optionally suppressing disk writes when `dry_run` is `true`.
+///
+/// Safety & Traceability: Realises: [REQ-0604] [REQ-SYSML-SYNC-REVERSE/ENGINE-SYNC]
+/// Contract: Updates `PartDef` operations in-place via `pkg.find_part_mut`, computes the unified SHA-256 `SchemaDigest` and `file_manifest`, and performs zero disk writes when `dry_run` is `true`.
+/// Bounds & Faults: Validates directory existence and overwrite permissions fail-closed, returning `Err(String)` on I/O or parse errors.
+pub fn reverse_sync_specs_to_sysml_with_dry_run(
+    base_pkg: Option<&PackageDef>,
+    opts: &ReverseSyncOptions,
+    dry_run: bool,
+) -> Result<(PackageDef, SchemaDigest), String> {
+    if !opts.docs_dir.exists() {
+        return Err(format!(
+            "Docs directory does not exist: {}",
+            opts.docs_dir.display()
+        ));
+    }
+    if !opts.allow_overwrite && opts.schema_path.as_ref() == Some(&opts.output_path) {
+        return Err(format!(
+            "In-place overwrite of base input schema '{}' is prohibited when allow_overwrite=false.",
+            opts.output_path.display()
+        ));
+    }
+
+    let mut pkg = base_pkg.cloned().unwrap_or_else(|| PackageDef {
+        name: "System_SSOT".to_string(),
+        doc: Some("Single Source of Truth for System Architecture and Safety Model".to_string()),
+        ..Default::default()
+    });
+
+    extractor::extract_markdown_specs_into_package(&mut pkg, &opts.docs_dir)?;
+    let sysml_code = to_sysml(&pkg);
+
+    if !dry_run {
+        if let Some(parent) = opts.output_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create directory '{}': {}", parent.display(), e))?;
+        }
+        write_atomic(&opts.output_path, &sysml_code).map_err(|e| e.to_string())?;
+    }
+
+    let mut digest = generate_digest(&pkg, &sysml_code);
+    let manifest_files = collect_and_refresh_manifest_files(opts, dry_run)?;
     if !manifest_files.is_empty() {
         let manifest = crate::semantic::digest::compute_file_manifest(&manifest_files);
         digest = digest.with_file_manifest(manifest);
@@ -695,563 +188,11 @@ pub fn reverse_sync_specs_to_sysml_with_dry_run(
     }
 
     write_digest_atomic(&opts.digest_path, &digest).map_err(|e| e.to_string())?;
-
     println!(
         "[SysML v2 Reverse-Sync] Merged specifications from '{}' -> '{}' (SHA-256: {})",
         opts.docs_dir.display(),
         opts.output_path.display(),
         digest.sha256
     );
-
     Ok((pkg, digest))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_frontmatter_extraction() {
-        let md = r#"---
-title: "Feature 01: CoreSubsystem"
-type: feature
-part: CoreSubsystem
----
-
-# Content
-"#;
-        let (fm, body) = parse_frontmatter(md);
-        assert_eq!(
-            fm.get("title").map(|s| s.as_str()),
-            Some("Feature 01: CoreSubsystem")
-        );
-        assert_eq!(fm.get("type").map(|s| s.as_str()), Some("feature"));
-        assert_eq!(fm.get("part").map(|s| s.as_str()), Some("CoreSubsystem"));
-        assert!(body.contains("# Content"));
-    }
-
-    /// Regression test for Issue #534 verifying that non-Agile documents under `docs/designs/`
-    /// with 2-column Markdown tables containing `| Type | feature |` do not pollute `.pipeline/schema.sysml`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
-    /// for fn `test_reverse_sync_ignores_docs_designs_type_tables` in `crates/compile-sysml/src/sync/reverse.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Subdirectory Scoping Invariant: Only markdown files directly under canonical Agile specification
-    ///   subdirectories (`epics/`, `features/`, `user-stories/`, `use-cases/`) are synthesized into AST definitions.
-    ///
-    /// ## 3. Preconditions
-    /// - Temporary workspace directory is writable on the host filesystem.
-    ///
-    /// ## 4. Postconditions
-    /// - Asserts `CoreController` is preserved and `Blueprint01Arch` is absent from `.pipeline/schema.sysml`
-    ///   and the returned `PackageDef`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(1) bounded over the 2 fixture markdown files.
-    /// - Space Complexity: O(1) bounded auxiliary memory.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates `ReverseSyncOptions` boundary paths.
-    /// - State: Cleans up temporary test directory before returning.
-    /// - Action: Executes deterministically without network or external dependencies.
-    /// - Resource: Bounded temporary filesystem usage under `std::env::temp_dir()`.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SYSML-SYNC-REVERSE/SUBDIR-SCOPING] | SysML v2: VerificationCase(test_reverse_sync_ignores_docs_designs_type_tables)
-    #[test]
-    fn test_reverse_sync_ignores_docs_designs_type_tables() -> Result<(), String> {
-        let tmp_dir =
-            std::env::temp_dir().join(format!("deap_issue_534_rev_sync_{}", std::process::id()));
-        let _ = fs::remove_dir_all(&tmp_dir);
-
-        let pipeline_dir = tmp_dir.join(".pipeline");
-        let designs_dir = tmp_dir.join("docs").join("designs");
-        let features_dir = tmp_dir.join("docs").join("features");
-        fs::create_dir_all(&pipeline_dir).map_err(|e| e.to_string())?;
-        fs::create_dir_all(&designs_dir).map_err(|e| e.to_string())?;
-        fs::create_dir_all(&features_dir).map_err(|e| e.to_string())?;
-
-        let schema_path = pipeline_dir.join("schema.sysml");
-        let digest_path = pipeline_dir.join("schema-digest.json");
-        fs::write(
-            &schema_path,
-            "package TestSys {\n    part def CoreController;\n}\n",
-        )
-        .map_err(|e| e.to_string())?;
-
-        fs::write(
-            designs_dir.join("blueprint-01-arch.md"),
-            "# Blueprint 01\n\n| Attribute | Value |\n| :--- | :--- |\n| Type | feature |\n",
-        )
-        .map_err(|e| e.to_string())?;
-
-        fs::write(
-            features_dir.join("fea-01.md"),
-            "---\ntitle: \"Feature 01: CoreController\"\ntype: feature\npart: CoreController\n---\n\n# Feature 01\n\n- `+computeControl() : void`\n",
-        )
-        .map_err(|e| e.to_string())?;
-
-        let base_pkg = PackageDef {
-            name: "TestSys".to_string(),
-            part_defs: vec![PartDef {
-                name: "CoreController".to_string(),
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-
-        let opts = ReverseSyncOptions {
-            docs_dir: tmp_dir.join("docs"),
-            schema_path: Some(schema_path.clone()),
-            output_path: schema_path.clone(),
-            digest_path,
-            allow_overwrite: true,
-        };
-
-        let (pkg, _) = reverse_sync_specs_to_sysml(Some(&base_pkg), &opts)?;
-        let emitted_sysml = fs::read_to_string(&schema_path).map_err(|e| e.to_string())?;
-        let _ = fs::remove_dir_all(&tmp_dir);
-
-        assert!(
-            !pkg.part_defs.iter().any(|p| p.name == "Blueprint01Arch"),
-            "docs/designs/blueprint-01-arch.md must not synthesize PartDef Blueprint01Arch"
-        );
-        assert!(
-            !emitted_sysml.contains("Blueprint01Arch"),
-            "Emitted .pipeline/schema.sysml must not contain Blueprint01Arch, got:\n{}",
-            emitted_sysml
-        );
-        assert!(
-            pkg.part_defs.iter().any(|p| p.name == "CoreController"),
-            "Canonical docs/features/fea-01.md part CoreController must be preserved"
-        );
-        Ok(())
-    }
-
-    /// Regression test for Issue #535 verifying that `reverse_sync_specs_to_sysml` extracts
-    /// `SC-*` safety constraints from `docs/designs/blueprint-*.md` (including backtick-wrapped
-    /// and bold-wrapped cells) and deduplicates constraints across `STPA_MATRIX.md` and blueprints.
-    ///
-    /// # Objective
-    /// Verify `SC-*` safety constraints declared in `docs/designs/blueprint-*.md` 5-column STPA
-    /// Derivation-Annotation tables are extracted into `.pipeline/schema.sysml` without duplication.
-    ///
-    /// # Intention
-    /// Prevent silent loss of blueprint-defined `SC-*` safety constraints during reverse sync.
-    ///
-    /// # Logic
-    /// Creates a temporary workspace containing `docs/designs/blueprint-01-core.md` (declaring
-    /// backtick-wrapped `` `SC-01` `` and bold-wrapped `**SC-02**`) and
-    /// `docs/architecture/safety/STPA_MATRIX.md` (declaring `**SC-01**`), runs
-    /// `reverse_sync_specs_to_sysml`, and verifies both `SC_01_SafetyConstraint` and
-    /// `SC_02_SafetyConstraint` are emitted with `SC_01_SafetyConstraint` appearing once.
-    ///
-    /// # Parameters
-    /// - None (self-contained unit test fixture).
-    ///
-    /// # Returns
-    /// - `Result<(), String>` indicating test pass or failure reason.
-    ///
-    /// # Errors
-    /// - Returns `Err(String)` if temporary filesystem operations or reverse sync execution fail.
-    ///
-    /// # Safety
-    /// - Purely operates on an isolated temporary directory under `std::env::temp_dir()`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
-    /// for fn `test_reverse_sync_extracts_blueprint_sc_constraints` in `crates/compile-sysml/src/sync/reverse.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Blueprint Constraint Extraction & Deduplication Invariant: Every unique `SC-<digits>` row in
-    ///   `STPA_MATRIX.md` and `docs/designs/blueprint-*.md` produces exactly one `SC_<digits>_SafetyConstraint`
-    ///   in the resulting `PackageDef` and `.pipeline/schema.sysml`.
-    ///
-    /// ## 3. Preconditions
-    /// - Host temporary directory is writable.
-    ///
-    /// ## 4. Postconditions
-    /// - Asserts `.pipeline/schema.sysml` contains `constraint def SC_01_SafetyConstraint` (exactly once)
-    ///   and `constraint def SC_02_SafetyConstraint`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(1) bounded over the 2 fixture markdown files.
-    /// - Space Complexity: O(1) bounded auxiliary memory.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates `ReverseSyncOptions` boundary paths.
-    /// - State: Cleans up temporary test directory before returning.
-    /// - Action: Executes deterministically without network or external dependencies.
-    /// - Resource: Bounded temporary filesystem usage under `std::env::temp_dir()`.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SYSML-SYNC-REVERSE/BLUEPRINT-SC-EXTRACTION] | SysML v2: VerificationCase(test_reverse_sync_extracts_blueprint_sc_constraints)
-    #[test]
-    fn test_reverse_sync_extracts_blueprint_sc_constraints() -> Result<(), String> {
-        let tmp_dir =
-            std::env::temp_dir().join(format!("deap_issue_535_rev_sync_{}", std::process::id()));
-        let _ = fs::remove_dir_all(&tmp_dir);
-
-        let pipeline_dir = tmp_dir.join(".pipeline");
-        let designs_dir = tmp_dir.join("docs").join("designs");
-        let safety_dir = tmp_dir.join("docs").join("architecture").join("safety");
-        fs::create_dir_all(&pipeline_dir).map_err(|e| e.to_string())?;
-        fs::create_dir_all(&designs_dir).map_err(|e| e.to_string())?;
-        fs::create_dir_all(&safety_dir).map_err(|e| e.to_string())?;
-
-        let schema_path = pipeline_dir.join("schema.sysml");
-        let digest_path = pipeline_dir.join("schema-digest.json");
-        fs::write(
-            &schema_path,
-            "package TestSys {\n    part def CoreController;\n}\n",
-        )
-        .map_err(|e| e.to_string())?;
-
-        fs::write(
-            designs_dir.join("blueprint-01-core.md"),
-            "---\ntitle: \"Blueprint 01: Core\"\ntype: blueprint\n---\n\n# Blueprint 01\n\n| SC ID | Safety Constraint | UCA | Hazard | Mitigation |\n| :--- | :--- | :--- | :--- | :--- |\n| `SC-01` | Controller must enforce bounds | UCA-01 | H-01 | Clamp output |\n| **SC-02** | Controller must reject stale telemetry | UCA-02 | H-02 | Check timestamp |\n| `SC-03` | Controller must validate checksum | UCA-03 | H-03 | Verify CRC |\n",
-        )
-        .map_err(|e| e.to_string())?;
-
-        fs::write(
-            safety_dir.join("STPA_MATRIX.md"),
-            "# STPA Matrix\n\n| SC ID | Safety Constraint | UCA | Hazard |\n| :--- | :--- | :--- | :--- |\n| **SC-01** | Controller must enforce bounds | UCA-01 | H-01 |\n",
-        )
-        .map_err(|e| e.to_string())?;
-
-        let base_pkg = PackageDef {
-            name: "TestSys".to_string(),
-            part_defs: vec![PartDef {
-                name: "CoreController".to_string(),
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-
-        let opts = ReverseSyncOptions {
-            docs_dir: tmp_dir.join("docs"),
-            schema_path: Some(schema_path.clone()),
-            output_path: schema_path.clone(),
-            digest_path,
-            allow_overwrite: true,
-        };
-
-        let (pkg, _) = reverse_sync_specs_to_sysml(Some(&base_pkg), &opts)?;
-        let emitted_sysml = fs::read_to_string(&schema_path).map_err(|e| e.to_string())?;
-        let _ = fs::remove_dir_all(&tmp_dir);
-
-        assert!(
-            emitted_sysml.contains("assert constraint SC_01_SafetyConstraint"),
-            "Expected assert constraint SC_01_SafetyConstraint in .pipeline/schema.sysml, got:\n{}",
-            emitted_sysml
-        );
-        assert!(
-            emitted_sysml.contains("assert constraint SC_02_SafetyConstraint"),
-            "Expected assert constraint SC_02_SafetyConstraint from blueprint-01-core.md in .pipeline/schema.sysml, got:\n{}",
-            emitted_sysml
-        );
-        assert!(
-            emitted_sysml.contains("assert constraint SC_03_SafetyConstraint"),
-            "Expected assert constraint SC_03_SafetyConstraint (backtick-wrapped) from blueprint-01-core.md in .pipeline/schema.sysml, got:\n{}",
-            emitted_sysml
-        );
-        assert_eq!(
-            emitted_sysml.matches("SC_01_SafetyConstraint").count(),
-            1,
-            "Expected SC_01_SafetyConstraint to appear exactly once, got:\n{}",
-            emitted_sysml
-        );
-        assert_eq!(
-            pkg.constraint_defs
-                .iter()
-                .filter(|c| c.name == "SC_01_SafetyConstraint")
-                .count(),
-            1,
-            "Expected exactly 1 SC_01_SafetyConstraint in PackageDef.constraint_defs"
-        );
-        Ok(())
-    }
-
-    /// Verifies `ARCH-04`: `reverse_sync_specs_to_sysml_with_dry_run` performs zero disk writes when `dry_run` is `true`
-    /// and writes atomically when `dry_run` is `false`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_arch_04_reverse_sync_with_dry_run_skips_writes` in `crates/compile-sysml/src/sync/reverse.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves side-effect-free simulation during `dry_run: true` and atomic persistence during `dry_run: false`.
-    ///
-    /// ## 3. Preconditions
-    /// - Temporary workspace directory is writable.
-    ///
-    /// ## 4. Postconditions
-    /// - Asserts `output_path` and `digest_path` do not exist after `dry_run: true`, and both exist with zero leftover `.tmp.*` files after `dry_run: false`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N) over synthetic fixture.
-    /// - Space Complexity: O(N) bounded memory.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Removes temporary directory on test completion.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SYNC-REVERSE-REVERSE-SYNC-SPECS-TO-SYSML] | SysML v2: VerificationCaseDef(test_arch_04_reverse_sync_with_dry_run_skips_writes)
-    #[test]
-    fn test_arch_04_reverse_sync_with_dry_run_skips_writes(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let tmp_dir = std::env::temp_dir().join(format!(
-            "deap_test_reverse_sync_dry_run_{}",
-            std::process::id()
-        ));
-        let _ = fs::remove_dir_all(&tmp_dir);
-        let features_dir = tmp_dir.join("docs").join("features");
-        fs::create_dir_all(&features_dir).map_err(|e| e.to_string())?;
-        fs::write(
-            features_dir.join("FEAT-001.md"),
-            "---\nid: FEAT-001\ntitle: CoreController\n---\n# Feature: CoreController\n",
-        )
-        .map_err(|e| e.to_string())?;
-
-        let schema_path = tmp_dir.join("schema.sysml");
-        let digest_path = tmp_dir.join("schema_digest.json");
-        let opts = ReverseSyncOptions {
-            docs_dir: tmp_dir.join("docs"),
-            schema_path: None,
-            output_path: schema_path.clone(),
-            digest_path: digest_path.clone(),
-            allow_overwrite: true,
-        };
-
-        let base_pkg = PackageDef {
-            name: "TestSys".to_string(),
-            part_defs: vec![PartDef {
-                name: "CoreController".to_string(),
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-
-        let (pkg_dry, _) = reverse_sync_specs_to_sysml_with_dry_run(Some(&base_pkg), &opts, true)?;
-        assert_eq!(pkg_dry.part_defs.len(), 1);
-        assert!(!schema_path.exists(), "Dry-run must not write output_path");
-        assert!(!digest_path.exists(), "Dry-run must not write digest_path");
-
-        let (_pkg_live, _) =
-            reverse_sync_specs_to_sysml_with_dry_run(Some(&base_pkg), &opts, false)?;
-        assert!(
-            schema_path.exists(),
-            "Non-dry-run must atomically write output_path"
-        );
-        assert!(
-            digest_path.exists(),
-            "Non-dry-run must atomically write digest_path"
-        );
-
-        let _ = fs::remove_dir_all(&tmp_dir);
-        Ok(())
-    }
-
-    /// Verifies that `reverse_sync_specs_to_sysml` includes `docs/designs/*.sysml` in `digest.file_manifest`
-    /// and atomically refreshes sidecar `docs/designs/*.digest.json` files.
-    ///
-    /// # Objective
-    /// Regression test for GitHub Issue #536 ensuring `reverse_sync_specs_to_sysml` discovers `.sysml`
-    /// files under `docs/designs/`, includes them in the unified `file_manifest`, and updates stale
-    /// sidecar `.digest.json` files on disk.
-    ///
-    /// # Intention
-    /// Prevent stale blueprint sidecar digests and incomplete `file_manifest` arrays after reverse-sync.
-    ///
-    /// # Logic
-    /// 1. Create a temporary workspace containing `docs/designs/blueprint-01-core.sysml` and a stale
-    ///    `docs/designs/blueprint-01-core.digest.json`.
-    /// 2. Execute `reverse_sync_specs_to_sysml`.
-    /// 3. Assert that `digest.file_manifest` contains `"docs/designs/blueprint-01-core.sysml"` and that
-    ///    `docs/designs/blueprint-01-core.digest.json` has an updated SHA-256 and `file_manifest`.
-    ///
-    /// # Parameters
-    /// - None (self-contained unit test fixture).
-    ///
-    /// # Returns
-    /// - `Result<(), Box<dyn std::error::Error>>` indicating test pass or failure.
-    ///
-    /// # Errors
-    /// - Returns `Err` if temporary directory creation, file I/O, or reverse-sync fails.
-    ///
-    /// # Safety
-    /// - Pure safe Rust operating on an isolated temporary directory; no `unsafe` blocks.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `test_reverse_sync_includes_docs_designs_sysml_in_manifest_and_updates_sidecar_digests` in `crates/compile-sysml/src/sync/reverse.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Ensures `file_manifest` covers `docs/designs/*.sysml` and sidecar `.digest.json` digests remain synchronized.
-    ///
-    /// ## 3. Preconditions
-    /// - Temporary workspace directory is writable.
-    ///
-    /// ## 4. Postconditions
-    /// - Asserts `digest.file_manifest` contains `"docs/designs/blueprint-01-core.sysml"` and `docs/designs/blueprint-01-core.digest.json` is refreshed.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N) over synthetic fixture.
-    /// - Space Complexity: O(N) bounded memory.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Removes temporary directory on test completion prior to assertions.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SYNC-REVERSE-REVERSE-SYNC-SPECS-TO-SYSML] | SysML v2: VerificationCaseDef(test_reverse_sync_includes_docs_designs_sysml_in_manifest_and_updates_sidecar_digests)
-    #[test]
-    fn test_reverse_sync_includes_docs_designs_sysml_in_manifest_and_updates_sidecar_digests(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let tmp_dir = std::env::temp_dir().join(format!(
-            "deap_test_reverse_sync_designs_manifest_{}",
-            std::process::id()
-        ));
-        let _ = fs::remove_dir_all(&tmp_dir);
-
-        let designs_dir = tmp_dir.join("docs").join("designs");
-        let pipeline_dir = tmp_dir.join(".pipeline");
-        fs::create_dir_all(&designs_dir).map_err(|e| e.to_string())?;
-        fs::create_dir_all(&pipeline_dir).map_err(|e| e.to_string())?;
-
-        let bp_sysml_path = designs_dir.join("blueprint-01-core.sysml");
-        fs::write(
-            &bp_sysml_path,
-            "package BlueprintCore {\n    part def CoreEngine {}\n}\n",
-        )
-        .map_err(|e| e.to_string())?;
-
-        let bp_digest_path = designs_dir.join("blueprint-01-core.digest.json");
-        fs::write(
-            &bp_digest_path,
-            "{\n  \"sha256\": \"stale\",\n  \"file_manifest\": []\n}\n",
-        )
-        .map_err(|e| e.to_string())?;
-
-        let schema_path = pipeline_dir.join("schema.sysml");
-        fs::write(
-            &schema_path,
-            "package TestSys {\n    part def CoreController {}\n}\n",
-        )
-        .map_err(|e| e.to_string())?;
-        let digest_path = pipeline_dir.join("schema_digest.json");
-
-        let base_pkg = PackageDef {
-            name: "TestSys".to_string(),
-            part_defs: vec![PartDef {
-                name: "CoreController".to_string(),
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-
-        let opts = ReverseSyncOptions {
-            docs_dir: tmp_dir.join("docs"),
-            schema_path: Some(schema_path.clone()),
-            output_path: schema_path,
-            digest_path,
-            allow_overwrite: true,
-        };
-
-        let (_pkg, digest) = reverse_sync_specs_to_sysml(Some(&base_pkg), &opts)?;
-        let sidecar_raw = fs::read_to_string(&bp_digest_path).map_err(|e| e.to_string())?;
-        let _ = fs::remove_dir_all(&tmp_dir);
-
-        assert!(
-            digest
-                .file_manifest
-                .iter()
-                .any(|entry| entry.path == "docs/designs/blueprint-01-core.sysml"),
-            "Expected digest.file_manifest to contain 'docs/designs/blueprint-01-core.sysml', got: {:?}",
-            digest.file_manifest
-        );
-
-        let sidecar_digest: SchemaDigest =
-            serde_json::from_str(&sidecar_raw).map_err(|e| e.to_string())?;
-        assert_ne!(
-            sidecar_digest.sha256, "stale",
-            "Expected docs/designs/blueprint-01-core.digest.json sha256 to be updated from 'stale'"
-        );
-        assert!(
-            sidecar_digest
-                .file_manifest
-                .iter()
-                .any(|entry| entry.path == "docs/designs/blueprint-01-core.sysml"),
-            "Expected sidecar file_manifest to contain 'docs/designs/blueprint-01-core.sysml', got: {:?}",
-            sidecar_digest.file_manifest
-        );
-
-        Ok(())
-    }
-
-    /// Verifies `parse_frontmatter` and `reverse_sync_specs_to_sysml_with_dry_run` handle malformed
-    /// single-character quote delimiters, multi-byte UTF-8 strings, and malformed operation bullets without panicking.
-    #[test]
-    fn test_parse_frontmatter_and_action_extraction_utf8_and_malformed_inputs() -> Result<(), String>
-    {
-        let malformed_md = "---\ntitle: \"\nsubtitle: '\nempty_dq: \"\"\nempty_sq: ''\nutf8_key: \"軌道制御: Δv ≤ 60 m/s\"\nno_colon_line\n---\nBody ΔΩ🛰\n";
-        let (fm, body) = parse_frontmatter(malformed_md);
-        assert_eq!(fm.get("title").map(String::as_str), Some("\""));
-        assert_eq!(fm.get("subtitle").map(String::as_str), Some("'"));
-        assert_eq!(fm.get("empty_dq").map(String::as_str), Some(""));
-        assert_eq!(fm.get("empty_sq").map(String::as_str), Some(""));
-        assert_eq!(
-            fm.get("utf8_key").map(String::as_str),
-            Some("軌道制御: Δv ≤ 60 m/s")
-        );
-        assert!(body.contains("Body ΔΩ🛰"));
-
-        let unclosed_md = "---\ntitle: \"unclosed\nBody without closing fence";
-        let (fm_unclosed, body_unclosed) = parse_frontmatter(unclosed_md);
-        assert!(fm_unclosed.is_empty());
-        assert_eq!(body_unclosed, unclosed_md);
-
-        let tmp_dir = std::env::temp_dir().join(format!(
-            "deap_test_rev_sync_utf8_checked_{}",
-            std::process::id()
-        ));
-        let _ = fs::remove_dir_all(&tmp_dir);
-        let features_dir = tmp_dir.join("docs").join("features");
-        fs::create_dir_all(&features_dir).map_err(|e| e.to_string())?;
-        fs::write(
-            features_dir.join("FEAT-01-Core.md"),
-            concat!(
-                "---\n",
-                "title: \"\n",
-                "type: feature\n",
-                "part: CoreEngine\n",
-                "---\n\n",
-                "- `+computeTrajectory(in Δv: Real, in 軌道: String) : ControlStatus`\n",
-                "- `+execute_coreengine() : void`\n",
-                "- `+)reversedParens( : void`\n",
-                "- `+unclosedParen(in x: Real : void`\n",
-                "- `+() : void`\n",
-                "- `+missingReturnType() : `\n"
-            ),
-        )
-        .map_err(|e| e.to_string())?;
-
-        let opts = ReverseSyncOptions {
-            docs_dir: tmp_dir.join("docs"),
-            schema_path: None,
-            output_path: tmp_dir.join("schema.sysml"),
-            digest_path: tmp_dir.join("schema-digest.json"),
-            allow_overwrite: true,
-        };
-        let (pkg, _) = reverse_sync_specs_to_sysml_with_dry_run(None, &opts, true)?;
-        let _ = fs::remove_dir_all(&tmp_dir);
-
-        let core_part = pkg
-            .part_defs
-            .iter()
-            .find(|p| p.name == "CoreEngine")
-            .ok_or_else(|| "Expected CoreEngine PartDef".to_string())?;
-        let action_names: Vec<&str> = core_part.actions.iter().map(|a| a.name.as_str()).collect();
-        assert_eq!(action_names, vec!["computeTrajectory"]);
-        Ok(())
-    }
 }

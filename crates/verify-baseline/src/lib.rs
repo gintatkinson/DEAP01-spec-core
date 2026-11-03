@@ -32,14 +32,37 @@
 //! Realises: [REQ-VERIFY-BASELINE-LIB], [DO-330-TQL-4-VERIFY-LIB]
 
 pub mod audit_code;
+pub(crate) mod audit_code_models;
+pub(crate) mod audit_code_pillars_a;
+pub(crate) mod audit_code_pillars_b;
+pub(crate) mod audit_code_pillars_c;
+pub(crate) mod audit_code_scanner;
+#[cfg(test)]
+mod audit_code_tests;
 pub mod blueprint_gate;
+pub(crate) mod bp_gate_checks_a;
+pub(crate) mod bp_gate_checks_b;
+pub(crate) mod bp_gate_checks_c;
+pub(crate) mod bp_gate_publish;
+pub(crate) mod bp_gate_sysml;
+pub(crate) mod bp_gate_tables;
+#[cfg(test)]
+mod bp_gate_tests;
 pub mod check_secrets;
 pub mod checks;
+pub mod clippy_gate;
 pub mod commit_msg;
+mod commit_msg_scanner;
 pub mod defect_dossier;
+pub(crate) mod defect_dossier_grounding;
+pub(crate) mod defect_dossier_publish;
+pub(crate) mod defect_dossier_repo;
+pub(crate) mod defect_dossier_sections;
 pub mod ndjson_cli;
 pub mod output_integrity;
 pub mod runner;
+pub mod runner_gates;
+pub mod runner_helpers;
 pub mod setup_hooks;
 pub mod spec_audit;
 

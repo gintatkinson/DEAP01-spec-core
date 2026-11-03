@@ -49,13 +49,13 @@ fn test_check_36_anti_padding_cap_and_explicit_doc_tier_a() {
         "Expected > 4-line Tier-B/C docblock in non-ratcheted module to fail Check 36, got:\n{red_errs}"
     );
 
-    assert_eq!(
+    assert!(
         audit_rust_source_docstrings(
             padded_red,
             "crates/verify-baseline/src/checks/docstring_gate.rs"
-        ),
-        Ok(1),
-        "Legacy ratcheted path must remain exempt from > 4-line Tier-B/C cap until Stream 4.3 compaction"
+        )
+        .is_err(),
+        "Zero modules remain in LEGACY_RATCHET_MAX_LINES; > 4-line Tier-B/C docblocks must fail everywhere"
     );
 }
 

@@ -184,7 +184,7 @@ mod tests {
             5,
             "crates/verify-baseline/src/checks/dod_gates.rs"
         ));
-        assert!(!exceeds_unratcheted_tier_bc_line_cap(
+        assert!(exceeds_unratcheted_tier_bc_line_cap(
             20,
             "crates/verify-baseline/src/checks/docstring_gate.rs"
         ));

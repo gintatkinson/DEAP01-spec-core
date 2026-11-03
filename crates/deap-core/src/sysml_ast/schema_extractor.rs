@@ -25,11 +25,8 @@ impl UnifiedSchemaModelExtractor {
     /// Realises: [REQ-SYSML-AST-MOD-UNIFIEDSCHEMAMODELEXTRACTOR-SUPPORTED-EXTENSIONS]
     pub const SUPPORTED_EXTENSIONS: SupportedExtensionsCatalog = SupportedExtensionsCatalog;
 
-    /// Recursively discovers all supported schema files across the provided search directories.
-    /// Excludes hidden entries (`.`), editor swap files (`#`), and `README.md`.
-    /// Results are lexicographically sorted to eliminate filesystem traversal jitter.
-    ///
-    /// Conforms to DO-178C Level A and ECSS-E-ST-40C.
+    /// Recursively discovers all supported schema files across `search_dirs` in sorted order,
+    /// excluding hidden entries (`.`), swap files (`#`), and `README.md`.
     /// Realises: [REQ-SYSML-AST-SSOT-PARITY/DISCOVER-SCHEMA-FILES]
     pub fn discover_schema_files<P: AsRef<Path>>(search_dirs: &[P]) -> Vec<PathBuf> {
         let mut schema_files = Vec::new();

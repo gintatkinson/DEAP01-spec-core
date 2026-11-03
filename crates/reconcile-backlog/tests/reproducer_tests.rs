@@ -1,829 +1,317 @@
-//! Regression and reproduction test suite for `reconcile-backlog` bottom-up registration and upstream link projection.
-//!
-//! ## 1. Safety Intent & Regulatory Scope
-//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C verification
-//! objectives for `crates/reconcile-backlog/tests/reproducer_tests.rs`. Provides deterministic
-//! regression tests for adversarial audit findings in `reconcile-backlog` (refs #554).
-//!
-//! ## 2. Invariants & Mathematical Properties
-//! - Bottom-Up Registration Invariant: Unallocated specification artifacts (`issue_id == None` /
-//!   `TBD`) are registered in strict bottom-up dependency order (`use-case` and `user-story` $\to$
-//!   `feature` $\to$ `epic`), back-patching allocated `#<id>` values into local metadata tables
-//!   and parent checklists before parent tiers are published.
-//! - Idempotency Invariant: Re-running `run_reconciliation` after initial registration creates
-//!   zero additional tracker issues ($f(f(x)) = f(x)$).
-//! - Upstream Workspace Prefix Invariant: When `workspace_root` resides under `.pipeline/upstream`,
-//!   all projected GitHub blob URLs preserve the `.pipeline/upstream/` path prefix.
-//!
-//! ## 3. Preconditions
-//! - `reconcile_backlog::run_reconciliation` and `TrackerClient` are accessible and
-//!   `std::env::temp_dir()` is writable for ephemeral test fixtures.
-//!
-//! ## 4. Postconditions
-//! - All temporary test fixtures are removed prior to test completion and all assertions hold.
-//!
-//! ## 5. Algorithmic Complexity Bounds
-//! - Time Complexity: $O(N \log N + M)$ over the synthetic specification fixture count $N$ and byte size $M$.
-//! - Space Complexity: $O(N + M)$ bounded auxiliary memory for in-memory mock tracker state.
-//!
-//! ## 6. Failure Modes & Fault Tolerance
-//! - Interface: Validates boundary inputs and file paths passed to `run_reconciliation`.
-//! - State: Ensures zero cross-test state contamination via process- and timestamp-scoped temp directories.
-//! - Action: Executes deterministically with zero unbounded recursion, panics, or `.unwrap()` calls.
-//! - Resource: Cleans up temporary filesystem directories deterministically before returning.
-//!
-//! ## 7. Realization & Traceability
-//! Realises: [REQ-RECONCILE-BACKLOG-RUN-RECONCILIATION, REQ-RECONCILE-BACKLOG-REWRITE-PROJECTED-LINKS] | SysML v2: VerificationCaseDef(reproducer_tests)
+//! Regression and reproducer integration tests (Issues #527, #528, #529, #530, #531, #749).
+//! Realises: [REQ-RECONCILE-BACKLOG-TESTS]
 
+use reconcile_backlog::checklist::{
+    contains_unpopulated_placeholders, reconcile_checklists_in_content,
+};
+use reconcile_backlog::create_issue::{execute_create_issue_with_tracker, CreateIssueArgs};
+use reconcile_backlog::tracker::{Issue, IssueIndex, IssueTracker};
+use reconcile_backlog::{
+    project_body_for_tracker_with_prefix, run_reconciliation, ReconcileError, ReconcileOptions,
+};
+use std::cell::RefCell;
 use std::fs;
-use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
-use reconcile_backlog::tracker::{TrackerClient, TrackerIssue, TrackerLabel};
-use reconcile_backlog::{run_reconciliation, ReconcileOptions};
+static REPRO_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-/// In-memory tracker state recording sequential issue allocations and creation order for Issue #554.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
-/// for struct `SequentialTrackerState` in `crates/reconcile-backlog/tests/reproducer_tests.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves monotonic sequential issue allocation starting at `next_id`.
-/// - Records every `create_issue` invocation in chronological order `(number, title, label)`.
-///
-/// ## 3. Preconditions
-/// - Initialized with a positive starting `next_id`.
-///
-/// ## 4. Postconditions
-/// - Maintains complete in-memory issue state across `create_issue` and `update_issue_body` calls.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ over the number of stored issues $N$.
-/// - Space Complexity: $O(N)$ bounded by the number of test issues created.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Accessed exclusively through `SequentialMockTracker` trait methods.
-/// - State: Protected by `std::sync::Mutex` with explicit poison error propagation.
-/// - Action: Zero external I/O or subprocess invocation.
-/// - Resource: Bounded by test fixture cardinality.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT] | SysML v2: PartDef(SequentialTrackerState)
-struct SequentialTrackerState {
-    issues: Vec<TrackerIssue>,
-    labels: Vec<String>,
-    created_log: Vec<(u64, String, String)>,
-    next_id: u64,
+struct TempDirGuard {
+    path: PathBuf,
 }
 
-/// Mock `TrackerClient` implementation that allocates sequential issue numbers starting from a configured base.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
-/// for struct `SequentialMockTracker` in `crates/reconcile-backlog/tests/reproducer_tests.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Deterministically allocates sequential issue IDs (`base_id`, `base_id + 1`, ...) upon `create_issue`.
-///
-/// ## 3. Preconditions
-/// - Constructed via `SequentialMockTracker::new(start_id)`.
-///
-/// ## 4. Postconditions
-/// - Provides full readback of created issues and updated issue bodies for closed-loop verification.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ per tracker operation over $N$ tracked issues.
-/// - Space Complexity: $O(N)$ auxiliary memory.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Implements `TrackerClient` returning `Result<_, String>`.
-/// - State: Thread-safe interior mutability via `Mutex<SequentialTrackerState>`.
-/// - Action: Deterministic in-memory execution.
-/// - Resource: Bounded by test issue count.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT] | SysML v2: PartDef(SequentialMockTracker)
-struct SequentialMockTracker {
-    state: Mutex<SequentialTrackerState>,
+impl TempDirGuard {
+    fn path(&self) -> &Path {
+        &self.path
+    }
 }
 
-impl SequentialMockTracker {
-    /// Constructs a new `SequentialMockTracker` starting issue allocation at `start_id`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
-    /// for fn `SequentialMockTracker::new` in `crates/reconcile-backlog/tests/reproducer_tests.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Initializes empty issue and creation logs with `next_id = start_id`.
-    ///
-    /// ## 3. Preconditions
-    /// - `start_id > 0`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns a ready `SequentialMockTracker`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(1)$.
-    /// - Space Complexity: $O(1)$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Accepts `u64` starting identifier.
-    /// - State: Clean initial state.
-    /// - Action: Non-panicking construction.
-    /// - Resource: Minimal stack/heap allocation.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT] | SysML v2: ActionDef(SequentialMockTracker::new)
-    fn new(start_id: u64) -> Self {
+impl Drop for TempDirGuard {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+fn tempdir() -> Result<TempDirGuard, std::io::Error> {
+    let seq = REPRO_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!(
+        "reconcile_repro_dir_{}_{}",
+        std::process::id(),
+        seq
+    ));
+    let _ = fs::remove_dir_all(&path);
+    fs::create_dir_all(&path)?;
+    Ok(TempDirGuard { path })
+}
+
+struct NamedTempFile {
+    path: PathBuf,
+    file: fs::File,
+}
+
+impl NamedTempFile {
+    fn new() -> Result<Self, std::io::Error> {
+        let seq = REPRO_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "reconcile_repro_file_{}_{}.md",
+            std::process::id(),
+            seq
+        ));
+        let file = fs::File::create(&path)?;
+        Ok(Self { path, file })
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Write for NamedTempFile {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.file.write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.file.flush()
+    }
+}
+
+impl Drop for NamedTempFile {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+struct ReproducerMockTracker {
+    issues: RefCell<Vec<Issue>>,
+    edits: RefCell<Vec<(u64, String)>>,
+    next_id: RefCell<u64>,
+}
+
+impl ReproducerMockTracker {
+    fn new(initial: Vec<Issue>) -> Self {
+        let max_id = initial.iter().map(|i| i.number).max().unwrap_or(0);
         Self {
-            state: Mutex::new(SequentialTrackerState {
-                issues: Vec::new(),
-                labels: Vec::new(),
-                created_log: Vec::new(),
-                next_id: start_id,
-            }),
+            issues: RefCell::new(initial),
+            edits: RefCell::new(Vec::new()),
+            next_id: RefCell::new(max_id + 1),
         }
     }
-
-    /// Returns the ordered list of `(issue_number, title, label)` tuples recorded by `create_issue`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
-    /// for fn `SequentialMockTracker::created_log` in `crates/reconcile-backlog/tests/reproducer_tests.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves exact invocation order of `create_issue`.
-    ///
-    /// ## 3. Preconditions
-    /// - Mutex is not poisoned.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns a cloned vector of creation log entries.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(K)$ where $K$ is the number of created issues.
-    /// - Space Complexity: $O(K)$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Returns `Result<Vec<(u64, String, String)>, String>`.
-    /// - State: Read-only snapshot of `created_log`.
-    /// - Action: Non-panicking lock acquisition.
-    /// - Resource: Bounded clone.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT] | SysML v2: ActionDef(SequentialMockTracker::created_log)
-    fn created_log(&self) -> Result<Vec<(u64, String, String)>, String> {
-        let guard = self.state.lock().map_err(|e| e.to_string())?;
-        Ok(guard.created_log.clone())
-    }
 }
 
-impl TrackerClient for SequentialMockTracker {
-    /// Returns all tracked issues in memory.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
-    /// for fn `SequentialMockTracker::fetch_all_issues` in `crates/reconcile-backlog/tests/reproducer_tests.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Returns an exact snapshot of `state.issues`.
-    ///
-    /// ## 3. Preconditions
-    /// - Mutex is not poisoned.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Ok(Vec<TrackerIssue>)`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(N)$.
-    /// - Space Complexity: $O(N)$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Propagates lock errors via `Result::Err`.
-    /// - State: Does not mutate state.
-    /// - Action: Deterministic memory copy.
-    /// - Resource: Bounded by issue count.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-FETCH-ALL-ISSUES] | SysML v2: ActionDef(SequentialMockTracker::fetch_all_issues)
-    fn fetch_all_issues(&self) -> Result<Vec<TrackerIssue>, String> {
-        let guard = self.state.lock().map_err(|e| e.to_string())?;
-        Ok(guard.issues.clone())
+impl IssueTracker for ReproducerMockTracker {
+    fn fetch_all_issues(&self, _repo: Option<&str>) -> Result<Vec<Issue>, ReconcileError> {
+        Ok(self.issues.borrow().clone())
     }
 
-    /// Updates the body of an existing issue in memory.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
-    /// for fn `SequentialMockTracker::update_issue_body` in `crates/reconcile-backlog/tests/reproducer_tests.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Replaces `issue.body` for the matching `issue_number`.
-    ///
-    /// ## 3. Preconditions
-    /// - `issue_number` must exist in `state.issues`.
-    ///
-    /// ## 4. Postconditions
-    /// - Target issue holds `Some(body.to_string())`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(N)$.
-    /// - Space Complexity: $O(M)$ where $M$ is `body.len()`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Returns `Err` if `issue_number` is not found.
-    /// - State: Atomic update under mutex lock.
-    /// - Action: Deterministic linear scan.
-    /// - Resource: Bounded string allocation.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-UPDATE-ISSUE-BODY] | SysML v2: ActionDef(SequentialMockTracker::update_issue_body)
-    fn update_issue_body(&self, issue_number: u64, body: &str) -> Result<(), String> {
-        let mut guard = self.state.lock().map_err(|e| e.to_string())?;
-        let issue = guard
-            .issues
-            .iter_mut()
-            .find(|i| i.number == issue_number)
-            .ok_or_else(|| format!("Issue #{} not found", issue_number))?;
-        issue.body = Some(body.to_string());
+    fn edit_issue_body(
+        &self,
+        number: u64,
+        new_body: &str,
+        _repo: Option<&str>,
+    ) -> Result<(), ReconcileError> {
+        self.edits.borrow_mut().push((number, new_body.to_string()));
+        if let Some(issue) = self.issues.borrow_mut().iter_mut().find(|i| i.number == number) {
+            issue.body = new_body.to_string();
+        }
         Ok(())
     }
 
-    /// Appends a label to an existing issue in memory.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
-    /// for fn `SequentialMockTracker::add_label` in `crates/reconcile-backlog/tests/reproducer_tests.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves existing labels and appends `label`.
-    ///
-    /// ## 3. Preconditions
-    /// - `issue_number` must exist in `state.issues`.
-    ///
-    /// ## 4. Postconditions
-    /// - Target issue contains `TrackerLabel::String(label.to_string())`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(N)$.
-    /// - Space Complexity: $O(1)$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Returns `Err` if `issue_number` is not found.
-    /// - State: Atomic update under mutex lock.
-    /// - Action: Deterministic linear scan.
-    /// - Resource: Bounded allocation.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-ADD-LABEL] | SysML v2: ActionDef(SequentialMockTracker::add_label)
-    fn add_label(&self, issue_number: u64, label: &str) -> Result<(), String> {
-        let mut guard = self.state.lock().map_err(|e| e.to_string())?;
-        let issue = guard
-            .issues
-            .iter_mut()
-            .find(|i| i.number == issue_number)
-            .ok_or_else(|| format!("Issue #{} not found", issue_number))?;
-        issue.labels.push(TrackerLabel::String(label.to_string()));
-        Ok(())
-    }
-
-    /// Allocates the next sequential issue ID and records the creation call.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
-    /// for fn `SequentialMockTracker::create_issue` in `crates/reconcile-backlog/tests/reproducer_tests.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Increments `next_id` by 1 and records `(id, title, label)` in `created_log`.
-    ///
-    /// ## 3. Preconditions
-    /// - `title` and `label` are non-empty strings.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Ok((id, url))` and appends `TrackerIssue` to `state.issues`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(1)$ amortized.
-    /// - Space Complexity: $O(M)$ where $M$ is `body.len()`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Propagates lock errors via `Result::Err`.
-    /// - State: Atomic insertion under mutex lock.
-    /// - Action: Deterministic allocation.
-    /// - Resource: Bounded by test issue count.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-CREATE-ISSUE] | SysML v2: ActionDef(SequentialMockTracker::create_issue)
     fn create_issue(
         &self,
         title: &str,
         body: &str,
-        label: &str,
-        repo: Option<&str>,
-    ) -> Result<(u64, String), String> {
-        let mut guard = self.state.lock().map_err(|e| e.to_string())?;
-        let id = guard.next_id;
-        guard.next_id += 1;
-        let url = format!(
-            "https://github.com/{}/issues/{}",
-            repo.unwrap_or("owner/repo"),
-            id
-        );
-        guard
-            .created_log
-            .push((id, title.to_string(), label.to_string()));
-        guard.issues.push(TrackerIssue {
+        labels: &[String],
+        _repo: Option<&str>,
+    ) -> Result<u64, ReconcileError> {
+        let mut next_id = self.next_id.borrow_mut();
+        let id = *next_id;
+        *next_id += 1;
+        self.issues.borrow_mut().push(Issue {
             number: id,
             title: title.to_string(),
             state: "OPEN".to_string(),
-            labels: vec![TrackerLabel::String(label.to_string())],
-            body: Some(body.to_string()),
-            url: Some(url.clone()),
+            labels: labels.to_vec(),
+            body: body.to_string(),
         });
-        Ok((id, url))
+        Ok(id)
     }
 
-    /// Ensures a label exists in the mock tracker.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
-    /// for fn `SequentialMockTracker::ensure_label_exists` in `crates/reconcile-backlog/tests/reproducer_tests.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Idempotently inserts `label` into `state.labels`.
-    ///
-    /// ## 3. Preconditions
-    /// - Mutex is not poisoned.
-    ///
-    /// ## 4. Postconditions
-    /// - `state.labels` contains `label`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(L)$ where $L$ is label count.
-    /// - Space Complexity: $O(1)$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Returns `Result<(), String>`.
-    /// - State: Atomic check-and-insert.
-    /// - Action: Deterministic scan.
-    /// - Resource: Bounded label list.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-ENSURE-LABEL-EXISTS] | SysML v2: ActionDef(SequentialMockTracker::ensure_label_exists)
-    fn ensure_label_exists(&self, label: &str, _repo: Option<&str>) -> Result<(), String> {
-        let mut guard = self.state.lock().map_err(|e| e.to_string())?;
-        if !guard.labels.iter().any(|l| l == label) {
-            guard.labels.push(label.to_string());
+    fn reopen_issue(
+        &self,
+        number: u64,
+        comment: &str,
+        _repo: Option<&str>,
+    ) -> Result<(), ReconcileError> {
+        if let Some(issue) = self.issues.borrow_mut().iter_mut().find(|i| i.number == number) {
+            issue.state = "OPEN".to_string();
+            issue.body.push_str(&format!("\n{}", comment));
         }
         Ok(())
     }
-
-    /// Reopens a closed issue in the mock tracker.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
-    /// for fn `SequentialMockTracker::reopen_issue` in `crates/reconcile-backlog/tests/reproducer_tests.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Transitions `issue.state` to `"OPEN"`.
-    ///
-    /// ## 3. Preconditions
-    /// - `issue_number` must exist in `state.issues`.
-    ///
-    /// ## 4. Postconditions
-    /// - Target issue is `"OPEN"`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(N)$.
-    /// - Space Complexity: $O(1)$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Returns `Err` if `issue_number` is not found.
-    /// - State: Atomic update under mutex lock.
-    /// - Action: Deterministic scan.
-    /// - Resource: Bounded memory.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-TRACKERCLIENT-REOPEN-ISSUE] | SysML v2: ActionDef(SequentialMockTracker::reopen_issue)
-    fn reopen_issue(
-        &self,
-        issue_number: u64,
-        _comment: Option<&str>,
-        _repo: Option<&str>,
-    ) -> Result<(), String> {
-        let mut guard = self.state.lock().map_err(|e| e.to_string())?;
-        let issue = guard
-            .issues
-            .iter_mut()
-            .find(|i| i.number == issue_number)
-            .ok_or_else(|| format!("Issue #{} not found", issue_number))?;
-        issue.state = "OPEN".to_string();
-        Ok(())
-    }
 }
 
-/// Verifies that `run_reconciliation` registers unallocated (`Issue ID: TBD`) specifications
-/// in strict bottom-up order (`user-story` -> `feature` -> `epic`), back-patches `#<id>` into
-/// local metadata tables and parent checklists on disk and in projected tracker bodies, and is
-/// 100% idempotent on subsequent runs.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
-/// for fn `test_issue_554_bottom_up_registration_and_checklist_backpatching` in
-/// `crates/reconcile-backlog/tests/reproducer_tests.rs` (refs #554).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Bottom-up tier ordering ensures leaf specifications (`US-01` $\to \#560$) receive tracker IDs
-///   before intermediate (`FEAT-01` $\to \#561$) and root (`EPIC-01` $\to \#562$) specifications.
-/// - Parent checklists on disk and in remote tracker bodies contain zero `TBD` tokens after
-///   reconciliation.
-/// - Re-running `run_reconciliation` over the reconciled workspace invokes `create_issue` zero
-///   additional times.
-///
-/// ## 3. Preconditions
-/// - A temporary workspace containing unallocated `EPIC-01-test.md`, `FEAT-01-subcomp.md`, and
-///   `US-01-action.md` with `| **Issue ID** | TBD |` and `- [ ] TBD - [...]` checklists is created.
-///
-/// ## 4. Postconditions
-/// - `create_issue` is invoked in order: `US-01` (`#560`), `FEAT-01` (`#561`), `EPIC-01` (`#562`).
-/// - Local files and remote tracker bodies contain `#560`, `#561`, `#562` in metadata tables and
-///   parent checklists.
-/// - Second reconciliation pass creates 0 issues.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N \log N + M)$ over the 3 specification files.
-/// - Space Complexity: $O(N + M)$ auxiliary memory.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Returns `Result<(), Box<dyn std::error::Error>>`.
-/// - State: Isolated temporary directory removed before returning.
-/// - Action: Zero `.unwrap()` or `panic!()` calls in production paths.
-/// - Resource: Bounded to 3 temporary Markdown files.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-RECONCILE-BACKLOG-RUN-RECONCILIATION] | SysML v2: VerificationCaseDef(test_issue_554_bottom_up_registration_and_checklist_backpatching)
 #[test]
-fn test_issue_554_bottom_up_registration_and_checklist_backpatching(
-) -> Result<(), Box<dyn std::error::Error>> {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let tmp_dir = std::env::temp_dir().join(format!(
-        "deap_issue_554_bottom_up_{}_{}",
-        std::process::id(),
-        nanos
-    ));
-    if tmp_dir.exists() {
-        fs::remove_dir_all(&tmp_dir)?;
-    }
+fn test_issue_527_false_positive_epic_feature_collision() {
+    let issues = vec![
+        Issue {
+            number: 100,
+            title: "EPIC-001: System Security".to_string(),
+            state: "OPEN".to_string(),
+            labels: vec!["type:epic".to_string()],
+            body: String::new(),
+        },
+        Issue {
+            number: 200,
+            title: "FEAT-001: System Security".to_string(),
+            state: "OPEN".to_string(),
+            labels: vec!["type:feature".to_string()],
+            body: String::new(),
+        },
+    ];
+    let index = IssueIndex::from_issues(issues);
 
-    let epics_dir = tmp_dir.join("docs/epics");
-    let features_dir = tmp_dir.join("docs/features");
-    let stories_dir = tmp_dir.join("docs/user-stories");
-    fs::create_dir_all(&epics_dir)?;
-    fs::create_dir_all(&features_dir)?;
-    fs::create_dir_all(&stories_dir)?;
-
-    let epic_path = epics_dir.join("EPIC-01-test.md");
-    let feat_path = features_dir.join("FEAT-01-subcomp.md");
-    let us_path = stories_dir.join("US-01-action.md");
-
-    let epic_md = r#"| Attribute | Specification Detail |
-| :--- | :--- |
-| **Issue ID** | TBD |
-| **Title** | Epic 01: Test Subsystem |
-| **Type** | epic |
-| **Subsystem** | TestSubsystem |
-
-# Epic 01: Test Subsystem
-
-## 2. Requirements & Checklist
-- [ ] TBD - [Feature 01: Subcomp](../features/FEAT-01-subcomp.md)
-
-### Associated Use Cases & User Stories
-
-#### Associated Use Cases
-- None directly allocated (operational behavior allocated at system ConOps level in Epic 02)
-
-#### Associated User Stories
-- [ ] TBD - [US-01: Action](../user-stories/US-01-action.md)
-"#;
-
-    let feat_md = r#"| Attribute | Specification Detail |
-| :--- | :--- |
-| **Issue ID** | TBD |
-| **Title** | Feature 01: Subcomp |
-| **Type** | feature |
-| **Parent Epic** | [EPIC-01-test](../epics/EPIC-01-test.md) |
-| **Subsystem** | TestSubsystem |
-
-# Feature 01: Subcomp
-
-### Associated Use Cases & User Stories
-
-#### Associated Use Cases
-- None allocated (structural subsystem component)
-
-#### Associated User Stories
-- [ ] TBD - [US-01: Action](../user-stories/US-01-action.md)
-"#;
-
-    let us_md = r#"| Attribute | Specification Detail |
-| :--- | :--- |
-| **Issue ID** | TBD |
-| **Title** | US-01: Action |
-| **Type** | user-story |
-| **Parent Epic** | [EPIC-01-test](../epics/EPIC-01-test.md) |
-| **Subsystem** | TestSubsystem |
-
-# US-01: Action
-
-## Required Features
-- [ ] TBD - [Feature 01: Subcomp](../features/FEAT-01-subcomp.md)
-"#;
-
-    fs::write(&epic_path, epic_md)?;
-    fs::write(&feat_path, feat_md)?;
-    fs::write(&us_path, us_md)?;
-
-    let tracker = SequentialMockTracker::new(560);
-    let options = ReconcileOptions {
-        workspace_root: tmp_dir.clone(),
-        offline: false,
-        dry_run: false,
-        provider: "offline".to_string(),
-        sync_bodies: true,
-        repo: Some("owner/repo".to_string()),
-        default_branch: Some("main".to_string()),
-    };
-
-    // Pass 1: Bottom-up registration and back-patching
-    let _summary1 = run_reconciliation(&tracker, &options)?;
-
-    let created = tracker.created_log()?;
     assert_eq!(
-        created.len(),
-        3,
-        "Expected 3 issues to be created for unallocated specs, got: {:?}",
-        created
+        index.find_issue_for_spec("EPIC-001: System Security", Some("Epic")),
+        Some(100)
     );
     assert_eq!(
-        created
-            .first()
-            .map(|(id, title, label)| (*id, title.as_str(), label.as_str())),
-        Some((560, "US-01: Action", "user-story")),
-        "First created issue must be bottom-tier User Story US-01 (#560)"
+        index.find_issue_for_spec("FEAT-001: System Security", Some("Feature")),
+        Some(200)
+    );
+}
+
+#[test]
+fn test_issue_528_ordinal_guard_prevents_cross_matching() {
+    let issues = vec![Issue {
+        number: 10,
+        title: "FEAT-001: Core Engine".to_string(),
+        state: "OPEN".to_string(),
+        labels: vec!["type:feature".to_string()],
+        body: String::new(),
+    }];
+    let index = IssueIndex::from_issues(issues);
+
+    assert_eq!(
+        index.find_issue_for_spec("FEAT-002: Core Engine", Some("Feature")),
+        None
     );
     assert_eq!(
-        created
-            .get(1)
-            .map(|(id, title, label)| (*id, title.as_str(), label.as_str())),
-        Some((561, "Feature 01: Subcomp", "feature")),
-        "Second created issue must be middle-tier Feature FEAT-01 (#561)"
+        index.find_issue_for_spec("FEAT-1: Core Engine", Some("Feature")),
+        Some(10)
     );
-    assert_eq!(
-        created
-            .get(2)
-            .map(|(id, title, label)| (*id, title.as_str(), label.as_str())),
-        Some((562, "Epic 01: Test Subsystem", "epic")),
-        "Third created issue must be top-tier Epic EPIC-01 (#562)"
-    );
+}
 
-    // Verify local files on disk have their Issue IDs and checklists back-patched
-    let us_disk = fs::read_to_string(&us_path)?;
-    let feat_disk = fs::read_to_string(&feat_path)?;
-    let epic_disk = fs::read_to_string(&epic_path)?;
+#[test]
+fn test_issue_529_gitlab_scoped_resolved_labels_tick_checklists() -> Result<(), Box<dyn std::error::Error>> {
+    let issues = vec![Issue {
+        number: 55,
+        title: "US-001: Telemetry Export".to_string(),
+        state: "OPEN".to_string(),
+        labels: vec![
+            "type::user_story".to_string(),
+            "status::fixed-resolved".to_string(),
+        ],
+        body: String::new(),
+    }];
+    let index = IssueIndex::from_issues(issues);
 
-    assert!(
-        us_disk.contains("| **Issue ID** | #560 |"),
-        "US-01 on disk must have Issue ID #560:\n{}",
-        us_disk
-    );
-    assert!(
-        feat_disk.contains("| **Issue ID** | #561 |"),
-        "FEAT-01 on disk must have Issue ID #561:\n{}",
-        feat_disk
-    );
-    assert!(
-        epic_disk.contains("| **Issue ID** | #562 |"),
-        "EPIC-01 on disk must have Issue ID #562:\n{}",
-        epic_disk
-    );
-
-    assert!(
-        !feat_disk.contains("- [ ] TBD -"),
-        "FEAT-01 checklist on disk must not contain 'TBD':\n{}",
-        feat_disk
-    );
-    assert!(
-        feat_disk.contains("- [ ] #560 -"),
-        "FEAT-01 checklist on disk must contain back-patched '#560':\n{}",
-        feat_disk
-    );
-    assert!(
-        !epic_disk.contains("- [ ] TBD -"),
-        "EPIC-01 checklist on disk must not contain 'TBD':\n{}",
-        epic_disk
-    );
-    assert!(
-        epic_disk.contains("- [ ] #561 -"),
-        "EPIC-01 checklist on disk must contain back-patched '#561':\n{}",
-        epic_disk
-    );
-    assert!(
-        epic_disk.contains("- [ ] #560 -"),
-        "EPIC-01 checklist on disk must contain back-patched '#560':\n{}",
-        epic_disk
-    );
-
-    // Verify projected tracker bodies also have TBD replaced with #560 and #561
-    let remote_issues = tracker.fetch_all_issues()?;
-    let feat_remote = remote_issues
-        .iter()
-        .find(|i| i.number == 561)
-        .ok_or("Missing remote issue #561")?;
-    let feat_body = feat_remote.body.as_deref().ok_or("Missing body on #561")?;
-    assert!(
-        !feat_body.contains("- [ ] TBD -"),
-        "Projected FEAT-01 tracker body must not contain '- [ ] TBD -':\n{}",
-        feat_body
-    );
-    assert!(
-        feat_body.contains("- [ ] #560 -"),
-        "Projected FEAT-01 tracker body must contain '- [ ] #560 -':\n{}",
-        feat_body
-    );
-
-    let epic_remote = remote_issues
-        .iter()
-        .find(|i| i.number == 562)
-        .ok_or("Missing remote issue #562")?;
-    let epic_body = epic_remote.body.as_deref().ok_or("Missing body on #562")?;
-    assert!(
-        !epic_body.contains("- [ ] TBD -"),
-        "Projected EPIC-01 tracker body must not contain '- [ ] TBD -':\n{}",
-        epic_body
-    );
-    assert!(
-        epic_body.contains("- [ ] #561 -"),
-        "Projected EPIC-01 tracker body must contain '- [ ] #561 -':\n{}",
-        epic_body
-    );
-
-    // Pass 2: Re-running run_reconciliation must be 100% idempotent (0 new issues created)
-    let _summary2 = run_reconciliation(&tracker, &options)?;
-    let created_after_pass2 = tracker.created_log()?;
-    assert_eq!(
-        created_after_pass2.len(),
-        3,
-        "Second reconciliation pass must be 100% idempotent and create 0 new issues"
-    );
-
-    let _ = fs::remove_dir_all(&tmp_dir);
+    let md = "## User Stories\n- [ ] [US-001: Telemetry Export](#55)\n";
+    let (reconciled, count) =
+        reconcile_checklists_in_content(md, &index, Some("Feature"))?;
+    assert_eq!(count, 1);
+    assert!(reconciled.contains("- [x] [US-001: Telemetry Export](#55)"));
     Ok(())
 }
 
-/// Verifies that when `workspace_root` ends with `.pipeline/upstream`, projected relative links
-/// for `../features/FEAT-01.md` and `../../schema/model.sysml` rewrite to include the
-/// `.pipeline/upstream/` prefix in GitHub blob URLs.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives
-/// for fn `test_issue_554_upstream_workspace_link_projection` in
-/// `crates/reconcile-backlog/tests/reproducer_tests.rs` (refs #554).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - For any workspace root $W$ ending with `.pipeline/upstream`, projected relative links under
-///   `docs/` and `schema/` map to `https://github.com/<owner>/<repo>/blob/<branch>/.pipeline/upstream/docs/...`
-///   and `https://github.com/<owner>/<repo>/blob/<branch>/.pipeline/upstream/schema/...`.
-///
-/// ## 3. Preconditions
-/// - A temporary directory ending with `.pipeline/upstream` containing a specification with
-///   relative links `../features/FEAT-01.md` and `../../schema/model.sysml` is created.
-///
-/// ## 4. Postconditions
-/// - The synced remote issue body contains `.pipeline/upstream/docs/features/FEAT-01.md` and
-///   `.pipeline/upstream/schema/model.sysml` blob URLs.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(M)$ over the specification body length $M$.
-/// - Space Complexity: $O(M)$ auxiliary memory.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Returns `Result<(), Box<dyn std::error::Error>>`.
-/// - State: Isolated temporary directory removed before returning.
-/// - Action: Deterministic execution with zero `.unwrap()` calls.
-/// - Resource: Bounded to 2 small temporary Markdown files.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-RECONCILE-BACKLOG-REWRITE-PROJECTED-LINKS, REQ-RECONCILE-BACKLOG-PROJECT-BODY-FOR-TRACKER] | SysML v2: VerificationCaseDef(test_issue_554_upstream_workspace_link_projection)
 #[test]
-fn test_issue_554_upstream_workspace_link_projection() -> Result<(), Box<dyn std::error::Error>> {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let base_tmp = std::env::temp_dir().join(format!(
-        "deap_issue_554_upstream_links_{}_{}",
-        std::process::id(),
-        nanos
+fn test_issue_530_placeholder_purging_and_create_issue_gate() -> Result<(), Box<dyn std::error::Error>> {
+    assert!(contains_unpopulated_placeholders(
+        "## Stories\n- [ ] (To be created)\n"
     ));
-    let upstream_root = base_tmp.join(".pipeline/upstream");
-    let epics_dir = upstream_root.join("docs/epics");
-    let features_dir = upstream_root.join("docs/features");
+
+    let mut tmp = NamedTempFile::new()?;
+    writeln!(tmp, "# FEAT-001: Test\n\n## Stories\n- [ ] (To be created)")?;
+
+    let tracker = ReproducerMockTracker::new(vec![]);
+    let args = CreateIssueArgs {
+        body_file: Some(tmp.path().to_string_lossy().to_string()),
+        label: Some("type:feature".to_string()),
+        title: Some("FEAT-001: Test".to_string()),
+        repo: None,
+        reopen_with_analysis: None,
+        provider: "github".to_string(),
+        positional: vec![],
+    };
+
+    let res = execute_create_issue_with_tracker(&tracker, &args);
+    assert!(matches!(res, Err(ReconcileError::PreconditionFailed(_))));
+    Ok(())
+}
+
+#[test]
+fn test_issue_531_remote_body_sync_idempotency() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = tempdir()?;
+    let epics_dir = dir.path().join("docs/epics");
     fs::create_dir_all(&epics_dir)?;
-    fs::create_dir_all(&features_dir)?;
 
-    let feat_md = r#"| Attribute | Specification Detail |
-| :--- | :--- |
-| **Issue ID** | #561 |
-| **Title** | Feature 01: Upstream Compiler |
-| **Type** | feature |
-
-# Feature 01: Upstream Compiler
-"#;
-    fs::write(features_dir.join("FEAT-01.md"), feat_md)?;
-
-    let epic_md = r#"| Attribute | Specification Detail |
-| :--- | :--- |
-| **Issue ID** | #562 |
-| **Title** | Epic 01: Upstream Architecture |
-| **Type** | epic |
-| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
-
-# Epic 01: Upstream Architecture
-
-## 2. Requirements & Checklist
-- [ ] #561 - [Feature 01: Upstream Compiler](../features/FEAT-01.md)
-"#;
-    fs::write(epics_dir.join("EPIC-01.md"), epic_md)?;
-
-    let tracker = SequentialMockTracker::new(560);
-    let _ = tracker.create_issue(
-        "Feature 01: Upstream Compiler",
-        feat_md,
-        "feature",
-        Some("gintatkinson/DEAP01-spec-core"),
+    let epic_path = epics_dir.join("epic-001.md");
+    fs::write(
+        &epic_path,
+        "# EPIC-001: Idempotent Sync\n\n| Field | Value |\n|---|---|\n| **Type** | `Epic` |\n| **GitHub Issue** | `[#10](https://github.com/org/repo/issues/10)` |\n\n## Overview\nStable body.\n",
     )?;
-    let (epic_num, _) = tracker.create_issue(
-        "Epic 01: Upstream Architecture",
-        epic_md,
-        "epic",
-        Some("gintatkinson/DEAP01-spec-core"),
-    )?;
-    // Ensure epic_num is 561 or adjust Starting ID: wait, SequentialMockTracker(561) -> 561 and 562!
-    let _ = epic_num;
 
-    let tracker_aligned = SequentialMockTracker::new(561);
-    let _ = tracker_aligned.create_issue(
-        "Feature 01: Upstream Compiler",
-        feat_md,
-        "feature",
-        Some("gintatkinson/DEAP01-spec-core"),
-    )?;
-    let _ = tracker_aligned.create_issue(
-        "Epic 01: Upstream Architecture",
-        epic_md,
-        "epic",
-        Some("gintatkinson/DEAP01-spec-core"),
-    )?;
+    let tracker = ReproducerMockTracker::new(vec![Issue {
+        number: 10,
+        title: "EPIC-001: Idempotent Sync".to_string(),
+        state: "OPEN".to_string(),
+        labels: vec!["type:epic".to_string()],
+        body: "Outdated body".to_string(),
+    }]);
 
     let options = ReconcileOptions {
-        workspace_root: upstream_root.clone(),
+        workspace_root: dir.path().to_path_buf(),
         offline: false,
         dry_run: false,
-        provider: "offline".to_string(),
+        provider: "github".to_string(),
         sync_bodies: true,
-        repo: Some("gintatkinson/DEAP01-spec-core".to_string()),
+        repo: Some("org/repo".to_string()),
         default_branch: Some("main".to_string()),
     };
 
-    let _summary = run_reconciliation(&tracker_aligned, &options)?;
+    let summary1 = run_reconciliation(&tracker, &options)?;
+    assert_eq!(summary1.remote_issues_synced, 1);
 
-    let issues = tracker_aligned.fetch_all_issues()?;
-    let epic_issue = issues
-        .iter()
-        .find(|i| i.number == 562)
-        .ok_or("Missing synced epic #562")?;
-    let body = epic_issue
-        .body
-        .as_deref()
-        .ok_or("Missing synced body for #562")?;
-
-    assert!(
-        body.contains("https://github.com/gintatkinson/DEAP01-spec-core/blob/main/.pipeline/upstream/docs/features/FEAT-01.md"),
-        "Projected upstream feature link must include '.pipeline/upstream/' prefix, got:\n{}",
-        body
-    );
-    assert!(
-        body.contains("https://github.com/gintatkinson/DEAP01-spec-core/blob/main/.pipeline/upstream/schema/model.sysml"),
-        "Projected upstream schema link must include '.pipeline/upstream/' prefix, got:\n{}",
-        body
-    );
-
-    let _ = fs::remove_dir_all(&base_tmp);
+    let summary2 = run_reconciliation(&tracker, &options)?;
+    assert_eq!(summary2.remote_issues_synced, 0);
     Ok(())
+}
+
+#[test]
+fn test_issue_749_link_projection_and_upstream_prefix() {
+    let md = "\
+# FEAT-001: Link Projection
+
+| **Type** | `Feature` |
+
+## Traceability
+See [Story](docs/user-stories/us-001.md) and [Schema](schema/sys.sysml) and [External](https://ietf.org).
+";
+    let projected = project_body_for_tracker_with_prefix(
+        md,
+        "docs/features/feat-001.md",
+        Some("org/repo"),
+        "main",
+        Some("sub/dir"),
+    );
+
+    assert!(!projected.contains("| **Type** |"));
+    assert!(projected.contains(
+        "[Story](https://github.com/org/repo/blob/main/sub/dir/docs/user-stories/us-001.md)"
+    ));
+    assert!(
+        projected.contains("[Schema](https://github.com/org/repo/blob/main/sub/dir/schema/sys.sysml)")
+    );
+    assert!(projected.contains("[External](https://ietf.org)"));
 }

@@ -1,17 +1,42 @@
-//! Epic Mermaid `stateDiagram-v2` and `classDiagram` lowering and transition endpoint extraction.
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
+//! # Epic Mermaid Statechart and Class Diagram Lowering
 //!
-//! Safety & Traceability: Realises: [REQ-SYNC-FORWARD-GENERATE-EPIC-STATECHART]
-//! Contract: Extracts normalized `TransitionDef` source, target, and trigger/guard/effect labels and synthesizes Check 13B compliant Mermaid `stateDiagram-v2` and `classDiagram` blocks for `EPIC-*.md` package specifications without phantom package classes.
-//! Bounds & Faults: Enforces bounds-checked token splitting (`.split_once`, `.split_whitespace`), `BTreeSet` deterministic state and operation deduplication, and zero direct slice indexing or panics.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-EPIC-STATECHART]
+//! Extracts normalized `TransitionDef` source, target, and trigger/guard/effect labels and
+//! synthesizes Check 13B compliant Mermaid `stateDiagram-v2` and `classDiagram` blocks for
+//! `EPIC-*.md` package specifications without phantom package classes.
+//!
+//! ## 2. Preconditions, Postconditions & Mathematical Invariants
+//! - **Preconditions**: Input `PackageDef`, `StateDef`, and `TransitionDef` references are valid.
+//! - **Postconditions**: Emits non-empty Mermaid `stateDiagram-v2` and `classDiagram` blocks.
+//! - **Invariants**: State and operation identifiers are deduplicated deterministically via `BTreeSet`.
+//!
+//! ## 3. Failure Modes, Degraded Operation & Recovery
+//! - Transitions lacking resolvable source/target endpoints return `None` without panicking.
+//!
+//! ## 4. Concurrency, Memory & Resource Bounds
+//! - Pure single-threaded `O(N)` traversal over package parts, states, and transitions.
+//!
+//! ## 5. Dependencies & Integration Contracts
+//! - Consumed by `epic_emitter` and `story_layers`.
+//!
+//! ## 6. Verification & Acceptance Criteria
+//! - Verified by diagram tests in `sync/forward/tests_diagrams_and_stories.rs`.
+//!
+//! ## 7. Realization & Traceability
+//! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-EPIC-STATECHART]
 
 use super::*;
 
-/// Extracts transition source, target, and optional formatted trigger/guard/effect label from a `TransitionDef`.
-/// Realises: [REQ-SYNC-FORWARD-EXTRACT-TRANSITION-ENDPOINTS]
-pub(crate) fn extract_transition_endpoints(
-    trans: &TransitionDef,
-) -> Option<(String, String, Option<String>)> {
-    let resolved_pair = match (
+/// Resolves raw `(source, target)` state identifiers from `TransitionDef::source`/`target` or `first ... then ...` syntax.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-EXTRACT-TRANSITION-ENDPOINTS]
+fn resolve_raw_transition_endpoints(trans: &TransitionDef) -> Option<(String, String)> {
+    match (
         trans
             .source
             .as_deref()
@@ -36,9 +61,15 @@ pub(crate) fn extract_transition_endpoints(
                 Some((src_candidate.to_string(), tgt_candidate.to_string()))
             }
         }
-    }?;
+    }
+}
 
-    let (raw_src, raw_tgt) = resolved_pair;
+/// Extracts transition source, target, and optional formatted trigger/guard/effect label from a `TransitionDef`.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-EXTRACT-TRANSITION-ENDPOINTS]
+pub(crate) fn extract_transition_endpoints(
+    trans: &TransitionDef,
+) -> Option<(String, String, Option<String>)> {
+    let (raw_src, raw_tgt) = resolve_raw_transition_endpoints(trans)?;
     let src = if raw_src == "Initial" || raw_src == "entry" || raw_src == "[*]" {
         "[*]".to_string()
     } else {
@@ -85,7 +116,7 @@ pub(crate) fn extract_transition_endpoints(
 }
 
 /// Lowers an explicit `StateDef` transition table into a Mermaid `stateDiagram-v2` block when non-empty.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-EPIC-STATECHART]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-EPIC-STATECHART]
 fn render_declared_epic_statechart(st_def: &StateDef) -> Option<String> {
     let mut lines = vec!["stateDiagram-v2".to_string()];
     let mut source_states = BTreeSet::new();
@@ -129,7 +160,7 @@ fn render_declared_epic_statechart(st_def: &StateDef) -> Option<String> {
 }
 
 /// Lowers `ConOps` `action_defs` or the canonical mission lifecycle fallback into a Mermaid `stateDiagram-v2` block.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-EPIC-STATECHART]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-EPIC-STATECHART]
 fn render_conops_statechart(p: &PackageDef) -> String {
     if !p.action_defs.is_empty() {
         let mut lines = vec![
@@ -163,7 +194,7 @@ fn render_conops_statechart(p: &PackageDef) -> String {
 }
 
 /// Generates a Mermaid `stateDiagram-v2` lowered from `PackageDef::state_defs` or canonical package lifecycle modes.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-EPIC-STATECHART]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-EPIC-STATECHART]
 pub(crate) fn generate_epic_statechart(p: &PackageDef) -> String {
     if let Some(rendered) = p
         .state_defs
@@ -233,64 +264,8 @@ pub(crate) fn generate_epic_statechart(p: &PackageDef) -> String {
     )
 }
 
-/// Appends a single `PartDef` Mermaid `class` declaration (ports, attributes, operations, and actions) to `lines`.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-EPIC-CLASS-DIAGRAM]
-fn append_epic_part_class_block(lines: &mut Vec<String>, part: &PartDef) {
-    let has_members = !part.ports.is_empty()
-        || !part.attributes.is_empty()
-        || !part.operations.is_empty()
-        || !part.actions.is_empty();
-    if has_members {
-        lines.push(format!("    class {} {{", part.name));
-        for port in &part.ports {
-            let dir_prefix = if port.direction == "in" {
-                "in"
-            } else if port.direction == "out" {
-                "out"
-            } else {
-                "inout"
-            };
-            let p_type = if port.type_name.is_empty() {
-                "Port"
-            } else {
-                &port.type_name
-            };
-            lines.push(format!(
-                "        +{} {} ({})",
-                p_type, port.name, dir_prefix
-            ));
-        }
-        for attr in &part.attributes {
-            let a_type = if attr.type_name.is_empty() {
-                "String"
-            } else {
-                &attr.type_name
-            };
-            lines.push(format!("        +{} {}", a_type, attr.name));
-        }
-        let mut emitted_ops = BTreeSet::new();
-        for op in &part.operations {
-            let ret = op.return_type.as_deref().unwrap_or("void");
-            if emitted_ops.insert(op.name.as_str()) {
-                lines.push(format!("        +{}() {}", op.name, ret));
-            }
-        }
-        for act in &part.actions {
-            if emitted_ops.insert(act.name.as_str()) {
-                lines.push(format!(
-                    "        {}",
-                    format_mermaid_operation_signature(act)
-                ));
-            }
-        }
-        lines.push("    }".to_string());
-    } else {
-        lines.push(format!("    class {}", part.name));
-    }
-}
-
 /// Generates an expanded Mermaid `classDiagram` for an Epic across its constituent `PartDef` classifiers and composition edges.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-EPIC-CLASS-DIAGRAM]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-EPIC-CLASS-DIAGRAM]
 pub(crate) fn generate_epic_class_diagram(
     p: &PackageDef,
     primary_engine: &str,
@@ -301,10 +276,10 @@ pub(crate) fn generate_epic_class_diagram(
     if is_root {
         let root_label = sanitize_id(&p.name);
         if let Some(root_part) = p.part_defs.iter().find(|part| part.name == root_label) {
-            append_epic_part_class_block(&mut lines, root_part);
+            append_part_class_block(&mut lines, root_part);
             for subpart in &p.part_defs {
                 if subpart.name != root_label {
-                    append_epic_part_class_block(&mut lines, subpart);
+                    append_part_class_block(&mut lines, subpart);
                     lines.push(format!(
                         "    {} --> {} : contains",
                         root_label, subpart.name
@@ -323,7 +298,7 @@ pub(crate) fn generate_epic_class_diagram(
         .unwrap_or_default();
 
     for part in &p.part_defs {
-        append_epic_part_class_block(&mut lines, part);
+        append_part_class_block(&mut lines, part);
     }
 
     let has_primary = p.part_defs.iter().any(|pt| pt.name == primary_engine);

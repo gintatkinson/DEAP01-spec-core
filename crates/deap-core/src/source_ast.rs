@@ -28,6 +28,11 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 pub use crate::dart_cst::{parse_dart_cst, parse_dart_items, DartCstItem, DartItemKind, DartToken};
+pub use crate::rust_cst::codemod::{
+    inventory_extractable_items, list_rust_cst_items, splice_disjoint_reverse_spans, CodemodError,
+    RustCstInventoryError, RustCstItemDescriptor, RustItemDescriptor, RustItemInventory,
+    SpanSpliceEdit, Utf8ByteSpan, ZeroTokenCodemodConfig,
+};
 pub use crate::rust_cst::source_bridge::*;
 use crate::sysml_ast::{
     ActionDef, AttributeDef, ConstraintDef, PackageDef, PartDef, PortDef, RequirementDef,
@@ -260,4 +265,109 @@ pub fn ingest_source_directory(source_dir: &Path, language: SourceLanguage, pack
     }
     let effective = resolve_source_package_name(source_dir, if package_name.is_empty() { None } else { Some(package_name) });
     Ok(lower_source_ast_to_package(&items, &effective))
+}
+
+#[cfg(test)]
+#[allow(clippy::pedantic, clippy::nursery)]
+mod tests {
+    use super::*;
+    use crate::rust_cst::*;
+
+    #[test]
+    fn seals_supply_chain_receipt_and_rejects_envelope_drift() -> Result<(), Box<dyn std::error::Error>> {
+        let ws = Path::new(".");
+        let toml_src = "[workspace]\nmembers = [\"deap-core\"]\n";
+        let lock_src = "version = 3\n[[package]]\nname = \"ra_ap_syntax\"\nversion = \"1.0.0\"\n[[package]]\nname = \"rowan\"\nversion = \"1.0.0\"\n[[package]]\nname = \"syn\"\nversion = \"1.0.0\"\n[[package]]\nname = \"quote\"\nversion = \"1.0.0\"\n[[package]]\nname = \"prettyplease\"\nversion = \"1.0.0\"\n";
+        let snap = parse_locked_manifest_snapshot(ws, toml_src, lock_src, 16)?;
+        let crates: BTreeSet<String> = snap.packages.keys().cloned().collect();
+        let receipt = verify_analyzer_envelope_and_seal_receipt(&snap, &crates, &CstComplexityEnvelope::default())?;
+        assert_eq!(receipt.verify_snapshot_parity(&snap), Ok(()));
+        let mut drifted = snap;
+        drifted.cargo_lock_sha256 = [9u8; 32];
+        assert_eq!(receipt.verify_snapshot_parity(&drifted), Err(OfflineLockGovernanceError::ManifestToLockDriftDetected));
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_out_of_bounds_cst_metrics_thresholds() {
+        let mut t = CstMetricsThresholds::default();
+        assert!(validate_metrics_thresholds(&t).is_ok());
+        t.max_fn_exec_sloc = 0;
+        assert_eq!(validate_metrics_thresholds(&t).err().map(|e| e.diagnostic_code()), Some("DEAP-E0803"));
+    }
+
+    #[test]
+    fn enforces_lossless_green_node_roundtrip_and_max_depth_64() -> Result<(), Box<dyn std::error::Error>> {
+        let t = CstMetricsThresholds::default();
+        let cst = parse_verified_lossless_cst("src/a.rs", b"pub fn f() -> u32 { 1 }\n", &t)?;
+        assert!(cst.is_lossless_red_green_tree_ready());
+        assert!(parse_verified_lossless_cst("bad.rs", b"fn f( {", &t).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn prunes_cfg_test_subtrees_from_production_doc_tiers() -> Result<(), Box<dyn std::error::Error>> {
+        let t = CstMetricsThresholds::default();
+        let src = b"/// Doc\npub struct S;\nfn h() {}\n#[cfg(test)]\nmod tests { #[test] fn t() {} }\n";
+        let cst = parse_verified_lossless_cst("src/s.rs", src, &t)?;
+        let inv = classify_cfg_test_excluded_doc_tier(&cst, &t, false)?;
+        assert_eq!((inv.rust_tier_a_count, inv.rust_tier_bc_count), (1, 1));
+        assert!(inv.test_excluded_item_count > 0);
+        Ok(())
+    }
+
+    #[test]
+    fn extracts_exact_v2_metrics_sloc_arity_mut_bool_and_string_err() -> Result<(), Box<dyn std::error::Error>> {
+        let t = CstMetricsThresholds::default();
+        let src = b"pub fn f(x: i32) -> Result<(), String> { let mut b = true; if x > 0 && b { Ok(()) } else { Err(String::new()) } }\n";
+        let cst = parse_verified_lossless_cst("src/m.rs", src, &t)?;
+        let rep = analyze_cst_v2_metrics(&cst, &t)?;
+        let m = rep.callable_metrics.values().next().ok_or("missing callable")?;
+        assert!(m.returns_result_string_err && m.mut_bool_flag_count == 1 && m.max_predicate_clauses == 2);
+        Ok(())
+    }
+
+    #[test]
+    fn emits_ndjson_diagnostics_on_sloc_arity_or_string_err_breach() -> Result<(), Box<dyn std::error::Error>> {
+        let t = CstMetricsThresholds::default();
+        let src = "pub fn bad() -> Result<(), String> { Err(String::new()) }\n";
+        let cst = parse_verified_lossless_cst("src/b.rs", src.as_bytes(), &t)?;
+        let rep = analyze_cst_v2_metrics(&cst, &t)?;
+        let lines = evaluate_metrics_and_format_ndjson(&rep, &t, src, true)?;
+        assert!(lines.first().is_some_and(|l| l.contains("DEAP-E0803")));
+        Ok(())
+    }
+
+    #[test]
+    fn lists_btreemap_ordered_rust_items_with_disjoint_utf8_spans() -> Result<(), Box<dyn std::error::Error>> {
+        let src = "/// Doc A\npub struct Alpha;\nfn beta() {}\n";
+        let inv = list_rust_cst_items("src/lib.rs", src)?;
+        assert_eq!(inv.items.len(), 2);
+        assert!(inv.symbol_index.contains("Alpha") && inv.symbol_index.contains("beta"));
+        assert!(list_rust_cst_items("src/lib.rs", "fn broken(").is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn inventories_extractable_items_with_outer_doc_and_attr_trivia() -> Result<(), Box<dyn std::error::Error>> {
+        let src = "/// Summary\n/// Realises: [REQ-0608]\n#[derive(Debug)]\npub struct Widget;\n";
+        let map = inventory_extractable_items("src/w.rs", src)?;
+        let w = map.get("Widget").ok_or("missing Widget")?;
+        assert!(w.realises_reqs.contains("REQ-0608") && w.span.byte_start == 0);
+        Ok(())
+    }
+
+    #[test]
+    fn splices_disjoint_reverse_spans_and_rejects_post_splice_syntax_errors() -> Result<(), Box<dyn std::error::Error>> {
+        let src = "pub fn a() -> u32 { 1 }\npub fn b() -> u32 { 2 }\n";
+        let edits = vec![
+            SpanSpliceEdit { span: Utf8ByteSpan { byte_start: 20, byte_end: 21 }, replacement: "10".to_string() },
+            SpanSpliceEdit { span: Utf8ByteSpan { byte_start: 44, byte_end: 45 }, replacement: "20".to_string() },
+        ];
+        let out = splice_disjoint_reverse_spans(src, &edits)?;
+        assert!(out.contains("10") && out.contains("20"));
+        let bad = vec![SpanSpliceEdit { span: Utf8ByteSpan { byte_start: 0, byte_end: 6 }, replacement: "fn (".to_string() }];
+        assert!(matches!(splice_disjoint_reverse_spans(src, &bad), Err(CodemodError::PostSpliceSyntaxError(_))));
+        Ok(())
+    }
 }

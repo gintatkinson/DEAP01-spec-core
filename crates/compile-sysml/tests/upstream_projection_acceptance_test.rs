@@ -23,7 +23,7 @@
 //! - The temporary directory is deterministically removed on test completion via `Drop`.
 //!
 //! ## 5. Algorithmic Complexity Bounds
-//! - Time Complexity: $O(N + L)$ where $N = 208$ generated specification files and $L$ is the total byte length of all generated markdown files.
+//! - Time Complexity: $O(N + L)$ where $N = 208$ generated specification files and $L$ is the total byte length.
 //! - Space Complexity: $O(L)$ bounded by the in-memory AST and generated specification strings.
 //!
 //! ## 6. Failure Modes & Fault Tolerance
@@ -31,74 +31,30 @@
 //!   cross-package `FEAT-01` pollution, or empty epic state diagrams return a descriptive `Err`.
 //!
 //! ## 7. Realization & Traceability
-//! - Verifies `compile_sysml::sync::forward::forward_sync_sysml_to_specs` against `.pipeline/upstream/schema/model.sysml`.
+//! Realises: [REQ-UPSTREAM-PROJECTION-ACCEPTANCE]
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// RAII temporary workspace guard that cleans up its root directory when dropped.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Ensures isolated filesystem fixtures created during acceptance testing never pollute
-/// the repository working tree or persist across test runs.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `self.root` points to a unique directory under `std::env::temp_dir()`.
-/// - Upon scope exit, `Drop::drop` removes `self.root` and all nested contents.
-///
-/// ## 3. Preconditions
-/// - The host OS temporary directory must be writable.
-///
-/// ## 4. Postconditions
-/// - `self.root/schema` and `self.root/docs` exist upon construction and are removed upon drop.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$ creation and $O(F)$ cleanup for $F$ created fixture files.
-/// - Space Complexity: $O(1)$ in-memory path storage.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Returns `Err` if directory creation fails; ignores cleanup I/O errors during `Drop`.
-///
-/// ## 7. Realization & Traceability
-/// - Enforces the Forbidden Test Workspace Creation rule via deterministic RAII cleanup.
+/// Realises: [REQ-UPSTREAM-PROJECTION-ACCEPTANCE]
 struct TempUpstreamWorkspace {
     root: PathBuf,
 }
 
 impl TempUpstreamWorkspace {
     /// Creates a new isolated temporary workspace containing `schema/` and `docs/` subdirectories.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Allocates a collision-free temporary directory for forward-sync specification compilation tests.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Unique directory name derived from process ID and monotonic system timestamp nanos.
-    ///
-    /// ## 3. Preconditions
-    /// - `std::env::temp_dir()` is accessible and writable.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns an initialized `TempUpstreamWorkspace` with `schema/` and `docs/` directories created on disk.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(1)$ filesystem directory allocation.
-    /// - Space Complexity: $O(1)$ heap allocation for `PathBuf`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Propagates any `std::io::Error` encountered while creating the temporary directory structure.
-    ///
-    /// ## 7. Realization & Traceability
-    /// - Supports `test_upstream_blueprint_to_spec_and_github_projection_zero_defects`.
+    /// Realises: [REQ-UPSTREAM-PROJECTION-ACCEPTANCE]
     fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let pid = std::process::id();
         let root = std::env::temp_dir().join(format!(
             "deap_upstream_projection_acceptance_{}_{}",
-            pid, nanos
+            std::process::id(),
+            nanos
         ));
         fs::create_dir_all(root.join("schema"))?;
         fs::create_dir_all(root.join("docs"))?;
@@ -108,58 +64,14 @@ impl TempUpstreamWorkspace {
 
 impl Drop for TempUpstreamWorkspace {
     /// Removes the temporary workspace directory tree when `TempUpstreamWorkspace` goes out of scope.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Prevents test fixture leakage on both passing and failing execution paths.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Idempotent best-effort recursive removal of `self.root`.
-    ///
-    /// ## 3. Preconditions
-    /// - `self.root` was initialized by `TempUpstreamWorkspace::new`.
-    ///
-    /// ## 4. Postconditions
-    /// - `self.root` no longer exists on the filesystem.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(F)$ where $F$ is the number of files inside `self.root`.
-    /// - Space Complexity: $O(1)$ auxiliary memory.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Suppresses `remove_dir_all` errors so unwinding never double-panics.
-    ///
-    /// ## 7. Realization & Traceability
-    /// - Implements `std::ops::Drop` for `TempUpstreamWorkspace`.
+    /// Realises: [REQ-UPSTREAM-PROJECTION-ACCEPTANCE]
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.root);
     }
 }
 
 /// Extracts all markdown link targets from `[label](target)` expressions outside fenced code blocks.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Provides memory-safe, zero-indexing extraction of markdown hyperlink targets so that every
-/// generated relative link can be verified to exist on disk.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Ignores lines enclosed within fenced code blocks (` ``` `).
-/// - Uses only bounds-checked `.find(..)` and `.get(..)` slicing with zero direct index operations.
-///
-/// ## 3. Preconditions
-/// - `content` is a valid UTF-8 string slice representing a markdown document.
-///
-/// ## 4. Postconditions
-/// - Returns a `Vec<String>` containing every non-empty trimmed link target in document order.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(B)$ where $B$ is the byte length of `content`.
-/// - Space Complexity: $O(K)$ where $K$ is the number of extracted markdown link targets.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Malformed or unclosed `[label](` patterns are safely skipped without error or panic.
-///
-/// ## 7. Realization & Traceability
-/// - Used by `test_upstream_blueprint_to_spec_and_github_projection_zero_defects` to enforce Check 1 (Zero Broken Relative Links).
+/// Realises: [REQ-UPSTREAM-PROJECTION-ACCEPTANCE]
 fn extract_markdown_link_targets(content: &str) -> Vec<String> {
     let mut targets = Vec::new();
     let mut in_fence = false;
@@ -201,29 +113,7 @@ fn extract_markdown_link_targets(content: &str) -> Vec<String> {
 }
 
 /// Collects and lexicographically sorts all `.md` file paths directly inside `dir`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Deterministically enumerates generated markdown files within a specification category directory.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Filters strictly to regular files whose extension equals `"md"`.
-/// - Output vector is sorted in ascending lexicographical order.
-///
-/// ## 3. Preconditions
-/// - `dir` exists on disk and is a readable directory.
-///
-/// ## 4. Postconditions
-/// - Returns the sorted list of `.md` `PathBuf` entries inside `dir`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(M \log M)$ for $M$ directory entries.
-/// - Space Complexity: $O(M)$ to store the resulting `PathBuf` collection.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Returns `Err` if `fs::read_dir` or directory entry inspection fails.
-///
-/// ## 7. Realization & Traceability
-/// - Helper for `test_upstream_blueprint_to_spec_and_github_projection_zero_defects`.
+/// Realises: [REQ-UPSTREAM-PROJECTION-ACCEPTANCE]
 fn collect_sorted_md_files(dir: &Path) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
     let mut files = Vec::new();
     for entry_res in fs::read_dir(dir)? {
@@ -237,47 +127,104 @@ fn collect_sorted_md_files(dir: &Path) -> Result<Vec<PathBuf>, Box<dyn std::erro
     Ok(files)
 }
 
-/// Verifies end-to-end compilation of `.pipeline/upstream/schema/model.sysml` into 208 defect-free specifications.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Acts as the primary regression and acceptance gate for upstream SysML-to-specification projection,
-/// ensuring zero broken links, zero hardcoded GitHub URLs in local specs, zero anti-stutter defects,
-/// zero cross-package `FEAT-01` feature link pollution, and non-empty Epic state diagrams.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Synthesizes 11 Epics, 53 Features, 78 User Stories, and 65 Use Cases (207 total markdown files).
-/// - Every relative link target resolves to an existing file on disk.
-/// - No generated markdown file contains `"https://github.com/"`.
-/// - No filename contains `"UC_AC_"` or `"US_AC_"`, and no heading title contains `"UC AC "` or `"US AC "`.
-/// - User Stories `US-06` through `US-44` do not reference `"FEAT-01-"`.
-/// - Every Epic file contains `"stateDiagram-v2"` and `"-->"`.
-///
-/// ## 3. Preconditions
-/// - `.pipeline/upstream/schema/model.sysml` is present relative to the workspace root.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok(())` only if all cardinality and content invariants hold across all 208 files.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N + L)$ over $N = 208$ files and $L$ total markdown bytes.
-/// - Space Complexity: $O(L)$ bounded by the temporary workspace and in-memory verification buffers.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Returns a descriptive `Err` identifying the exact file and invariant violation if any check fails.
-///
-/// ## 7. Realization & Traceability
-/// - Validates `compile_sysml::sync::forward::forward_sync_sysml_to_specs`.
+/// Verifies that no Mermaid diagram block inside `content` contains inline backticks or HTML entities.
+/// Realises: [REQ-UPSTREAM-PROJECTION-ACCEPTANCE]
+fn verify_mermaid_hygiene(file_name: &str, content: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let mut in_mermaid = false;
+    for (line_idx, line) in content.lines().enumerate() {
+        let trimmed = line.trim();
+        if !in_mermaid && trimmed.starts_with("```mermaid") {
+            in_mermaid = true;
+            continue;
+        }
+        if in_mermaid && trimmed.starts_with("```") {
+            in_mermaid = false;
+            continue;
+        }
+        if in_mermaid {
+            if trimmed.contains('`') {
+                return Err(format!(
+                    "Inline backtick found inside Mermaid block at {}:{} -> {}",
+                    file_name,
+                    line_idx + 1,
+                    trimmed
+                )
+                .into());
+            }
+            if trimmed.contains("&lt;") || trimmed.contains("&gt;") {
+                return Err(format!(
+                    "HTML entity found inside Mermaid block at {}:{} -> {}",
+                    file_name,
+                    line_idx + 1,
+                    trimmed
+                )
+                .into());
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Verifies all link closure, local purity, anti-stutter, package isolation, and diagram invariants for `md_path`.
+/// Realises: [REQ-UPSTREAM-PROJECTION-ACCEPTANCE]
+fn verify_spec_file_invariants(md_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let file_name = md_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| format!("Invalid UTF-8 filename at {}", md_path.display()))?;
+    let md_file_dir = md_path
+        .parent()
+        .ok_or_else(|| format!("Missing parent directory for {}", md_path.display()))?;
+    let content = fs::read_to_string(md_path)?;
+
+    for target in extract_markdown_link_targets(&content) {
+        if target.starts_with("http://") || target.starts_with("https://") || target.starts_with('#') {
+            continue;
+        }
+        if !md_file_dir.join(&target).exists() {
+            return Err(format!("Broken relative link target '{}' in file {}", target, md_path.display()).into());
+        }
+    }
+    if content.contains("https://github.com/") {
+        return Err(format!("Hardcoded GitHub link found in local specification file {}", md_path.display()).into());
+    }
+    if file_name.contains("UC_AC_") || file_name.contains("US_AC_") {
+        return Err(format!("Anti-stutter filename violation: {}", file_name).into());
+    }
+    for line in content.lines() {
+        if line.starts_with('#') && (line.contains("UC AC ") || line.contains("US AC ")) {
+            return Err(format!("Anti-stutter title violation '{}' in {}", line, md_path.display()).into());
+        }
+    }
+    if file_name.starts_with("US-") {
+        let is_bp01_story = ["US-01-", "US-02-", "US-03-", "US-04-", "US-05-"]
+            .iter()
+            .any(|p| file_name.starts_with(p));
+        if !is_bp01_story && content.contains("FEAT-01-") {
+            return Err(format!("Cross-package FEAT-01 pollution detected in {}", file_name).into());
+        }
+    }
+    if file_name.starts_with("EPIC-")
+        && (!content.contains("stateDiagram-v2") || !content.contains("-->"))
+    {
+        return Err(format!("Epic stateDiagram-v2 missing or lacks transitions in {}", file_name).into());
+    }
+    verify_mermaid_hygiene(file_name, &content)?;
+    if file_name.starts_with("UC-")
+        && !content.contains("UC_Main -. \"<<include>>\" .-> UC_Step01")
+    {
+        return Err(format!("Use Case diagram missing clean <<include>> edge in {}", file_name).into());
+    }
+    Ok(())
+}
+
 #[test]
 fn test_upstream_blueprint_to_spec_and_github_projection_zero_defects(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let upstream_schema = repo_root.join(".pipeline/upstream/schema/model.sysml");
     if !upstream_schema.exists() {
-        return Err(format!(
-            "Missing canonical upstream schema at {}",
-            upstream_schema.display()
-        )
-        .into());
+        return Err(format!("Missing canonical upstream schema at {}", upstream_schema.display()).into());
     }
 
     let temp_ws = TempUpstreamWorkspace::new()?;
@@ -296,170 +243,36 @@ fn test_upstream_blueprint_to_spec_and_github_projection_zero_defects(
     };
     let generated = compile_sysml::sync::forward::forward_sync_sysml_to_specs(&pkg, &opts)?;
     if generated.len() < 208 {
-        return Err(format!(
-            "Expected at least 208 forward-synced files, got {}",
-            generated.len()
-        )
-        .into());
+        return Err(format!("Expected at least 208 forward-synced files, got {}", generated.len()).into());
     }
 
-    let epics_dir = temp_ws.root.join("docs/epics");
-    let features_dir = temp_ws.root.join("docs/features");
-    let stories_dir = temp_ws.root.join("docs/user-stories");
-    let use_cases_dir = temp_ws.root.join("docs/use-cases");
+    let epic_files = collect_sorted_md_files(&temp_ws.root.join("docs/epics"))?;
+    let feature_files = collect_sorted_md_files(&temp_ws.root.join("docs/features"))?;
+    let story_files = collect_sorted_md_files(&temp_ws.root.join("docs/user-stories"))?;
+    let use_case_files = collect_sorted_md_files(&temp_ws.root.join("docs/use-cases"))?;
 
-    let epic_files = collect_sorted_md_files(&epics_dir)?;
-    let feature_files = collect_sorted_md_files(&features_dir)?;
-    let story_files = collect_sorted_md_files(&stories_dir)?;
-    let use_case_files = collect_sorted_md_files(&use_cases_dir)?;
-
-    if epic_files.len() != 11 {
-        return Err(format!("Expected 11 Epics, found {}", epic_files.len()).into());
-    }
-    if feature_files.len() != 53 {
-        return Err(format!("Expected 53 Features, found {}", feature_files.len()).into());
-    }
-    if story_files.len() != 78 {
-        return Err(format!("Expected 78 User Stories, found {}", story_files.len()).into());
-    }
-    if use_case_files.len() != 65 {
-        return Err(format!("Expected 65 Use Cases, found {}", use_case_files.len()).into());
+    for (label, count, expected) in [
+        ("Epics", epic_files.len(), 11usize),
+        ("Features", feature_files.len(), 53),
+        ("User Stories", story_files.len(), 78),
+        ("Use Cases", use_case_files.len(), 65),
+    ] {
+        if count != expected {
+            return Err(format!("Expected {expected} {label}, found {count}").into());
+        }
     }
 
     let mut all_files = Vec::with_capacity(208);
-    all_files.extend(epic_files.iter().cloned());
-    all_files.extend(feature_files.iter().cloned());
-    all_files.extend(story_files.iter().cloned());
-    all_files.extend(use_case_files.iter().cloned());
-
+    all_files.extend(epic_files);
+    all_files.extend(feature_files);
+    all_files.extend(story_files);
+    all_files.extend(use_case_files);
     if all_files.len() != 207 {
-        return Err(format!(
-            "Expected total of 207 specification files, found {}",
-            all_files.len()
-        )
-        .into());
+        return Err(format!("Expected total of 207 specification files, found {}", all_files.len()).into());
     }
 
     for md_path in &all_files {
-        let file_name = md_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .ok_or_else(|| format!("Invalid UTF-8 filename at {}", md_path.display()))?;
-        let md_file_dir = md_path
-            .parent()
-            .ok_or_else(|| format!("Missing parent directory for {}", md_path.display()))?;
-        let content = fs::read_to_string(md_path)?;
-
-        // 1. Zero Broken Relative Links
-        let targets = extract_markdown_link_targets(&content);
-        for target in targets {
-            if target.starts_with("http://")
-                || target.starts_with("https://")
-                || target.starts_with('#')
-            {
-                continue;
-            }
-            if !md_file_dir.join(&target).exists() {
-                return Err(format!(
-                    "Broken relative link target '{}' in file {}",
-                    target,
-                    md_path.display()
-                )
-                .into());
-            }
-        }
-
-        // 2. Zero Hardcoded GitHub Blob Links in Local Markdown
-        if content.contains("https://github.com/") {
-            return Err(format!(
-                "Hardcoded GitHub link found in local specification file {}",
-                md_path.display()
-            )
-            .into());
-        }
-
-        // 3. Zero Anti-Stutter Filenames or Titles
-        if file_name.contains("UC_AC_") || file_name.contains("US_AC_") {
-            return Err(format!("Anti-stutter filename violation: {}", file_name).into());
-        }
-        for line in content.lines() {
-            if line.starts_with('#') && (line.contains("UC AC ") || line.contains("US AC ")) {
-                return Err(format!(
-                    "Anti-stutter title violation '{}' in {}",
-                    line,
-                    md_path.display()
-                )
-                .into());
-            }
-        }
-
-        // 4. Zero Cross-Package FEAT-01 Pollution on BP_02..06 User Stories (US-06..US-44)
-        if file_name.starts_with("US-") {
-            let is_bp01_story = file_name.starts_with("US-01-")
-                || file_name.starts_with("US-02-")
-                || file_name.starts_with("US-03-")
-                || file_name.starts_with("US-04-")
-                || file_name.starts_with("US-05-");
-            if !is_bp01_story && content.contains("FEAT-01-") {
-                return Err(
-                    format!("Cross-package FEAT-01 pollution detected in {}", file_name).into(),
-                );
-            }
-        }
-
-        // 5. All Epic stateDiagram-v2 Blocks Have Non-Empty Transitions
-        if file_name.starts_with("EPIC-")
-            && (!content.contains("stateDiagram-v2") || !content.contains("-->"))
-        {
-            return Err(format!(
-                "Epic stateDiagram-v2 missing or lacks transitions in {}",
-                file_name
-            )
-            .into());
-        }
-
-        // 6. Zero Inline Backticks or HTML Entities Inside Any Mermaid Diagram Block
-        let mut in_mermaid = false;
-        for (line_idx, line) in content.lines().enumerate() {
-            let trimmed = line.trim();
-            if !in_mermaid && trimmed.starts_with("```mermaid") {
-                in_mermaid = true;
-                continue;
-            }
-            if in_mermaid && trimmed.starts_with("```") {
-                in_mermaid = false;
-                continue;
-            }
-            if in_mermaid {
-                if trimmed.contains('`') {
-                    return Err(format!(
-                        "Inline backtick found inside Mermaid block at {}:{} -> {}",
-                        file_name,
-                        line_idx + 1,
-                        trimmed
-                    )
-                    .into());
-                }
-                if trimmed.contains("&lt;") || trimmed.contains("&gt;") {
-                    return Err(format!(
-                        "HTML entity found inside Mermaid block at {}:{} -> {}",
-                        file_name,
-                        line_idx + 1,
-                        trimmed
-                    )
-                    .into());
-                }
-            }
-        }
-        if file_name.starts_with("UC-")
-            && !content.contains("UC_Main -. \"<<include>>\" .-> UC_Step01")
-        {
-            return Err(format!(
-                "Use Case diagram missing clean <<include>> edge in {}",
-                file_name
-            )
-            .into());
-        }
+        verify_spec_file_invariants(md_path)?;
     }
 
     Ok(())

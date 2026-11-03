@@ -286,3 +286,56 @@ pub fn parse_sysml_directory(dir: &Path) -> Result<PackageDef, ParseError> {
     }
     parse_sysml_tree(&files)
 }
+
+impl<'a> SysmlParser<'a> {
+    /// Parses a `capability` or `capability def` declaration and optional `subsystem` binding into a `CapabilityDef`.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-CAPABILITY-DECL]
+    pub(crate) fn parse_capability_decl(
+        &mut self,
+        doc: Option<String>,
+    ) -> Result<CapabilityDef, ParseError> {
+        self.expect(&TokenKind::Capability)?;
+        if self.check(&TokenKind::Def) {
+            self.advance();
+        }
+        let name = self.expect_ident()?;
+        let mut cap_doc = doc;
+        let mut subsystem = None;
+        if self.eat(&TokenKind::OpenBrace) {
+            while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
+                self.skip_trivia();
+                while let Some(d) = self.take_inner_doc_comment() {
+                    if cap_doc.is_none() {
+                        cap_doc = Some(d);
+                    }
+                    self.skip_trivia();
+                }
+                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                    break;
+                }
+                if self.eat(&TokenKind::Subsystem) {
+                    subsystem = Some(self.read_until_semi());
+                } else {
+                    let tok = self.peek();
+                    return Err(ParseError {
+                        message: format!(
+                            "Unexpected token '{:?}' in capability declaration body",
+                            tok.kind
+                        ),
+                        span: tok.span,
+                    });
+                }
+            }
+            self.expect(&TokenKind::CloseBrace)?;
+        } else {
+            self.expect_semi()?;
+        }
+        Ok(CapabilityDef {
+            name,
+            description: cap_doc.clone(),
+            subsystem,
+            package_ref: None,
+            doc: cap_doc,
+        })
+    }
+}

@@ -1,4 +1,5 @@
 //! Check 20: WBS & Enterprise Deliverables Suite Validation.
+//! Realises: [REQ-CHECKS-WBS-INTEGRITY-CHECK-WBS-SUITE-INTEGRITY]
 
 use serde_json::Value;
 use std::fs;
@@ -60,9 +61,7 @@ pub const REQUIRED_CSV_HEADERS: &[&str] = &[
 /// - Preserves deterministic state conservation and referential transparency for fn `check_wbs_suite_integrity` (declaration #2) within `CHECKS-WBS-INTEGRITY`.
 ///
 /// ## 3. Preconditions
-/// - `repo_root: &Path` must satisfy domain and type-safety constraints prior to invoking `check_wbs_suite_integrity`.
-/// - `allow_missing_specs: bool` must satisfy domain and type-safety constraints prior to invoking `check_wbs_suite_integrity`.
-/// - `strict: bool` must satisfy domain and type-safety constraints prior to invoking `check_wbs_suite_integrity`.
+/// - `repo_root: &Path`, `allow_missing_specs: bool`, and `strict: bool` satisfy domain and type-safety constraints.
 ///
 /// ## 4. Postconditions
 /// - Returns `Result<WbsCheckOutcome, Vec<String>>` from `check_wbs_suite_integrity` with deterministic post-execution state.
@@ -103,13 +102,11 @@ pub fn check_wbs_suite_integrity(
     }
 
     let mut errors = Vec::new();
-
     let target_md = if wbs_md.is_file() {
-        wbs_md.clone()
+        wbs_md
     } else {
         wbs_dir.join("WBS_DELIVERABLES_SUITE.md")
     };
-
     let wbs_csv = repo_root
         .join("docs")
         .join("management")
@@ -119,82 +116,89 @@ pub fn check_wbs_suite_integrity(
         .join("management")
         .join("wbs_export.json");
 
-    if !wbs_csv.is_file() {
-        errors.push(format!(
-            "Missing enterprise export deliverable: {}",
-            wbs_csv
-                .strip_prefix(repo_root)
-                .unwrap_or(&wbs_csv)
-                .display()
-        ));
+    validate_wbs_markdown_suite(repo_root, &target_md, &mut errors);
+    validate_wbs_csv_and_json(repo_root, &wbs_csv, &wbs_json, &mut errors);
+    validate_wbs_zero_em_dash(repo_root, &[&target_md, &wbs_csv, &wbs_json], &mut errors);
+
+    if errors.is_empty() {
+        Ok(WbsCheckOutcome::Verified)
+    } else {
+        Err(errors)
     }
-    if !wbs_json.is_file() {
-        errors.push(format!(
-            "Missing enterprise export deliverable: {}",
-            wbs_json
-                .strip_prefix(repo_root)
-                .unwrap_or(&wbs_json)
-                .display()
-        ));
+}
+
+/// Validates `WBS_DELIVERABLES_SUITE.md` metadata table, 7-column traceability matrix, and links.
+/// Realises: [REQ-CHECKS-WBS-INTEGRITY-CHECK-WBS-SUITE-INTEGRITY]
+fn validate_wbs_markdown_suite(repo_root: &Path, target_md: &Path, errors: &mut Vec<String>) {
+    if !target_md.is_file() {
+        return;
     }
-
-    // Validate WBS_DELIVERABLES_SUITE.md content
-    if target_md.is_file() {
-        match fs::read_to_string(&target_md) {
-            Ok(content) => {
-                // Check 2-column Metadata Table
-                let has_meta_table = content.contains("| Attribute | Specification Detail |")
-                    || content.contains("|Attribute|Specification Detail|");
-                if !has_meta_table {
-                    errors.push("WBS_DELIVERABLES_SUITE.md missing 2-column Metadata Table (| Attribute | Specification Detail |).".to_string());
-                }
-
-                // Check 7-Column Traceability Matrix
-                let has_traceability = content.contains("WBS Code")
-                    && content.contains("Deliverable / Task Name")
-                    && content.contains("Spec Reference")
-                    && content.contains("MBD Package / Model File")
-                    && content.contains("Verification Artifact")
-                    && content.contains("Target Issue Key")
-                    && content.contains("Owner / Role");
-                if !has_traceability {
-                    errors.push(
-                        "WBS_DELIVERABLES_SUITE.md missing 7-Column Traceability Matrix header."
-                            .to_string(),
-                    );
-                }
-
-                // Check internal markdown hyperlinks resolve
-                let parent_dir = target_md.parent().unwrap_or(repo_root);
-                for target in extract_markdown_link_targets(&content) {
-                    if !target.starts_with("http://")
-                        && !target.starts_with("https://")
-                        && !target.starts_with('#')
-                        && !target.starts_with("mailto:")
-                    {
-                        let clean_target = target.split('#').next().unwrap_or(target);
-                        if !clean_target.is_empty() {
-                            let resolved = parent_dir.join(clean_target);
-                            if !resolved.exists() {
-                                errors.push(format!(
-                                    "Broken markdown link in WBS_DELIVERABLES_SUITE.md: '{}' (resolved to: {})",
-                                    target,
-                                    resolved.display()
-                                ));
-                            }
+    match fs::read_to_string(target_md) {
+        Ok(content) => {
+            let has_meta_table = content.contains("| Attribute | Specification Detail |")
+                || content.contains("|Attribute|Specification Detail|");
+            if !has_meta_table {
+                errors.push(
+                    "WBS_DELIVERABLES_SUITE.md missing 2-column Metadata Table (| Attribute | Specification Detail |)."
+                        .to_string(),
+                );
+            }
+            let has_traceability = content.contains("WBS Code")
+                && content.contains("Deliverable / Task Name")
+                && content.contains("Spec Reference")
+                && content.contains("MBD Package / Model File")
+                && content.contains("Verification Artifact")
+                && content.contains("Target Issue Key")
+                && content.contains("Owner / Role");
+            if !has_traceability {
+                errors.push(
+                    "WBS_DELIVERABLES_SUITE.md missing 7-Column Traceability Matrix header."
+                        .to_string(),
+                );
+            }
+            let parent_dir = target_md.parent().unwrap_or(repo_root);
+            for target in extract_markdown_link_targets(&content) {
+                if !target.starts_with("http://")
+                    && !target.starts_with("https://")
+                    && !target.starts_with('#')
+                    && !target.starts_with("mailto:")
+                {
+                    let clean_target = target.split('#').next().unwrap_or(target);
+                    if !clean_target.is_empty() {
+                        let resolved = parent_dir.join(clean_target);
+                        if !resolved.exists() {
+                            errors.push(format!(
+                                "Broken markdown link in WBS_DELIVERABLES_SUITE.md: '{}' (resolved to: {})",
+                                target,
+                                resolved.display()
+                            ));
                         }
                     }
                 }
             }
-            Err(e) => {
-                errors.push(format!("Failed to read {}: {}", target_md.display(), e));
-            }
+        }
+        Err(e) => errors.push(format!("Failed to read {}: {}", target_md.display(), e)),
+    }
+}
+
+/// Validates enterprise CSV headers and `wbs_export.json` schema keys.
+/// Realises: [REQ-CHECKS-WBS-INTEGRITY-CHECK-WBS-SUITE-INTEGRITY]
+fn validate_wbs_csv_and_json(
+    repo_root: &Path,
+    wbs_csv: &Path,
+    wbs_json: &Path,
+    errors: &mut Vec<String>,
+) {
+    for missing in [wbs_csv, wbs_json] {
+        if !missing.is_file() {
+            errors.push(format!(
+                "Missing enterprise export deliverable: {}",
+                missing.strip_prefix(repo_root).unwrap_or(missing).display()
+            ));
         }
     }
-
-    // Validate CSV headers
     if wbs_csv.is_file() {
-        if let Ok(content) = fs::read_to_string(&wbs_csv) {
+        if let Ok(content) = fs::read_to_string(wbs_csv) {
             if let Some(first_line) = content.lines().next() {
                 let headers: Vec<&str> = first_line
                     .split(',')
@@ -203,8 +207,7 @@ pub fn check_wbs_suite_integrity(
                 for req in REQUIRED_CSV_HEADERS {
                     if !headers.contains(req) {
                         errors.push(format!(
-                            "wbs_export_jira_monday_ms_project.csv missing required header: '{}'",
-                            req
+                            "wbs_export_jira_monday_ms_project.csv missing required header: '{req}'"
                         ));
                     }
                 }
@@ -213,17 +216,14 @@ pub fn check_wbs_suite_integrity(
             }
         }
     }
-
-    // Validate JSON structure
     if wbs_json.is_file() {
-        match fs::read_to_string(&wbs_json) {
+        match fs::read_to_string(wbs_json) {
             Ok(content) => match serde_json::from_str::<Value>(&content) {
                 Ok(json_data) => {
                     for req_key in &["metadata", "wbs_tree", "traceability_matrix"] {
                         if json_data.get(req_key).is_none() {
                             errors.push(format!(
-                                "wbs_export.json missing required top-level key: '{}'",
-                                req_key
+                                "wbs_export.json missing required top-level key: '{req_key}'"
                             ));
                         }
                     }
@@ -236,26 +236,24 @@ pub fn check_wbs_suite_integrity(
                             for tree_key in &["wbs_code", "name", "level", "children"] {
                                 if wbs_tree.get(tree_key).is_none() {
                                     errors.push(format!(
-                                        "wbs_export.json 'wbs_tree' missing required key: '{}'",
-                                        tree_key
+                                        "wbs_export.json 'wbs_tree' missing required key: '{tree_key}'"
                                     ));
                                 }
                             }
                         }
                     }
                 }
-                Err(e) => {
-                    errors.push(format!("wbs_export.json invalid JSON: {}", e));
-                }
+                Err(e) => errors.push(format!("wbs_export.json invalid JSON: {e}")),
             },
-            Err(e) => {
-                errors.push(format!("Failed to read {}: {}", wbs_json.display(), e));
-            }
+            Err(e) => errors.push(format!("Failed to read {}: {e}", wbs_json.display())),
         }
     }
+}
 
-    // Validate Zero Unicode em dashes
-    for target_path in [&target_md, &wbs_csv, &wbs_json] {
+/// Validates zero Unicode em dashes across the WBS deliverables suite.
+/// Realises: [REQ-CHECKS-WBS-INTEGRITY-CHECK-WBS-SUITE-INTEGRITY]
+fn validate_wbs_zero_em_dash(repo_root: &Path, paths: &[&Path], errors: &mut Vec<String>) {
+    for target_path in paths {
         if target_path.is_file() {
             if let Ok(content) = fs::read_to_string(target_path) {
                 if content.contains('\u{2014}') {
@@ -268,40 +266,10 @@ pub fn check_wbs_suite_integrity(
             }
         }
     }
-
-    if errors.is_empty() {
-        Ok(WbsCheckOutcome::Verified)
-    } else {
-        Err(errors)
-    }
 }
 
-/// Extract link target destinations from markdown `[text](target)` patterns without regex.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `extract_markdown_link_targets` in `crates/verify-baseline/src/checks/wbs_integrity.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `extract_markdown_link_targets` (declaration #3) within `CHECKS-WBS-INTEGRITY`.
-///
-/// ## 3. Preconditions
-/// - `content: &str` must satisfy domain and type-safety constraints prior to invoking `extract_markdown_link_targets`.
-///
-/// ## 4. Postconditions
-/// - Returns `Vec<&str>` from `extract_markdown_link_targets` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(content)) bounded over input/member dimension of `extract_markdown_link_targets`.
-/// - Space Complexity: O(N(content)) bounded auxiliary memory for `extract_markdown_link_targets`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `extract_markdown_link_targets` (`Vec<&str>`).
-/// - State: Maintains consistent state invariants across `extract_markdown_link_targets` without partial mutation on error.
-/// - Action: Executes `extract_markdown_link_targets` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `extract_markdown_link_targets` (`CHECKS-WBS-INTEGRITY`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-CHECKS-WBS-INTEGRITY-EXTRACT-MARKDOWN-LINK-TARGETS] | SysML v2: ActionDef(extract_markdown_link_targets)
+/// Extracts link target destinations from markdown `[text](target)` patterns without regex.
+/// Realises: [REQ-CHECKS-WBS-INTEGRITY-EXTRACT-MARKDOWN-LINK-TARGETS]
 fn extract_markdown_link_targets(content: &str) -> Vec<&str> {
     let mut targets = Vec::new();
     let bytes = content.as_bytes();

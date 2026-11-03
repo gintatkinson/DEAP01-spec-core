@@ -132,11 +132,14 @@ fn translate_atomic_clause(clause: &str, field_names: &BTreeSet<String>) -> Stri
     }
 }
 
-/// Scoped identifier and parameter binding context shared across ANF batch emission passes.
+/// Scoped identifier, parameter binding, and output accumulator shared across ANF batch emission passes.
 /// Realises: [REQ-0607]
 struct AnfScope<'a> {
     slug: &'a str,
     params: &'a [(String, String)],
+    max_ops: usize,
+    seq: usize,
+    out: Vec<HoistedPredicate>,
 }
 
 /// Prefixes unreferenced parameter names in `params` with `_` so generated Rust helpers compile warning-free.
@@ -186,12 +189,10 @@ fn fold_inclusive_ranges(clauses: Vec<String>) -> Vec<(String, usize)> {
 /// Outlines a multi-term boolean batch into an indexed `HoistedPredicate` helper and returns its call expression.
 /// Realises: [REQ-0607]
 fn emit_hoisted_batch(
-    scope: &AnfScope<'_>,
+    scope: &mut AnfScope<'_>,
     batch: &[String],
     join_op: &str,
     batch_ops: usize,
-    seq: &mut usize,
-    out: &mut Vec<HoistedPredicate>,
 ) -> (String, usize) {
     if batch.len() <= 1 {
         return (
@@ -199,8 +200,8 @@ fn emit_hoisted_batch(
             batch_ops,
         );
     }
-    *seq = seq.saturating_add(1);
-    let fn_name = format!("eval_{}_term_{:02}", scope.slug, *seq);
+    scope.seq = scope.seq.saturating_add(1);
+    let fn_name = format!("eval_{}_term_{:02}", scope.slug, scope.seq);
     let rust_expr = batch.join(join_op);
     let params = bind_scope_params(&rust_expr, scope.params);
     let call_args = scope
@@ -209,7 +210,7 @@ fn emit_hoisted_batch(
         .map(|(n, _)| n.as_str())
         .collect::<Vec<_>>()
         .join(", ");
-    out.push(HoistedPredicate {
+    scope.out.push(HoistedPredicate {
         fn_name: fn_name.clone(),
         params,
         rust_expr,
@@ -218,21 +219,18 @@ fn emit_hoisted_batch(
     (format!("{fn_name}({call_args})"), 0)
 }
 
-/// Iteratively packs weighted boolean terms into `HoistedPredicate` batches bounded by `max_ops` operators.
+/// Iteratively packs weighted boolean terms into `HoistedPredicate` batches bounded by `scope.max_ops` operators.
 /// Realises: [REQ-0607]
 fn reduce_weighted_terms(
-    scope: &AnfScope<'_>,
+    scope: &mut AnfScope<'_>,
     mut terms: Vec<(String, usize)>,
     join_op: &str,
-    max_ops: usize,
-    seq: &mut usize,
-    out: &mut Vec<HoistedPredicate>,
 ) -> (String, usize) {
     while terms.len() > 1 {
         let prev_len = terms.len();
         let sum_ops: usize = terms.iter().map(|(_, ops)| *ops).sum();
         let total_ops = sum_ops.saturating_add(prev_len.saturating_sub(1));
-        if total_ops <= max_ops {
+        if total_ops <= scope.max_ops {
             return (
                 terms
                     .into_iter()
@@ -245,10 +243,8 @@ fn reduce_weighted_terms(
         let (mut batch, mut batch_ops, mut next_round) = (Vec::new(), 0usize, Vec::new());
         for (expr, ops) in terms {
             let link = usize::from(!batch.is_empty());
-            if link.saturating_mul(batch_ops.saturating_add(link).saturating_add(ops)) > max_ops {
-                next_round.push(emit_hoisted_batch(
-                    scope, &batch, join_op, batch_ops, seq, out,
-                ));
+            if link.saturating_mul(batch_ops.saturating_add(link).saturating_add(ops)) > scope.max_ops {
+                next_round.push(emit_hoisted_batch(scope, &batch, join_op, batch_ops));
                 batch.clear();
                 batch_ops = 0;
             }
@@ -257,15 +253,13 @@ fn reduce_weighted_terms(
                 .saturating_add(usize::from(batch.len() > 1))
                 .saturating_add(ops);
         }
-        next_round.push(emit_hoisted_batch(
-            scope, &batch, join_op, batch_ops, seq, out,
-        ));
+        next_round.push(emit_hoisted_batch(scope, &batch, join_op, batch_ops));
         if next_round.len() >= prev_len {
             let mut it = next_round.into_iter();
             let (lhs, lhs_ops) = it.next().unwrap_or_default();
             let (rhs, rhs_ops) = it.next().unwrap_or_default();
             let pair_ops = lhs_ops.saturating_add(rhs_ops).saturating_add(1);
-            let paired = emit_hoisted_batch(scope, &[lhs, rhs], join_op, pair_ops, seq, out);
+            let paired = emit_hoisted_batch(scope, &[lhs, rhs], join_op, pair_ops);
             terms = std::iter::once(paired).chain(it).collect();
         } else {
             terms = next_round;
@@ -283,8 +277,7 @@ fn reduce_weighted_terms(
 /// Contract: Binds `PartDef` attributes in `field_names` to `ctx.<field>`, preserves external parameters in `raw_params` as typed Rust arguments, and emits `eval_<slug>_term_NN` helpers terminated by `validate_<slug>`.
 /// Bounds & Faults: Deduplicates colliding parameter slugs via `BTreeSet`, lowers blank expressions to `"true"`, and converges in `O(N)` work across iterative reduction passes without panicking.
 pub fn hoist_constraint_anf_with_params(
-    constraint_slug: &str,
-    ctx_type_name: &str,
+    (constraint_slug, ctx_type_name): (&str, &str),
     field_names: &BTreeSet<String>,
     raw_params: &[String],
     raw_expression: &str,
@@ -303,13 +296,15 @@ pub fn hoist_constraint_anf_with_params(
         std::iter::once((String::from("ctx"), format!("&{ctx_type_name}")))
             .chain(extras)
             .collect();
-    let scope = AnfScope {
+    let mut scope = AnfScope {
         slug: constraint_slug,
         params: &all_params,
+        max_ops: max_vg.saturating_sub(2).max(1),
+        seq: 0,
+        out: Vec::new(),
     };
-    let max_ops = max_vg.saturating_sub(2).max(1);
     let cleaned = raw_expression.trim().trim_end_matches(';').trim();
-    let (mut out, mut seq, mut disjunct_terms) = (Vec::new(), 0usize, Vec::new());
+    let mut disjunct_terms = Vec::new();
     for disj in split_top_level_keyword(cleaned, "or") {
         let conjuncts = fold_inclusive_ranges(
             split_top_level_keyword(&disj, "and")
@@ -317,20 +312,17 @@ pub fn hoist_constraint_anf_with_params(
                 .map(|c| translate_atomic_clause(&c, field_names))
                 .collect(),
         );
-        disjunct_terms.push(reduce_weighted_terms(
-            &scope, conjuncts, " && ", max_ops, &mut seq, &mut out,
-        ));
+        disjunct_terms.push(reduce_weighted_terms(&mut scope, conjuncts, " && "));
     }
-    let (root_expr, root_ops) =
-        reduce_weighted_terms(&scope, disjunct_terms, " || ", max_ops, &mut seq, &mut out);
+    let (root_expr, root_ops) = reduce_weighted_terms(&mut scope, disjunct_terms, " || ");
     let params = bind_scope_params(&root_expr, &all_params);
-    out.push(HoistedPredicate {
+    scope.out.push(HoistedPredicate {
         fn_name: format!("validate_{constraint_slug}"),
         params,
         rust_expr: root_expr,
         cyclomatic_complexity: 1usize.saturating_add(root_ops),
     });
-    out
+    scope.out
 }
 
 /// Lowers a raw parameterless SysML constraint expression into A-Normal Form `HoistedPredicate` helpers and a root validator.
@@ -346,8 +338,7 @@ pub fn hoist_constraint_anf(
     max_vg: usize,
 ) -> Vec<HoistedPredicate> {
     hoist_constraint_anf_with_params(
-        constraint_slug,
-        ctx_type_name,
+        (constraint_slug, ctx_type_name),
         field_names,
         &[],
         raw_expression,

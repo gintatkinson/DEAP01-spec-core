@@ -16,13 +16,11 @@ mod satisfy_stmt_tests {
         let source = r#"
 package UserInterfaceSystem {
     satisfy requirement REQ-UI-00;
-
     part def TouchScreenPanel {
         satisfy requirement REQ-UI-01;
         satisfy requirement REQ-UI-02 by PrimaryTouchSensor;
         port in touchEvent;
     }
-
     part def NavigationController {
         satisfy requirement REQ-NAV-001;
         satisfy requirement REQ-CORE-002;
@@ -30,88 +28,31 @@ package UserInterfaceSystem {
 }
 "#;
         let pkg = SysmlParser::parse_source(source, "UserInterfaceSystem")?;
+        assert_eq!(pkg.satisfied_requirements, vec!["REQ-UI-00".to_string()]);
 
-        assert_eq!(
-            pkg.satisfied_requirements,
-            vec!["REQ-UI-00".to_string()],
-            "package-level satisfy requirement REQ-UI-00 must be captured"
-        );
+        let touch_panel = pkg.part_defs.iter().find(|p| p.name == "TouchScreenPanel").ok_or("missing TouchScreenPanel")?;
+        assert_eq!(touch_panel.satisfied_requirements, vec!["REQ-UI-01".to_string(), "REQ-UI-02".to_string()]);
 
-        let touch_panel = pkg
-            .part_defs
-            .iter()
-            .find(|p| p.name == "TouchScreenPanel")
-            .ok_or("missing TouchScreenPanel")?;
-        assert_eq!(
-            touch_panel.satisfied_requirements,
-            vec!["REQ-UI-01".to_string(), "REQ-UI-02".to_string()],
-            "TouchScreenPanel must capture REQ-UI-01 and REQ-UI-02"
-        );
-
-        let nav_ctrl = pkg
-            .part_defs
-            .iter()
-            .find(|p| p.name == "NavigationController")
-            .ok_or("missing NavigationController")?;
-        assert_eq!(
-            nav_ctrl.satisfied_requirements,
-            vec!["REQ-NAV-001".to_string(), "REQ-CORE-002".to_string()],
-            "zero-padded hyphenated requirement IDs must be preserved exactly"
-        );
+        let nav_ctrl = pkg.part_defs.iter().find(|p| p.name == "NavigationController").ok_or("missing NavigationController")?;
+        assert_eq!(nav_ctrl.satisfied_requirements, vec!["REQ-NAV-001".to_string(), "REQ-CORE-002".to_string()]);
 
         let serialized = pkg.to_sysml(0);
-        assert!(
-            serialized.contains("satisfy requirement REQ-UI-00;"),
-            "serialized sysml must contain package-level satisfy requirement REQ-UI-00:\n{}",
-            serialized
-        );
-        assert!(
-            serialized.contains("satisfy requirement REQ-UI-01;"),
-            "serialized sysml must contain part-level satisfy requirement REQ-UI-01:\n{}",
-            serialized
-        );
-        assert!(
-            serialized.contains("satisfy requirement REQ-UI-02;"),
-            "serialized sysml must contain part-level satisfy requirement REQ-UI-02:\n{}",
-            serialized
-        );
-        assert!(
-            serialized.contains("satisfy requirement REQ-NAV-001;"),
-            "serialized sysml must contain REQ-NAV-001:\n{}",
-            serialized
-        );
-        assert!(
-            serialized.contains("satisfy requirement REQ-CORE-002;"),
-            "serialized sysml must contain REQ-CORE-002:\n{}",
-            serialized
-        );
+        for expected_line in [
+            "satisfy requirement REQ-UI-00;",
+            "satisfy requirement REQ-UI-01;",
+            "satisfy requirement REQ-UI-02;",
+            "satisfy requirement REQ-NAV-001;",
+            "satisfy requirement REQ-CORE-002;",
+        ] {
+            assert!(serialized.contains(expected_line));
+        }
 
         let reparsed = SysmlParser::parse_source(&serialized, "UserInterfaceSystem")?;
-        assert_eq!(
-            reparsed.satisfied_requirements, pkg.satisfied_requirements,
-            "reparsed package satisfied_requirements must match original"
-        );
-
-        let reparsed_touch = reparsed
-            .part_defs
-            .iter()
-            .find(|p| p.name == "TouchScreenPanel")
-            .ok_or("missing reparsed TouchScreenPanel")?;
-        assert_eq!(
-            reparsed_touch.satisfied_requirements, touch_panel.satisfied_requirements,
-            "reparsed part satisfied_requirements must match original"
-        );
-
-        let reparsed_nav = reparsed
-            .part_defs
-            .iter()
-            .find(|p| p.name == "NavigationController")
-            .ok_or("missing reparsed NavigationController")?;
-        assert_eq!(
-            reparsed_nav.satisfied_requirements, nav_ctrl.satisfied_requirements,
-            "reparsed nav controller satisfied_requirements must match original"
-        );
-
+        assert_eq!(reparsed.satisfied_requirements, pkg.satisfied_requirements);
+        let reparsed_touch = reparsed.part_defs.iter().find(|p| p.name == "TouchScreenPanel").ok_or("missing reparsed TouchScreenPanel")?;
+        assert_eq!(reparsed_touch.satisfied_requirements, touch_panel.satisfied_requirements);
+        let reparsed_nav = reparsed.part_defs.iter().find(|p| p.name == "NavigationController").ok_or("missing reparsed NavigationController")?;
+        assert_eq!(reparsed_nav.satisfied_requirements, nav_ctrl.satisfied_requirements);
         Ok(())
     }
 

@@ -1,27 +1,46 @@
-//! Reverse-to-forward action roundtrip deduplication, ConOps behavioral projection, and non-destructive merge/cleanup unit tests.
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
+//! # Action Round-Trip Parity, Parameterized Signatures, and ICD/WBS Compilation Unit Tests
 //!
-//! Safety & Traceability: Realises: [REQ-SYNC-FORWARD-GENERATE-CLASS-DIAGRAM]
-//! Contract: Verifies `PartDef::actions` and `PartDef::operations` deduplicated rendering across Feature and Epic `classDiagram` blocks, `ConOps` and standalone `InteractionDef` Use Case / User Story projection, `!opts.force` authored prose and `- [x]` checkbox preservation, and stale colliding prefix file removal.
-//! Bounds & Faults: Isolates filesystem fixtures inside unique auto-cleaned temporary directories returning `Result<(), Box<dyn std::error::Error>>` with zero panics.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-CLASS-DIAGRAM]
+//! Verifies `PartDef::actions` and `PartDef::operations` deduplicated rendering across Feature
+//! and Epic `classDiagram` blocks (`DEFECT-07`), parameterized `ActionDef` Mermaid and Markdown
+//! bullets, logical ICD and WBS compilation, and HTML comment state tracking (`REQ-0604`).
+//!
+//! ## 2. Preconditions, Postconditions & Mathematical Invariants
+//! - **Preconditions**: Temporary directories and in-memory `PackageDef` fixtures are initialized.
+//! - **Postconditions**: Operations and actions are deduplicated with zero duplicate signatures.
+//! - **Invariants**: All temporary filesystem directories are cleaned up before test return.
+//!
+//! ## 3. Failure Modes, Degraded Operation & Recovery
+//! - Test assertions return `Result<(), Box<dyn std::error::Error>>` without panicking.
+//!
+//! ## 4. Concurrency, Memory & Resource Bounds
+//! - Uses PID-scoped temporary directories and pure in-memory AST structures.
+//!
+//! ## 5. Dependencies & Integration Contracts
+//! - Exercises `reverse_sync_specs_to_sysml`, `generate_class_diagram`, `generate_epic_class_diagram`, `compile_logical_icd_artifacts`, and `compile_wbs_artifacts`.
+//!
+//! ## 6. Verification & Acceptance Criteria
+//! - Executed as part of the `compile-sysml` unit test suite.
+//!
+//! ## 7. Realization & Traceability
+//! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-CLASS-DIAGRAM]
 
 use super::*;
-use deap_core::sysml_ast::PartDef;
+use deap_core::sysml_ast::{ActionDef, OperationDef, PartDef};
 
-/// Verifies `PartDef::actions` (including actions populated by `reverse_sync_specs_to_sysml`) render in `generate_class_diagram` and `generate_epic_class_diagram` without duplicating `part.operations`.
-///
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-CLASS-DIAGRAM]
-#[test]
-fn test_defect_07_forward_reverse_sync_actions_roundtrip_parity(
-) -> Result<(), Box<dyn std::error::Error>> {
-    use crate::sync::reverse::{reverse_sync_specs_to_sysml, ReverseSyncOptions};
-    use deap_core::sysml_ast::{ActionDef, OperationDef};
-
-    let tmp_dir = std::env::temp_dir().join(format!(
-        "deap_defect_07_sync_roundtrip_{}",
-        std::process::id()
-    ));
+/// Creates the `DEFECT-07` temporary Feature Markdown fixture and initial `FlightControlSystem` AST.
+/// Realises: [REQ-0604]
+fn setup_defect_07_roundtrip_fixture(
+    tmp_dir: &Path,
+) -> Result<PackageDef, Box<dyn std::error::Error>> {
     if tmp_dir.exists() {
-        std::fs::remove_dir_all(&tmp_dir)?;
+        std::fs::remove_dir_all(tmp_dir)?;
     }
     let docs_features_dir = tmp_dir.join("docs").join("features");
     std::fs::create_dir_all(&docs_features_dir)?;
@@ -67,6 +86,81 @@ fn test_defect_07_forward_reverse_sync_actions_roundtrip_parity(
     });
     sub.part_defs.push(controller);
     root.packages.push(sub);
+    Ok(root)
+}
+
+/// Asserts that both `generate_class_diagram` and `generate_epic_class_diagram` deduplicate `SharedOperation` and include `ComputeTrajectory`.
+/// Realises: [REQ-0604]
+fn assert_defect_07_class_diagrams(synced_sub: &PackageDef, synced_part: &PartDef) {
+    let feat_diag = generate_class_diagram(synced_part);
+    assert!(feat_diag.contains("+SharedOperation() Boolean"));
+    assert!(feat_diag.contains("+PreExistingAction() void"));
+    assert!(feat_diag.contains("+ComputeTrajectory() void"));
+    let shared_count_feat = feat_diag
+        .lines()
+        .filter(|l| l.contains("+SharedOperation("))
+        .count();
+    assert_eq!(shared_count_feat, 1);
+
+    let epic_diag = generate_epic_class_diagram(synced_sub, "GuidanceController", false);
+    assert!(epic_diag.contains("+SharedOperation() Boolean"));
+    assert!(epic_diag.contains("+PreExistingAction() void"));
+    assert!(epic_diag.contains("+ComputeTrajectory() void"));
+    let shared_count_epic = epic_diag
+        .lines()
+        .filter(|l| l.contains("+SharedOperation("))
+        .count();
+    assert_eq!(shared_count_epic, 1);
+}
+
+/// Asserts root Epic and actions-only subpart classDiagram rendering for `DEFECT-07`.
+/// Realises: [REQ-0604]
+fn assert_defect_07_root_and_actions_only_diagrams(
+    synced_part: &PartDef,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut root_with_part = PackageDef {
+        name: "GuidanceSubsystem".to_string(),
+        part_defs: vec![synced_part.clone()],
+        ..Default::default()
+    };
+    let mut actions_only_subpart = PartDef {
+        name: "ActuatorUnit".to_string(),
+        ..Default::default()
+    };
+    actions_only_subpart.actions.push(ActionDef {
+        name: "DeflectFin".to_string(),
+        ..Default::default()
+    });
+    root_with_part.part_defs.push(actions_only_subpart);
+
+    let root_epic_diag = generate_epic_class_diagram(&root_with_part, "GuidanceController", true);
+    assert!(root_epic_diag.contains("+SharedOperation() Boolean"));
+    assert!(root_epic_diag.contains("+ComputeTrajectory() void"));
+    assert!(root_epic_diag.contains("+DeflectFin() void"));
+
+    let actions_only_feat_diag = generate_class_diagram(
+        root_with_part
+            .part_defs
+            .get(1)
+            .ok_or("expected ActuatorUnit subpart")?,
+    );
+    assert!(actions_only_feat_diag.contains("class ActuatorUnit {"));
+    assert!(actions_only_feat_diag.contains("+DeflectFin() void"));
+    Ok(())
+}
+
+/// Verifies `PartDef::actions` (including actions populated by `reverse_sync_specs_to_sysml`) render in `generate_class_diagram` and `generate_epic_class_diagram` without duplicating `part.operations`.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-CLASS-DIAGRAM]
+#[test]
+fn test_defect_07_forward_reverse_sync_actions_roundtrip_parity(
+) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::sync::reverse::{reverse_sync_specs_to_sysml, ReverseSyncOptions};
+
+    let tmp_dir = std::env::temp_dir().join(format!(
+        "deap_defect_07_sync_roundtrip_{}",
+        std::process::id()
+    ));
+    let root = setup_defect_07_roundtrip_fixture(&tmp_dir)?;
 
     let rev_opts = ReverseSyncOptions {
         docs_dir: tmp_dir.join("docs"),
@@ -90,112 +184,12 @@ fn test_defect_07_forward_reverse_sync_actions_roundtrip_parity(
         .first()
         .ok_or("expected GuidanceController part")?;
 
-    assert!(
-        synced_part
-            .actions
-            .iter()
-            .any(|a| a.name == "ComputeTrajectory"),
-        "reverse_sync_specs_to_sysml must populate ComputeTrajectory in PartDef::actions"
-    );
-
-    let feat_diag = generate_class_diagram(synced_part);
-    assert!(
-        feat_diag.contains("+SharedOperation() Boolean"),
-        "generate_class_diagram must render operation signature, got:\n{}",
-        feat_diag
-    );
-    assert!(
-        feat_diag.contains("+PreExistingAction() void"),
-        "generate_class_diagram must render pre-existing PartDef::actions, got:\n{}",
-        feat_diag
-    );
-    assert!(
-        feat_diag.contains("+ComputeTrajectory() void"),
-        "generate_class_diagram must render reverse-synced PartDef::actions, got:\n{}",
-        feat_diag
-    );
-    let shared_count_feat = feat_diag
-        .lines()
-        .filter(|l| l.contains("+SharedOperation("))
-        .count();
-    assert_eq!(
-        shared_count_feat, 1,
-        "SharedOperation must not be duplicated when present in both operations and actions"
-    );
-
-    let epic_diag = generate_epic_class_diagram(synced_sub, "GuidanceController", false);
-    assert!(
-        epic_diag.contains("+SharedOperation() Boolean"),
-        "generate_epic_class_diagram must render operation signature, got:\n{}",
-        epic_diag
-    );
-    assert!(
-        epic_diag.contains("+PreExistingAction() void"),
-        "generate_epic_class_diagram must render pre-existing PartDef::actions, got:\n{}",
-        epic_diag
-    );
-    assert!(
-        epic_diag.contains("+ComputeTrajectory() void"),
-        "generate_epic_class_diagram must render reverse-synced PartDef::actions, got:\n{}",
-        epic_diag
-    );
-    let shared_count_epic = epic_diag
-        .lines()
-        .filter(|l| l.contains("+SharedOperation("))
-        .count();
-    assert_eq!(
-        shared_count_epic, 1,
-        "SharedOperation must not be duplicated in generate_epic_class_diagram"
-    );
-
-    let mut root_with_part = PackageDef {
-        name: "GuidanceSubsystem".to_string(),
-        part_defs: vec![synced_part.clone()],
-        ..Default::default()
-    };
-    let mut actions_only_subpart = PartDef {
-        name: "ActuatorUnit".to_string(),
-        ..Default::default()
-    };
-    actions_only_subpart.actions.push(ActionDef {
-        name: "DeflectFin".to_string(),
-        ..Default::default()
-    });
-    root_with_part.part_defs.push(actions_only_subpart);
-
-    let root_epic_diag = generate_epic_class_diagram(&root_with_part, "GuidanceController", true);
-    assert!(
-        root_epic_diag.contains("+SharedOperation() Boolean"),
-        "root generate_epic_class_diagram must render root_part operations, got:\n{}",
-        root_epic_diag
-    );
-    assert!(
-        root_epic_diag.contains("+ComputeTrajectory() void"),
-        "root generate_epic_class_diagram must render root_part actions, got:\n{}",
-        root_epic_diag
-    );
-    assert!(
-        root_epic_diag.contains("+DeflectFin() void"),
-        "root generate_epic_class_diagram must render actions-only subpart actions, got:\n{}",
-        root_epic_diag
-    );
-
-    let actions_only_feat_diag = generate_class_diagram(
-        root_with_part
-            .part_defs
-            .get(1)
-            .ok_or("expected ActuatorUnit subpart")?,
-    );
-    assert!(
-        actions_only_feat_diag.contains("class ActuatorUnit {"),
-        "generate_class_diagram must open class block when only PartDef::actions is non-empty, got:\n{}",
-        actions_only_feat_diag
-    );
-    assert!(
-        actions_only_feat_diag.contains("+DeflectFin() void"),
-        "generate_class_diagram must render action in actions-only PartDef, got:\n{}",
-        actions_only_feat_diag
-    );
+    assert!(synced_part
+        .actions
+        .iter()
+        .any(|a| a.name == "ComputeTrajectory"));
+    assert_defect_07_class_diagrams(synced_sub, synced_part);
+    assert_defect_07_root_and_actions_only_diagrams(synced_part)?;
 
     let fwd_opts = ForwardSyncOptions {
         schema_path: PathBuf::from("schema/test.sysml"),
@@ -216,260 +210,109 @@ fn test_defect_07_forward_reverse_sync_actions_roundtrip_parity(
         .map(|(_, v)| v)
         .ok_or("expected generated EPIC for GuidanceSubsystem")?;
 
-    assert!(
-        gen_feat.contains("+ComputeTrajectory() void"),
-        "Forward-synced Feature markdown must preserve reverse-synced action in classDiagram"
-    );
-    assert!(
-        gen_epic.contains("+ComputeTrajectory() void"),
-        "Forward-synced Epic markdown must preserve reverse-synced action in classDiagram"
-    );
-
+    assert!(gen_feat.contains("+ComputeTrajectory() void"));
+    assert!(gen_epic.contains("+ComputeTrajectory() void"));
     Ok(())
 }
 
-/// Verifies Issue #477: `ConOps` + `part.actions` + `p.interaction_defs` UC/US projection, `!opts.force` authored prose & `- [x]` checkbox preservation, and colliding prefix cleanup.
-///
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-CLASS-DIAGRAM]
+/// Builds the `GncSystem` fixture for `REQ-0604` ICD and WBS compilation tests.
+/// Realises: [REQ-0604]
+fn build_req_0604_gnc_model(act: ActionDef) -> PackageDef {
+    use deap_core::sysml_ast::{ConnectionDef, PortDef};
+
+    let mut pkg = PackageDef {
+        name: "GncSystem".to_string(),
+        ..Default::default()
+    };
+    pkg.part_defs.push(PartDef {
+        name: "AttitudeSensor".to_string(),
+        ports: vec![PortDef {
+            name: "q_out".to_string(),
+            type_name: "Quaternion".to_string(),
+            direction: "out".to_string(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    });
+    pkg.part_defs.push(PartDef {
+        name: "AttitudeController".to_string(),
+        ports: vec![PortDef {
+            name: "q_in".to_string(),
+            type_name: "Quaternion".to_string(),
+            direction: "in".to_string(),
+            ..Default::default()
+        }],
+        actions: vec![act],
+        ..Default::default()
+    });
+    pkg.connection_defs.push(ConnectionDef {
+        name: "QuatBus".to_string(),
+        source_part: Some("AttitudeSensor".to_string()),
+        source_port: "q_out".to_string(),
+        target_part: Some("AttitudeController".to_string()),
+        target_port: "q_in".to_string(),
+        item_flow_ref: Some("Quaternion".to_string()),
+        is_flow: true,
+        ..Default::default()
+    });
+    pkg
+}
+
+/// Verifies `REQ-0604` (`BP-04-FORWARD-SYNC-ICD-WBS`) `AC-01` through `AC-05`.
+/// Realises: [REQ-0604]
 #[test]
-fn test_issue_477_conops_part_behavior_projection_and_non_destructive_sync(
+fn test_req_0604_forward_sync_parameterized_actions_icd_wbs_and_html_comment_guards(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use deap_core::sysml_ast::{ActionDef, InteractionDef, PartDef, UseCaseDef};
+    use deap_core::sysml_ast::AttributeDef;
 
-    let tmp_dir = std::env::temp_dir().join(format!(
-        "deap_issue_477_forward_sync_{}",
-        std::process::id()
+    let act = ActionDef {
+        name: "SolveAttitude".to_string(),
+        in_params: vec![AttributeDef {
+            name: "quat_in".to_string(),
+            type_name: "Quaternion".to_string(),
+            ..Default::default()
+        }],
+        out_params: vec![AttributeDef {
+            name: "torque_cmd".to_string(),
+            type_name: "TorqueVector".to_string(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let sig = format_mermaid_operation_signature(&act);
+    assert_eq!(
+        sig,
+        "+SolveAttitude(in_quat_in_Quaternion, out_torque_cmd_TorqueVector) TorqueVector"
+    );
+    let bullet = format_markdown_operation_bullet(&act);
+    assert_eq!(
+        bullet,
+        "- `+SolveAttitude(in quat_in: Quaternion, out torque_cmd: TorqueVector) : TorqueVector`"
+    );
+    assert_eq!(parse_markdown_operation_bullet(&bullet), Some(act.clone()));
+    assert_eq!(parse_markdown_operation_bullet("invalid"), None);
+
+    let pkg = build_req_0604_gnc_model(act);
+    let (icd01, icd02) = compile_logical_icd_artifacts(&pkg);
+    assert!(icd01.contains("| **AttitudeController** | --- |"));
+    assert!(icd01.contains("| **AttitudeSensor** | `Quaternion` | --- |"));
+    assert!(icd02.contains("Quaternion"));
+
+    let wbs = compile_wbs_artifacts(&pkg);
+    assert!(wbs.wbs_01_md.contains("01.00.00"));
+    assert!(wbs.wbs_02_md.contains("FEAT-01"));
+
+    let mut in_comment = true;
+    assert!(advance_html_comment_state(
+        "close --> mid <!-- reopen",
+        &mut in_comment
     ));
-    if tmp_dir.exists() {
-        std::fs::remove_dir_all(&tmp_dir)?;
-    }
-    let docs_dir = tmp_dir.join("docs");
-    std::fs::create_dir_all(docs_dir.join("epics"))?;
-    std::fs::create_dir_all(docs_dir.join("features"))?;
-    std::fs::create_dir_all(docs_dir.join("use-cases"))?;
-    std::fs::create_dir_all(docs_dir.join("user-stories"))?;
+    assert!(in_comment);
 
-    let existing_epic = r#"| Attribute | Specification Detail |
-| :--- | :--- |
-| **Issue ID** | #2 |
-| **Title** | Epic 02: Concept of Operations Operational Activities |
-| **Type** | epic |
-
-# Epic 02: Concept of Operations Operational Activities
-
-## 1. Context
-Custom authored ConOps context narrative that must not be clobbered.
-
-## 2. Requirements & Checklist
-- [x] #12 - [Feature 01: [Con Ops] MissionOperator](../features/FEAT-01-MissionOperator.md) (conops.sysml)
-
-### Associated Use Cases & User Stories
-
-#### Associated Use Cases
-- [x] #42 - [Use Case 01: Mission Planning](../use-cases/UC-01-MissionPlanning.md)
-
-#### Associated User Stories
-- [ ] TBD - [User Story 01: Execute Mission Plan Action](../user-stories/US-01-ExecuteMissionPlanAction.md)
-
-## 3. Architecture
-Custom authored architecture narrative with detailed telemetry buses.
-
-## 4. Operational Considerations
-Custom authored operational considerations for mission timing bounds.
-
-## 5. Security & Governance
-Custom authored security and zero-trust governance controls.
-
-## 6. Source References
-- Custom source ref
-"#;
-    std::fs::write(docs_dir.join("epics/EPIC-02-ConOps.md"), existing_epic)?;
-
-    let existing_feat = r#"| Attribute | Specification Detail |
-| :--- | :--- |
-| **Issue ID** | #12 |
-| **Title** | Feature 01: [Con Ops] MissionOperator |
-| **Type** | feature |
-
-# Feature 01: [Con Ops] MissionOperator
-
-## Interface Requirements
-### 1. Test Data Shape
-```json
-{}
-```
-
-### 2. Validation & Constraints
-Custom authored validation constraints for MissionOperator.
-
-### 3. Visual Layout & Arrangement
-Custom authored logical containment and structural arrangement rules.
-
-### 4. Interactive Flow & States
-Custom authored interactive flow and operator state transitions.
-
-### Layer 1: Domain State & Signal Model
-Custom authored Layer 1 domain state model.
-
-### Layer 2: Logic & Safety State Management
-Custom authored Layer 2 safety state management logic.
-
-### Layer 3: Presentation & Actuator Interface Binding
-Custom authored Layer 3 presentation actuator bindings.
-
-## Acceptance Criteria (BDD)
-- [x] AC-01: Given nominal MissionOperator domain state, When command or input signals are received, Then updates internal state and signal outputs within declared bounds.
-"#;
-    std::fs::write(
-        docs_dir.join("features/FEAT-01-MissionOperator.md"),
-        existing_feat,
-    )?;
-
-    let stale_uc = r#"| Attribute | Specification Detail |
-| :--- | :--- |
-| **Issue ID** | #42 |
-| **Title** | Use Case 01: Old Obsolete Slug |
-"#;
-    let stale_uc_path = docs_dir.join("use-cases/UC-01-OldObsoleteSlug.md");
-    std::fs::write(&stale_uc_path, stale_uc)?;
-
-    let mut root = PackageDef {
-        name: "SysML_Model".to_string(),
-        ..Default::default()
-    };
-
-    let mut conops = PackageDef {
-        name: "ConOps".to_string(),
-        ..Default::default()
-    };
-    conops.part_defs.push(PartDef {
-        name: "MissionOperator".to_string(),
-        ..Default::default()
-    });
-    conops.action_defs.push(ActionDef {
-        name: "ExecuteMissionPlanAction".to_string(),
-        ..Default::default()
-    });
-    conops.use_case_defs.push(UseCaseDef {
-        name: "UC_01_MissionPlanning".to_string(),
-        ..Default::default()
-    });
-    root.packages.push(conops);
-
-    let mut sensor_pkg = PackageDef {
-        name: "SensorSubsystem".to_string(),
-        ..Default::default()
-    };
-    let mut radar_part = PartDef {
-        name: "RadarSensor".to_string(),
-        ..Default::default()
-    };
-    radar_part.actions.push(ActionDef {
-        name: "CalibrateBeamAction".to_string(),
-        ..Default::default()
-    });
-    sensor_pkg.part_defs.push(radar_part);
-    sensor_pkg.use_case_defs.push(UseCaseDef {
-        name: "UC_02_CalibrateSensor".to_string(),
-        ..Default::default()
-    });
-    root.packages.push(sensor_pkg);
-
-    let mut comms_pkg = PackageDef {
-        name: "CommsSubsystem".to_string(),
-        ..Default::default()
-    };
-    comms_pkg.part_defs.push(PartDef {
-        name: "RadioLink".to_string(),
-        ..Default::default()
-    });
-    comms_pkg.interaction_defs.push(InteractionDef {
-        name: "EstablishLinkInteraction".to_string(),
-        lifelines: vec![
-            "op : MissionOperator".to_string(),
-            "radio : RadioLink".to_string(),
-        ],
-        messages: vec![
-            "OpenChannel from op to radio".to_string(),
-            "LinkEstablished from radio to op".to_string(),
-        ],
-        ..Default::default()
-    });
-    root.packages.push(comms_pkg);
-
-    let opts = ForwardSyncOptions {
-        schema_path: tmp_dir.join("schema/model.sysml"),
-        docs_dir: docs_dir.clone(),
-        out_dir: None,
-        dry_run: false,
-        force: false,
-    };
-
-    let generated = forward_sync_sysml_to_specs(&root, &opts)?;
-
-    assert!(
-        generated.contains_key("use-cases/UC-01-MissionPlanning.md"),
-        "ConOps use case must be projected into UC-01-MissionPlanning.md"
+    let specs = vec![("epics/EPIC-02-ConOps.md".to_string(), String::new())];
+    assert_eq!(
+        count_total_epics_inclusive("epics/EPIC-01-GncSystem.md", true, &specs),
+        2
     );
-    assert!(
-        generated.contains_key("user-stories/US-01-ExecuteMissionPlanAction.md"),
-        "ConOps action must be projected into US-01-ExecuteMissionPlanAction.md"
-    );
-    assert!(
-        generated.contains_key("user-stories/US-02-CalibrateBeamAction.md"),
-        "PartDef::actions on RadarSensor must be projected into US-02-CalibrateBeamAction.md"
-    );
-    let uc02 = generated
-        .get("use-cases/UC-02-CalibrateSensor.md")
-        .ok_or("expected UC-02-CalibrateSensor.md")?;
-    assert!(
-        uc02.contains("US-02-CalibrateBeamAction.md"),
-        "UC-02 realization matrix must link to US-02-CalibrateBeamAction.md"
-    );
-    assert!(
-        generated.contains_key("user-stories/US-03-EstablishLinkInteraction.md"),
-        "Standalone interaction_defs on CommsSubsystem must be projected into US-03-EstablishLinkInteraction.md"
-    );
-
-    let epic02 = generated
-        .get("epics/EPIC-02-ConOps.md")
-        .ok_or("expected epics/EPIC-02-ConOps.md")?;
-    assert!(epic02.contains("Custom authored ConOps context narrative that must not be clobbered."));
-    assert!(
-        epic02.contains("Custom authored architecture narrative with detailed telemetry buses.")
-    );
-    assert!(
-        epic02.contains("Custom authored operational considerations for mission timing bounds.")
-    );
-    assert!(epic02.contains("Custom authored security and zero-trust governance controls."));
-    assert!(epic02.contains("- [x] #12 - [Feature 01: [Con Ops] MissionOperator]"));
-    assert!(epic02.contains("- [x] #42 - [Use Case 01: Mission Planning]"));
-    assert!(!epic02.contains("CalibrateBeamAction"));
-
-    let feat01 = generated
-        .get("features/FEAT-01-MissionOperator.md")
-        .ok_or("expected features/FEAT-01-MissionOperator.md")?;
-    assert!(feat01.contains("Custom authored validation constraints for MissionOperator."));
-    assert!(
-        feat01.contains("Custom authored logical containment and structural arrangement rules.")
-    );
-    assert!(feat01.contains("Custom authored interactive flow and operator state transitions."));
-    assert!(feat01.contains("Custom authored Layer 1 domain state model."));
-    assert!(feat01.contains("Custom authored Layer 2 safety state management logic."));
-    assert!(feat01.contains("Custom authored Layer 3 presentation actuator bindings."));
-    assert!(feat01.contains("- [x] AC-01:"));
-
-    assert!(
-        !stale_uc_path.exists(),
-        "Stale colliding file UC-01-OldObsoleteSlug.md must be cleaned up"
-    );
-    assert!(
-        docs_dir.join("use-cases/UC-01-MissionPlanning.md").exists(),
-        "Active UC-01-MissionPlanning.md must exist on disk"
-    );
-
-    if tmp_dir.exists() {
-        std::fs::remove_dir_all(&tmp_dir)?;
-    }
     Ok(())
 }

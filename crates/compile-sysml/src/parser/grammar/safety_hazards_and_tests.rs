@@ -211,4 +211,118 @@ impl<'a> SysmlParser<'a> {
             doc: tc_doc,
         })
     }
+
+    /// Parses an `operation` or `operation def` signature with typed `in`/`out`/`inout` parameters and optional return type into an `OperationDef`.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-OPERATION-DECL]
+    pub(crate) fn parse_operation_decl(
+        &mut self,
+        doc: Option<String>,
+    ) -> Result<OperationDef, ParseError> {
+        self.expect(&TokenKind::Operation)?;
+        if self.check(&TokenKind::Def) {
+            self.advance();
+        }
+        let name = self.expect_ident()?;
+        let mut return_type = None;
+        let mut parameters = Vec::new();
+
+        if self.eat(&TokenKind::OpenParen) {
+            while !self.check(&TokenKind::CloseParen) && !self.is_at_end() {
+                let dir = if self.eat(&TokenKind::In) {
+                    "in"
+                } else if self.eat(&TokenKind::Out) {
+                    "out"
+                } else if self.eat(&TokenKind::Inout) {
+                    "inout"
+                } else {
+                    "in"
+                }
+                .to_string();
+                let p_name = self.expect_ident()?;
+                let p_type = if self.eat(&TokenKind::Colon) {
+                    self.parse_type_expr()?
+                } else {
+                    "String".to_string()
+                };
+                parameters.push(AttributeDef {
+                    name: p_name,
+                    type_name: p_type,
+                    default_value: Some(dir),
+                    doc: None,
+                });
+                self.eat(&TokenKind::Comma);
+            }
+            self.expect(&TokenKind::CloseParen)?;
+        }
+        if self.eat(&TokenKind::Colon) {
+            return_type = Some(self.parse_type_expr()?);
+        }
+        self.expect_semi()?;
+        Ok(OperationDef {
+            name,
+            direction: "inout".to_string(),
+            param_type: "String".to_string(),
+            return_type,
+            doc,
+            parameters,
+        })
+    }
+
+    /// Parses an `interaction` or `interaction def` block containing `lifeline`, `message`, and `trigger` statements into an `InteractionDef`.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-INTERACTION-DECL]
+    pub(crate) fn parse_interaction_decl(
+        &mut self,
+        doc: Option<String>,
+    ) -> Result<InteractionDef, ParseError> {
+        self.expect(&TokenKind::Interaction)?;
+        if self.check(&TokenKind::Def) {
+            self.advance();
+        }
+        let name = self.expect_ident()?;
+        let mut inter_doc = doc;
+        let mut lifelines = Vec::new();
+        let mut messages = Vec::new();
+        let mut triggers = Vec::new();
+
+        if self.eat(&TokenKind::OpenBrace) {
+            while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
+                self.skip_trivia();
+                while let Some(d) = self.take_inner_doc_comment() {
+                    if inter_doc.is_none() {
+                        inter_doc = Some(d);
+                    }
+                    self.skip_trivia();
+                }
+                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                    break;
+                }
+                if self.eat(&TokenKind::Lifeline) {
+                    lifelines.push(self.read_until_semi());
+                } else if self.eat(&TokenKind::Message) {
+                    messages.push(self.read_until_semi());
+                } else if self.eat(&TokenKind::Trigger) {
+                    triggers.push(self.read_until_semi());
+                } else {
+                    let tok = self.peek();
+                    return Err(ParseError {
+                        message: format!(
+                            "Unexpected token '{:?}' in interaction declaration body",
+                            tok.kind
+                        ),
+                        span: tok.span,
+                    });
+                }
+            }
+            self.expect(&TokenKind::CloseBrace)?;
+        } else {
+            self.expect_semi()?;
+        }
+        Ok(InteractionDef {
+            name,
+            lifelines,
+            messages,
+            triggers,
+            doc: inter_doc,
+        })
+    }
 }

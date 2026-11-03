@@ -128,47 +128,23 @@ impl<'a> SysmlParser<'a> {
         let mut path_segments = Vec::new();
         let mut is_wildcard = false;
         let mut is_recursive = false;
+        let leading_colon = self.eat(&TokenKind::DoubleColon);
+        path_segments.push(self.expect_ident()?);
 
-        let mut leading_colon = false;
-        if self.check(&TokenKind::DoubleColon) {
-            self.advance();
-            leading_colon = true;
-        }
-
-        let first = self.expect_ident()?;
-        path_segments.push(first);
-
-        while self.check(&TokenKind::DoubleColon) {
-            self.advance();
-            if self.check(&TokenKind::Star) {
-                self.advance();
-                if self.check(&TokenKind::Star) {
-                    self.advance();
-                    is_recursive = true;
-                    is_wildcard = true;
-                } else {
-                    is_wildcard = true;
-                }
+        while self.eat(&TokenKind::DoubleColon) {
+            if self.eat(&TokenKind::Star) {
+                is_wildcard = true;
+                is_recursive = self.eat(&TokenKind::Star);
                 break;
-            } else {
-                let seg = self.expect_ident()?;
-                path_segments.push(seg);
             }
+            path_segments.push(self.expect_ident()?);
         }
-
         self.expect_semi()?;
-
         let mut path = path_segments.join("::");
         if leading_colon {
             path = format!("::{}", path);
         }
-
-        Ok(ImportDef {
-            path,
-            is_wildcard,
-            is_recursive,
-            doc,
-        })
+        Ok(ImportDef { path, is_wildcard, is_recursive, doc })
     }
 
     /// Parses a single member declaration inside a package or part scope bounded by `MAX_PARSE_DEPTH`.
@@ -187,6 +163,24 @@ impl<'a> SysmlParser<'a> {
         result
     }
 
+    /// Attaches a container documentation string to `parent_part` or `pkg` if none is set.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-CONTAINER-ITEM]
+    fn assign_container_doc(
+        pkg: &mut PackageDef,
+        parent_part: Option<&mut PartDef>,
+        doc: Option<String>,
+    ) {
+        if let Some(d) = doc {
+            if let Some(parent) = parent_part {
+                if parent.doc.is_none() {
+                    parent.doc = Some(d);
+                }
+            } else if pkg.doc.is_none() {
+                pkg.doc = Some(d);
+            }
+        }
+    }
+
     /// Dispatches a single container member declaration within an active depth frame.
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-CONTAINER-ITEM]
     fn parse_container_item_inner(
@@ -201,26 +195,15 @@ impl<'a> SysmlParser<'a> {
             doc = Some(extra_doc);
             self.skip_trivia();
         }
-
         if self.is_at_end() || self.check(&TokenKind::CloseBrace) {
-            if let Some(d) = doc {
-                if let Some(parent) = parent_part {
-                    if parent.doc.is_none() {
-                        parent.doc = Some(d);
-                    }
-                } else if pkg.doc.is_none() {
-                    pkg.doc = Some(d);
-                }
-            }
+            Self::assign_container_doc(pkg, parent_part, doc);
             return Ok(());
         }
-
         match self.peek_kind() {
             TokenKind::Doc => {
                 self.advance();
                 self.skip_trivia();
-                if self.check(&TokenKind::Eq) || self.check(&TokenKind::Colon) {
-                    self.advance();
+                if self.eat(&TokenKind::Eq) || self.eat(&TokenKind::Colon) {
                     self.skip_trivia();
                 }
                 let inner_doc = if let Some(d) = self.take_doc_comment() {
@@ -231,18 +214,8 @@ impl<'a> SysmlParser<'a> {
                 } else {
                     None
                 };
-                if let Some(d) = inner_doc {
-                    if let Some(parent) = parent_part {
-                        if parent.doc.is_none() {
-                            parent.doc = Some(d);
-                        }
-                    } else if pkg.doc.is_none() {
-                        pkg.doc = Some(d);
-                    }
-                }
-                if self.check(&TokenKind::Semi) {
-                    self.advance();
-                }
+                Self::assign_container_doc(pkg, parent_part, inner_doc);
+                self.eat(&TokenKind::Semi);
             }
             TokenKind::Package => {
                 let subpkg = self.parse_package_decl(doc)?;
@@ -268,12 +241,37 @@ impl<'a> SysmlParser<'a> {
                     pkg.state_defs.push(state);
                 }
             }
-            _ => {
-                self.parse_leaf_container_item(doc, pkg, parent_part)?;
-            }
+            _ => self.parse_leaf_container_item(doc, pkg, parent_part)?,
         }
-
         Ok(())
+    }
+
+    /// Applies a parsed `@TriggersHazard`, `@SafetyRealises`, or `@Layer` stereotype to `parent`.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-CONTAINER-ITEM]
+    fn apply_part_stereotype(parent: &mut PartDef, stereo_name: &str, values: Vec<String>) {
+        let non_empty = values.into_iter().filter(|v| !v.is_empty());
+        match stereo_name {
+            "TriggersHazard" => {
+                for val in non_empty {
+                    if !parent.triggers_hazards.contains(&val) {
+                        parent.triggers_hazards.push(val);
+                    }
+                }
+            }
+            "SafetyRealises" => {
+                for val in non_empty {
+                    if !parent.safety_realises.contains(&val) {
+                        parent.safety_realises.push(val);
+                    }
+                }
+            }
+            "Layer" => {
+                if let Some(first_val) = non_empty.into_iter().next() {
+                    parent.layer = Some(first_val);
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Parses non-container leaf member declarations inside a package or part scope, keeping
@@ -285,187 +283,55 @@ impl<'a> SysmlParser<'a> {
         pkg: &mut PackageDef,
         parent_part: Option<&mut PartDef>,
     ) -> Result<(), ParseError> {
+        macro_rules! push_member {
+            ($val:expr, $part_field:ident, $pkg_field:ident) => {
+                if let Some(parent) = parent_part {
+                    parent.$part_field.push($val);
+                } else {
+                    pkg.$pkg_field.push($val);
+                }
+            };
+        }
         match self.peek_kind() {
-            TokenKind::Port => {
-                let port = self.parse_port_decl(doc)?;
-                if let Some(parent) = parent_part {
-                    parent.ports.push(port);
-                } else {
-                    pkg.port_defs.push(port);
-                }
-            }
+            TokenKind::Port => push_member!(self.parse_port_decl(doc)?, ports, port_defs),
             TokenKind::In | TokenKind::Out | TokenKind::Inout if self.peek_next_is_port() => {
-                let port = self.parse_port_decl(doc)?;
-                if let Some(parent) = parent_part {
-                    parent.ports.push(port);
-                } else {
-                    pkg.port_defs.push(port);
-                }
+                push_member!(self.parse_port_decl(doc)?, ports, port_defs)
             }
-            TokenKind::Attribute => {
-                let attr = self.parse_attribute_decl(doc)?;
-                if let Some(parent) = parent_part {
-                    parent.attributes.push(attr);
-                } else {
-                    pkg.attribute_defs.push(attr);
-                }
-            }
-            TokenKind::Action => {
-                let action = self.parse_action_decl(doc)?;
-                if let Some(parent) = parent_part {
-                    parent.actions.push(action);
-                } else {
-                    pkg.action_defs.push(action);
-                }
-            }
+            TokenKind::Attribute => push_member!(self.parse_attribute_decl(doc)?, attributes, attribute_defs),
+            TokenKind::Action => push_member!(self.parse_action_decl(doc)?, actions, action_defs),
             TokenKind::Constraint | TokenKind::Assert => {
-                let constraint = self.parse_constraint_decl(doc)?;
-                if let Some(parent) = parent_part {
-                    parent.constraints.push(constraint);
-                } else {
-                    pkg.constraint_defs.push(constraint);
-                }
+                push_member!(self.parse_constraint_decl(doc)?, constraints, constraint_defs)
             }
             TokenKind::Requirement => {
-                let req = self.parse_requirement_decl(doc)?;
-                if let Some(parent) = parent_part {
-                    parent.requirements.push(req);
-                } else {
-                    pkg.requirement_defs.push(req);
-                }
+                push_member!(self.parse_requirement_decl(doc)?, requirements, requirement_defs)
             }
             TokenKind::Satisfy => {
                 let req_target = self.parse_satisfy_stmt()?;
-                if !req_target.is_empty() {
-                    if let Some(parent) = parent_part {
-                        if !parent.satisfied_requirements.contains(&req_target) {
-                            parent.satisfied_requirements.push(req_target);
-                        }
-                    } else if !pkg.satisfied_requirements.contains(&req_target) {
-                        pkg.satisfied_requirements.push(req_target);
-                    }
+                let list = match parent_part {
+                    Some(p) => &mut p.satisfied_requirements,
+                    None => &mut pkg.satisfied_requirements,
+                };
+                if !req_target.is_empty() && !list.contains(&req_target) {
+                    list.push(req_target);
                 }
             }
-            TokenKind::Import => {
-                let imp = self.parse_import_decl(doc)?;
-                pkg.imports.push(imp);
-            }
-            TokenKind::Connection => {
-                let conn = self.parse_connection_decl(doc, false)?;
-                if let Some(parent) = parent_part {
-                    parent.connections.push(conn);
-                } else {
-                    pkg.connection_defs.push(conn);
-                }
-            }
-            TokenKind::Connect => {
-                let conn = self.parse_inline_connect_decl(doc)?;
-                if let Some(parent) = parent_part {
-                    parent.connections.push(conn);
-                } else {
-                    pkg.connection_defs.push(conn);
-                }
-            }
-            TokenKind::Flow => {
-                let conn = self.parse_connection_decl(doc, true)?;
-                if let Some(parent) = parent_part {
-                    parent.connections.push(conn);
-                } else {
-                    pkg.connection_defs.push(conn);
-                }
-            }
-            TokenKind::UseCase => {
-                let uc = self.parse_use_case_decl(doc)?;
-                if let Some(parent) = parent_part {
-                    parent.use_cases.push(uc);
-                } else {
-                    pkg.use_case_defs.push(uc);
-                }
-            }
-            TokenKind::Item => {
-                let item = self.parse_item_decl(doc)?;
-                if let Some(parent) = parent_part {
-                    parent.item_defs.push(item);
-                } else {
-                    pkg.item_defs.push(item);
-                }
-            }
-            TokenKind::Hazard => {
-                let hz = self.parse_hazard_decl(doc)?;
-                if let Some(parent) = parent_part {
-                    parent.hazards.push(hz);
-                } else {
-                    pkg.hazard_defs.push(hz);
-                }
-            }
-            TokenKind::Risk => {
-                let rk = self.parse_risk_decl(doc)?;
-                if let Some(parent) = parent_part {
-                    parent.risks.push(rk);
-                } else {
-                    pkg.risk_defs.push(rk);
-                }
-            }
-            TokenKind::Test => {
-                let tc = self.parse_test_case_decl(doc)?;
-                if let Some(parent) = parent_part {
-                    parent.test_cases.push(tc);
-                } else {
-                    pkg.test_case_defs.push(tc);
-                }
-            }
-            TokenKind::Capability => {
-                let cap = self.parse_capability_decl(doc)?;
-                if let Some(parent) = parent_part {
-                    parent.capabilities.push(cap);
-                } else {
-                    pkg.capability_defs.push(cap);
-                }
-            }
-            TokenKind::Operation => {
-                let op = self.parse_operation_decl(doc)?;
-                if let Some(parent) = parent_part {
-                    parent.operations.push(op);
-                } else {
-                    pkg.operation_defs.push(op);
-                }
-            }
-            TokenKind::Interaction => {
-                let inter = self.parse_interaction_decl(doc)?;
-                if let Some(parent) = parent_part {
-                    parent.interactions.push(inter);
-                } else {
-                    pkg.interaction_defs.push(inter);
-                }
-            }
-            TokenKind::Calc => {
-                let c = self.parse_calc_decl(doc)?;
-                if let Some(parent) = parent_part {
-                    parent.calcs.push(c);
-                } else {
-                    pkg.calc_defs.push(c);
-                }
-            }
+            TokenKind::Import => pkg.imports.push(self.parse_import_decl(doc)?),
+            TokenKind::Connection => push_member!(self.parse_connection_decl(doc, false)?, connections, connection_defs),
+            TokenKind::Connect => push_member!(self.parse_inline_connect_decl(doc)?, connections, connection_defs),
+            TokenKind::Flow => push_member!(self.parse_connection_decl(doc, true)?, connections, connection_defs),
+            TokenKind::UseCase => push_member!(self.parse_use_case_decl(doc)?, use_cases, use_case_defs),
+            TokenKind::Item => push_member!(self.parse_item_decl(doc)?, item_defs, item_defs),
+            TokenKind::Hazard => push_member!(self.parse_hazard_decl(doc)?, hazards, hazard_defs),
+            TokenKind::Risk => push_member!(self.parse_risk_decl(doc)?, risks, risk_defs),
+            TokenKind::Test => push_member!(self.parse_test_case_decl(doc)?, test_cases, test_case_defs),
+            TokenKind::Capability => push_member!(self.parse_capability_decl(doc)?, capabilities, capability_defs),
+            TokenKind::Operation => push_member!(self.parse_operation_decl(doc)?, operations, operation_defs),
+            TokenKind::Interaction => push_member!(self.parse_interaction_decl(doc)?, interactions, interaction_defs),
+            TokenKind::Calc => push_member!(self.parse_calc_decl(doc)?, calcs, calc_defs),
             _ if self.peek_stereotype_name().is_some() => {
                 let (stereo_name, values) = self.parse_stereotype_annotation()?;
                 if let Some(parent) = parent_part {
-                    if stereo_name == "TriggersHazard" {
-                        for val in values {
-                            if !val.is_empty() && !parent.triggers_hazards.contains(&val) {
-                                parent.triggers_hazards.push(val);
-                            }
-                        }
-                    } else if stereo_name == "SafetyRealises" {
-                        for val in values {
-                            if !val.is_empty() && !parent.safety_realises.contains(&val) {
-                                parent.safety_realises.push(val);
-                            }
-                        }
-                    } else if stereo_name == "Layer" {
-                        if let Some(first_val) = values.into_iter().find(|v| !v.is_empty()) {
-                            parent.layer = Some(first_val);
-                        }
-                    }
+                    Self::apply_part_stereotype(parent, &stereo_name, values);
                 }
             }
             _ => {
@@ -479,7 +345,6 @@ impl<'a> SysmlParser<'a> {
                 });
             }
         }
-
         Ok(())
     }
 }

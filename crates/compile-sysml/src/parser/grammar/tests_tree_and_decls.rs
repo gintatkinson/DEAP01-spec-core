@@ -25,59 +25,20 @@ package ReqPkg {
 "#;
         let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.requirement_defs.len(), 1);
-        let req = pkg
-            .requirement_defs
-            .first()
-            .ok_or("missing first element of pkg.requirement_defs")?;
+        let req = pkg.requirement_defs.first().ok_or("missing req")?;
         assert_eq!(req.name, "REQ_0001_Demo");
         assert_eq!(req.req_id, "REQ-0001");
         assert_eq!(req.text, "The system shall process data.");
         assert_eq!(req.attributes.len(), 3);
-        assert_eq!(
-            req.attributes
-                .first()
-                .ok_or("missing first element of req.attributes")?
-                .name,
-            "uuidv5"
-        );
-        assert_eq!(
-            req.attributes
-                .first()
-                .ok_or("missing first element of req.attributes")?
-                .default_value
-                .as_deref(),
-            Some("\"5a4d7a99-0419-5c2b-ba0e-ccabdb05f1c9\"")
-        );
-        assert_eq!(
-            req.attributes
-                .get(1)
-                .ok_or("missing element 1 of req.attributes")?
-                .name,
-            "complexity_class"
-        );
-        assert_eq!(
-            req.attributes
-                .get(1)
-                .ok_or("missing element 1 of req.attributes")?
-                .default_value
-                .as_deref(),
-            Some("\"Class P\"")
-        );
-        assert_eq!(
-            req.attributes
-                .get(2)
-                .ok_or("missing element 2 of req.attributes")?
-                .name,
-            "ac_01_demo"
-        );
-        assert_eq!(
-            req.attributes
-                .get(2)
-                .ok_or("missing element 2 of req.attributes")?
-                .default_value
-                .as_deref(),
-            Some("\"Given: input. When: run. Then: success.\"")
-        );
+        let a0 = req.attributes.first().ok_or("missing a0")?;
+        assert_eq!(a0.name, "uuidv5");
+        assert_eq!(a0.default_value.as_deref(), Some("\"5a4d7a99-0419-5c2b-ba0e-ccabdb05f1c9\""));
+        let a1 = req.attributes.get(1).ok_or("missing a1")?;
+        assert_eq!(a1.name, "complexity_class");
+        assert_eq!(a1.default_value.as_deref(), Some("\"Class P\""));
+        let a2 = req.attributes.get(2).ok_or("missing a2")?;
+        assert_eq!(a2.name, "ac_01_demo");
+        assert_eq!(a2.default_value.as_deref(), Some("\"Given: input. When: run. Then: success.\""));
         assert_eq!(req.verified_by, vec!["AC_01_Demo"]);
         assert_eq!(req.satisfied_by, vec!["DemoEngine"]);
         Ok(())
@@ -103,16 +64,10 @@ package ReqPkg {
 "#;
         let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.requirement_defs.len(), 1);
-        let req = pkg
-            .requirement_defs
-            .first()
-            .ok_or("missing first element of pkg.requirement_defs")?;
+        let req = pkg.requirement_defs.first().ok_or("missing req")?;
         assert_eq!(req.assumes, vec!["ValidSchema"]);
         assert_eq!(req.requires, vec!["Invariant_Alpha", "Invariant_Beta"]);
-        assert_eq!(
-            req.derived_from,
-            vec!["REQ_0031_Parent", "REQ_0019_Sanitization"]
-        );
+        assert_eq!(req.derived_from, vec!["REQ_0031_Parent", "REQ_0019_Sanitization"]);
         Ok(())
     }
 
@@ -136,52 +91,16 @@ package ReqPkg {
 "#;
         let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.requirement_defs.len(), 1);
-        let req = pkg
-            .requirement_defs
-            .first()
-            .ok_or("missing first element of pkg.requirement_defs")?;
+        let req = pkg.requirement_defs.first().ok_or("missing req")?;
         assert_eq!(req.constraints.len(), 2);
-        assert_eq!(
-            req.constraints
-                .first()
-                .ok_or("missing first element of req.constraints")?
-                .name,
-            "Invariant_Alpha"
-        );
-        assert_eq!(
-            req.constraints
-                .first()
-                .ok_or("missing first element of req.constraints")?
-                .doc
-                .as_deref(),
-            Some("Formula Alpha")
-        );
-        assert!(
-            !req.constraints
-                .first()
-                .ok_or("missing first element of req.constraints")?
-                .is_assertion
-        );
-        assert_eq!(
-            req.constraints
-                .get(1)
-                .ok_or("missing element 1 of req.constraints")?
-                .name,
-            "Invariant_Beta"
-        );
-        assert!(
-            req.constraints
-                .get(1)
-                .ok_or("missing element 1 of req.constraints")?
-                .is_assertion
-        );
-        assert_eq!(
-            req.constraints
-                .get(1)
-                .ok_or("missing element 1 of req.constraints")?
-                .expression,
-            "x > 0"
-        );
+        let c0 = req.constraints.first().ok_or("missing c0")?;
+        assert_eq!(c0.name, "Invariant_Alpha");
+        assert_eq!(c0.doc.as_deref(), Some("Formula Alpha"));
+        assert!(!c0.is_assertion);
+        let c1 = req.constraints.get(1).ok_or("missing c1")?;
+        assert_eq!(c1.name, "Invariant_Beta");
+        assert!(c1.is_assertion);
+        assert_eq!(c1.expression, "x > 0");
         Ok(())
     }
 
@@ -196,65 +115,17 @@ package Subsystem_Imports {
 "#;
         let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.imports.len(), 3);
-        assert_eq!(
-            pkg.imports
-                .first()
-                .ok_or("missing first element of pkg.imports")?
-                .path,
-            "Subsystem_1"
-        );
-        assert!(
-            pkg.imports
-                .first()
-                .ok_or("missing first element of pkg.imports")?
-                .is_wildcard
-        );
-        assert!(
-            !pkg.imports
-                .first()
-                .ok_or("missing first element of pkg.imports")?
-                .is_recursive
-        );
+        let i0 = pkg.imports.first().ok_or("missing i0")?;
+        assert_eq!(i0.path, "Subsystem_1");
+        assert!(i0.is_wildcard && !i0.is_recursive);
 
-        assert_eq!(
-            pkg.imports
-                .get(1)
-                .ok_or("missing element 1 of pkg.imports")?
-                .path,
-            "Subsystem_2::Engine"
-        );
-        assert!(
-            !pkg.imports
-                .get(1)
-                .ok_or("missing element 1 of pkg.imports")?
-                .is_wildcard
-        );
-        assert!(
-            !pkg.imports
-                .get(1)
-                .ok_or("missing element 1 of pkg.imports")?
-                .is_recursive
-        );
+        let i1 = pkg.imports.get(1).ok_or("missing i1")?;
+        assert_eq!(i1.path, "Subsystem_2::Engine");
+        assert!(!i1.is_wildcard && !i1.is_recursive);
 
-        assert_eq!(
-            pkg.imports
-                .get(2)
-                .ok_or("missing element 2 of pkg.imports")?
-                .path,
-            "Subsystem_3::Core"
-        );
-        assert!(
-            pkg.imports
-                .get(2)
-                .ok_or("missing element 2 of pkg.imports")?
-                .is_wildcard
-        );
-        assert!(
-            pkg.imports
-                .get(2)
-                .ok_or("missing element 2 of pkg.imports")?
-                .is_recursive
-        );
+        let i2 = pkg.imports.get(2).ok_or("missing i2")?;
+        assert_eq!(i2.path, "Subsystem_3::Core");
+        assert!(i2.is_wildcard && i2.is_recursive);
         Ok(())
     }
 
@@ -267,16 +138,10 @@ part def DEAPCompilerSystem {
 "#;
         let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.part_defs.len(), 1);
-        let part = pkg
-            .part_defs
-            .first()
-            .ok_or("missing first element of pkg.part_defs")?;
+        let part = pkg.part_defs.first().ok_or("missing part")?;
         assert_eq!(part.name, "DEAPCompilerSystem");
         assert_eq!(part.connections.len(), 1);
-        let conn = part
-            .connections
-            .first()
-            .ok_or("missing first element of part.connections")?;
+        let conn = part.connections.first().ok_or("missing conn")?;
         assert_eq!(conn.source_port, "a.out");
         assert_eq!(conn.target_port, "b.in");
         assert_eq!(conn.source_part.as_deref(), Some("a"));
@@ -298,56 +163,14 @@ package Subsystem_2 {
         let pkg = SysmlParser::parse_source(source, "RootSystem")?;
         assert_eq!(pkg.name, "RootSystem");
         assert_eq!(pkg.packages.len(), 2);
-        assert_eq!(
-            pkg.packages
-                .first()
-                .ok_or("missing first element of pkg.packages")?
-                .name,
-            "Subsystem_1"
-        );
-        assert_eq!(
-            pkg.packages
-                .first()
-                .ok_or("missing first element of pkg.packages")?
-                .part_defs
-                .len(),
-            1
-        );
-        assert_eq!(
-            pkg.packages
-                .first()
-                .ok_or("missing first element of pkg.packages")?
-                .part_defs
-                .first()
-                .ok_or("missing first element of part_defs")?
-                .name,
-            "Engine"
-        );
-        assert_eq!(
-            pkg.packages
-                .get(1)
-                .ok_or("missing element 1 of pkg.packages")?
-                .name,
-            "Subsystem_2"
-        );
-        assert_eq!(
-            pkg.packages
-                .get(1)
-                .ok_or("missing element 1 of pkg.packages")?
-                .part_defs
-                .len(),
-            1
-        );
-        assert_eq!(
-            pkg.packages
-                .get(1)
-                .ok_or("missing element 1 of pkg.packages")?
-                .part_defs
-                .first()
-                .ok_or("missing first element of part_defs")?
-                .name,
-            "Controller"
-        );
+        let sub1 = pkg.packages.first().ok_or("missing sub1")?;
+        assert_eq!(sub1.name, "Subsystem_1");
+        assert_eq!(sub1.part_defs.len(), 1);
+        assert_eq!(sub1.part_defs.first().ok_or("missing Engine")?.name, "Engine");
+        let sub2 = pkg.packages.get(1).ok_or("missing sub2")?;
+        assert_eq!(sub2.name, "Subsystem_2");
+        assert_eq!(sub2.part_defs.len(), 1);
+        assert_eq!(sub2.part_defs.first().ok_or("missing Controller")?.name, "Controller");
         Ok(())
     }
 
@@ -374,24 +197,9 @@ package AutonomousSystem {
 "#;
         let pkg = SysmlParser::parse_source(source, "TestModel")?;
         assert_eq!(pkg.test_case_defs.len(), 1);
-        let tc = pkg
-            .test_case_defs
-            .first()
-            .ok_or("missing first element of pkg.test_case_defs")?;
+        let tc = pkg.test_case_defs.first().ok_or("missing tc")?;
         assert_eq!(tc.name, "TC_UCA_33_Verification");
-        assert_eq!(tc.verified_requirements.len(), 2);
-        assert_eq!(
-            tc.verified_requirements
-                .first()
-                .ok_or("missing first element of tc.verified_requirements")?,
-            "Assert_UCA_33"
-        );
-        assert_eq!(
-            tc.verified_requirements
-                .get(1)
-                .ok_or("missing element 1 of tc.verified_requirements")?,
-            "Assert_UCA_34"
-        );
+        assert_eq!(tc.verified_requirements, vec!["Assert_UCA_33", "Assert_UCA_34"]);
         Ok(())
     }
 

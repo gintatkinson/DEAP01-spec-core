@@ -30,12 +30,8 @@ package SystemModel_SSOT {
 }
 "#;
         let pkg = SysmlParser::parse_source(fixture, "TestModel")?;
-
         assert_eq!(pkg.name, "SystemModel_SSOT");
-        assert_eq!(
-            pkg.doc.as_deref(),
-            Some("SSOT for Generic System Architecture and Safety Model")
-        );
+        assert_eq!(pkg.doc.as_deref(), Some("SSOT for Generic System Architecture and Safety Model"));
         assert_eq!(pkg.attribute_defs.len(), 4);
         let channel_count = pkg.attribute_defs.first().ok_or("missing attribute 0")?;
         assert_eq!(channel_count.name, "channelCount");
@@ -46,10 +42,7 @@ package SystemModel_SSOT {
         let frame = pkg.part_defs.first().ok_or("missing part 0")?;
         assert_eq!(frame.name, "StructuralFrame");
         assert_eq!(frame.attributes.len(), 1);
-        let mass = frame
-            .attributes
-            .first()
-            .ok_or("missing frame attribute 0")?;
+        let mass = frame.attributes.first().ok_or("missing frame attribute 0")?;
         assert_eq!(mass.name, "nominalMass");
         assert_eq!(mass.default_value.as_deref(), Some("25.0"));
 
@@ -70,34 +63,16 @@ package SystemModel_SSOT {
         let fixture =
             include_str!("../../../../../tests/fixtures/safety/grounded_limits_model.sysml");
         let pkg = SysmlParser::parse_source(fixture, "TestLimits")?;
-
         assert_eq!(pkg.name, "GroundedLimits_SSOT");
-        assert_eq!(
-            pkg.doc.as_deref(),
-            Some("Ground truth limits for flight envelope verification")
-        );
+        assert_eq!(pkg.doc.as_deref(), Some("Ground truth limits for flight envelope verification"));
         assert_eq!(pkg.attribute_defs.len(), 5);
-        assert_eq!(
-            pkg.attribute_defs
-                .first()
-                .ok_or("missing first element of pkg.attribute_defs")?
-                .name,
-            "catapultPressureLimitBar"
-        );
-        assert_eq!(
-            pkg.attribute_defs
-                .first()
-                .ok_or("missing first element of pkg.attribute_defs")?
-                .default_value
-                .as_deref(),
-            Some("15.0")
-        );
+        let first_attr = pkg.attribute_defs.first().ok_or("missing first element of pkg.attribute_defs")?;
+        assert_eq!(first_attr.name, "catapultPressureLimitBar");
+        assert_eq!(first_attr.default_value.as_deref(), Some("15.0"));
         Ok(())
     }
 
-    #[test]
-    fn test_parse_complex_system_model() -> Result<(), Box<dyn std::error::Error>> {
-        let source = r#"
+    const COMPLEX_FLIGHT_CONTROL_FIXTURE: &str = r#"
 package FlightControl_SSOT {
     doc /* Primary Flight Control and Mission Computer Architecture */
 
@@ -146,122 +121,44 @@ package FlightControl_SSOT {
     }
 }
 "#;
-        let pkg = SysmlParser::parse_source(source, "Default")?;
+
+    #[test]
+    fn test_parse_complex_system_model() -> Result<(), Box<dyn std::error::Error>> {
+        let pkg = SysmlParser::parse_source(COMPLEX_FLIGHT_CONTROL_FIXTURE, "Default")?;
         assert_eq!(pkg.name, "FlightControl_SSOT");
-        assert_eq!(
-            pkg.doc.as_deref(),
-            Some("Primary Flight Control and Mission Computer Architecture")
-        );
+        assert_eq!(pkg.doc.as_deref(), Some("Primary Flight Control and Mission Computer Architecture"));
         assert_eq!(pkg.attribute_defs.len(), 2);
         assert_eq!(pkg.part_defs.len(), 2);
 
-        let nav = pkg
-            .part_defs
-            .first()
-            .ok_or("missing first element of pkg.part_defs")?;
+        let nav = pkg.part_defs.first().ok_or("missing first element of pkg.part_defs")?;
         assert_eq!(nav.name, "NavigationSubsystem");
         assert_eq!(nav.doc.as_deref(), Some("GPS, IMU and Sensor Fusion Unit"));
         assert_eq!(nav.ports.len(), 2);
-        assert_eq!(
-            nav.ports
-                .first()
-                .ok_or("missing first element of nav.ports")?
-                .direction,
-            "out"
-        );
-        assert_eq!(
-            nav.ports
-                .first()
-                .ok_or("missing first element of nav.ports")?
-                .name,
-            "nav_solution"
-        );
-        assert_eq!(
-            nav.ports
-                .get(1)
-                .ok_or("missing element 1 of nav.ports")?
-                .direction,
-            "in"
-        );
-        assert!(
-            nav.ports
-                .get(1)
-                .ok_or("missing element 1 of nav.ports")?
-                .is_conjugated
-        );
-        assert_eq!(
-            nav.ports
-                .get(1)
-                .ok_or("missing element 1 of nav.ports")?
-                .name,
-            "correction_stream"
-        );
+        let p0 = nav.ports.first().ok_or("missing first element of nav.ports")?;
+        assert_eq!(p0.direction, "out");
+        assert_eq!(p0.name, "nav_solution");
+        let p1 = nav.ports.get(1).ok_or("missing element 1 of nav.ports")?;
+        assert_eq!(p1.direction, "in");
+        assert!(p1.is_conjugated);
+        assert_eq!(p1.name, "correction_stream");
         assert_eq!(nav.actions.len(), 1);
-        assert_eq!(
-            nav.actions
-                .first()
-                .ok_or("missing first element of nav.actions")?
-                .name,
-            "ComputeNavigationState"
-        );
+        assert_eq!(nav.actions.first().ok_or("missing action")?.name, "ComputeNavigationState");
         assert_eq!(nav.states.len(), 1);
-        assert_eq!(
-            nav.states
-                .first()
-                .ok_or("missing first element of nav.states")?
-                .name,
-            "NavFilterState"
-        );
-        assert_eq!(
-            nav.states
-                .first()
-                .ok_or("missing first element of nav.states")?
-                .entry_action
-                .as_deref(),
-            Some("InitINS")
-        );
-        assert_eq!(
-            nav.states
-                .first()
-                .ok_or("missing first element of nav.states")?
-                .do_action
-                .as_deref(),
-            Some("RunEKF")
-        );
+        let st = nav.states.first().ok_or("missing first element of nav.states")?;
+        assert_eq!(st.name, "NavFilterState");
+        assert_eq!(st.entry_action.as_deref(), Some("InitINS"));
+        assert_eq!(st.do_action.as_deref(), Some("RunEKF"));
 
-        let actuator = pkg
-            .part_defs
-            .get(1)
-            .ok_or("missing element 1 of pkg.part_defs")?;
+        let actuator = pkg.part_defs.get(1).ok_or("missing element 1 of pkg.part_defs")?;
         assert_eq!(actuator.name, "ActuatorController");
         assert_eq!(actuator.constraints.len(), 1);
-        assert_eq!(
-            actuator
-                .constraints
-                .first()
-                .ok_or("missing first element of actuator.constraints")?
-                .name,
-            "DeflectionBounds"
-        );
-        assert!(
-            actuator
-                .constraints
-                .first()
-                .ok_or("missing first element of actuator.constraints")?
-                .is_assertion
-        );
-        assert!(actuator
-            .constraints
-            .first()
-            .ok_or("missing first element of actuator.constraints")?
-            .expression
-            .contains("deflectionDeg"));
+        let c0 = actuator.constraints.first().ok_or("missing constraint")?;
+        assert_eq!(c0.name, "DeflectionBounds");
+        assert!(c0.is_assertion);
+        assert!(c0.expression.contains("deflectionDeg"));
 
         assert_eq!(pkg.connection_defs.len(), 1);
-        let conn = pkg
-            .connection_defs
-            .first()
-            .ok_or("missing first element of pkg.connection_defs")?;
+        let conn = pkg.connection_defs.first().ok_or("missing connection")?;
         assert_eq!(conn.name, "NavToActuatorBus");
         assert_eq!(conn.source_port, "NavigationSubsystem.nav_solution");
         assert_eq!(conn.target_port, "ActuatorController.servo_cmd");
@@ -271,16 +168,10 @@ package FlightControl_SSOT {
         assert_eq!(conn.latency_ms, Some(2.5));
 
         assert_eq!(pkg.requirement_defs.len(), 1);
-        let req = pkg
-            .requirement_defs
-            .first()
-            .ok_or("missing first element of pkg.requirement_defs")?;
+        let req = pkg.requirement_defs.first().ok_or("missing requirement")?;
         assert_eq!(req.name, "Req_Nav_001");
         assert_eq!(req.req_id, "REQ-NAV-001");
-        assert_eq!(
-            req.text,
-            "Navigation system shall compute attitude at minimum 100 Hz."
-        );
+        assert_eq!(req.text, "Navigation system shall compute attitude at minimum 100 Hz.");
         assert_eq!(req.verified_by, vec!["HardwareInLoopTest"]);
         assert_eq!(req.satisfied_by, vec!["NavigationSubsystem"]);
         Ok(())
@@ -302,54 +193,12 @@ package TestPkg {
 "#;
         let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.name, "TestPkg");
-        let comp = pkg
-            .part_defs
-            .first()
-            .ok_or("missing first element of pkg.part_defs")?;
+        let comp = pkg.part_defs.first().ok_or("missing first element of pkg.part_defs")?;
         assert_eq!(comp.name, "Component");
         assert_eq!(comp.attributes.len(), 6);
-        assert_eq!(
-            comp.attributes
-                .first()
-                .ok_or("missing first element of comp.attributes")?
-                .name,
-            "text"
-        );
-        assert_eq!(
-            comp.attributes
-                .get(1)
-                .ok_or("missing element 1 of comp.attributes")?
-                .name,
-            "doc"
-        );
-        assert_eq!(
-            comp.attributes
-                .get(2)
-                .ok_or("missing element 2 of comp.attributes")?
-                .name,
-            "item"
-        );
-        assert_eq!(
-            comp.attributes
-                .get(3)
-                .ok_or("missing element 3 of comp.attributes")?
-                .name,
-            "state"
-        );
-        assert_eq!(
-            comp.attributes
-                .get(4)
-                .ok_or("missing element 4 of comp.attributes")?
-                .name,
-            "action"
-        );
-        assert_eq!(
-            comp.attributes
-                .get(5)
-                .ok_or("missing element 5 of comp.attributes")?
-                .name,
-            "port"
-        );
+        for (i, expected) in ["text", "doc", "item", "state", "action", "port"].into_iter().enumerate() {
+            assert_eq!(comp.attributes.get(i).ok_or("missing attr")?.name, expected);
+        }
         Ok(())
     }
 
@@ -365,41 +214,14 @@ package SubsystemPkg {
 "#;
         let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.part_defs.len(), 1);
-        let engine = pkg
-            .part_defs
-            .first()
-            .ok_or("missing first element of pkg.part_defs")?;
+        let engine = pkg.part_defs.first().ok_or("missing first element of pkg.part_defs")?;
         assert_eq!(engine.constraints.len(), 2);
-        assert_eq!(
-            engine
-                .constraints
-                .first()
-                .ok_or("missing first element of engine.constraints")?
-                .name,
-            "Invariant_Alpha"
-        );
-        assert!(
-            engine
-                .constraints
-                .first()
-                .ok_or("missing first element of engine.constraints")?
-                .is_assertion
-        );
-        assert_eq!(
-            engine
-                .constraints
-                .get(1)
-                .ok_or("missing element 1 of engine.constraints")?
-                .name,
-            "Invariant_Beta"
-        );
-        assert!(
-            engine
-                .constraints
-                .get(1)
-                .ok_or("missing element 1 of engine.constraints")?
-                .is_assertion
-        );
+        let c0 = engine.constraints.first().ok_or("missing constraint 0")?;
+        assert_eq!(c0.name, "Invariant_Alpha");
+        assert!(c0.is_assertion);
+        let c1 = engine.constraints.get(1).ok_or("missing constraint 1")?;
+        assert_eq!(c1.name, "Invariant_Beta");
+        assert!(c1.is_assertion);
         Ok(())
     }
 
@@ -416,11 +238,7 @@ package ArrayModel {
 }
 "#;
         let parsed = SysmlParser::parse_source(source, "ArrayModel");
-        assert!(
-            parsed.is_ok(),
-            "Type[] attribute failed to parse: {:?}",
-            parsed.err()
-        );
+        assert!(parsed.is_ok(), "Type[] attribute failed to parse: {:?}", parsed.err());
         let pkg = parsed.unwrap_or_default();
         let label_set = pkg.attribute_defs.iter().find(|a| a.name == "labelSet");
         assert_eq!(label_set.map(|a| a.type_name.as_str()), Some("String[]"));
@@ -438,10 +256,6 @@ package ArrayModel {
     fn test_parse_attribute_decl_rejects_unclosed_array_bracket() {
         let source = "package BadArray {\n    attribute labelSet : String[;\n}\n";
         let parsed = SysmlParser::parse_source(source, "BadArray");
-        assert!(
-            parsed.is_err(),
-            "unclosed '[' must be a parse error, got {:?}",
-            parsed.ok()
-        );
+        assert!(parsed.is_err(), "unclosed '[' must be a parse error, got {:?}", parsed.ok());
     }
 }

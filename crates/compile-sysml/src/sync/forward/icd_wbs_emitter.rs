@@ -1,37 +1,47 @@
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
 //! Logical Interface Control Document (ICD) Compiler and CLI Artifact Emission Dispatcher.
 //!
-//! Safety & Traceability: Realises: [REQ-0604]
-//! Contract: Synthesizes Level 1C `ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md` specifications from SysML v2 `PortDef` and `ConnectionDef` AST nodes and dispatches `--emit-icd` / `--emit-wbs` CLI flags.
-//! Bounds & Faults: Fails closed with `Diagnostic: E0200` on undeclared connection endpoints or zero-interface models, enforces deterministic `BTreeMap`/`BTreeSet` ordering, and persists files via `write_atomic`.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety-critical
+//! software engineering standards. Synthesizes Level 1C `ICD_01_SYSTEM_INTERFACE_MATRIX.md` and
+//! `ICD_02_MASTER_SIGNAL_DICTIONARY.md` specifications from SysML v2 `PortDef` and `ConnectionDef`
+//! AST nodes and dispatches `--emit-icd` / `--emit-wbs` CLI flags.
+//!
+//! ## 2. Invariants & Mathematical Properties
+//! - Fail-Closed Interface Verification: Undeclared connection endpoints or zero-interface models
+//!   fail closed with `Diagnostic: E0200`.
+//! - Total Ordering: `SignalDictionaryRow` entries are sorted lexicographically and deduplicated.
+//!
+//! ## 3. Preconditions
+//! - `pkg` is a parsed `PackageDef` containing declared `PartDef`, `PortDef`, or `ConnectionDef` nodes.
+//!
+//! ## 4. Postconditions
+//! - Emits validated `IcdDocumentPair` artifacts and persists files atomically via `write_atomic`.
+//!
+//! ## 5. Algorithmic Complexity Bounds
+//! - Time Complexity: $O(V^2 + E \log E)$ where $V$ is part count and $E$ is port/connection count.
+//! - Space Complexity: $O(V^2 + E)$ for interconnect matrices and signal rows.
+//!
+//! ## 6. Failure Modes & Fault Tolerance
+//! - Returns `Err(String)` containing `Diagnostic: E0200` or `Diagnostic: E0300` on invalid topology or CLI arguments.
+//!
+//! ## 7. Realization & Traceability
+//! Realises: [REQ-0604]
 
 use super::*;
 
+type ConnectionRegisterRow = (String, String, String, String, String);
+type CellLinkMap = BTreeMap<(String, String), BTreeSet<String>>;
+
 /// Canonical row in `ICD_02_MASTER_SIGNAL_DICTIONARY.md`.
 ///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `SignalDictionaryRow` in `crates/compile-sysml/src/sync/forward/icd_wbs_emitter.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Totally ordered lexicographically by `(signal_name, payload_type, direction, source_endpoint, target_endpoint, package_name)`.
-///
-/// ## 3. Preconditions
-/// - Populated from verified `PortDef` and `ConnectionDef` AST nodes.
-///
-/// ## 4. Postconditions
-/// - Represents a single deterministic row in `ICD_02_MASTER_SIGNAL_DICTIONARY.md`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(1) per row comparison.
-/// - Space Complexity: O(1) bounded string fields.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Strongly typed struct fields.
-/// - State: Immutable value semantics under `Clone` and `Eq`.
-/// - Action: Deterministic ordering via `Ord`.
-/// - Resource: Bounded heap strings.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-0604] | SysML v2: PartDef(SignalDictionaryRow)
+/// Safety & Traceability: Realises: [REQ-0604]
+/// Contract: Totally ordered lexicographically by `(signal_name, payload_type, direction, source_endpoint, target_endpoint, package_name)`.
+/// Bounds & Faults: Immutable value semantics under `Clone`, `Eq`, and `Ord`.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct SignalDictionaryRow {
     pub signal_name: String,
@@ -44,30 +54,9 @@ pub struct SignalDictionaryRow {
 
 /// Compiled Level 1C Logical Interface Control Document pair (`ICD_01` and `ICD_02`).
 ///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `IcdDocumentPair` in `crates/compile-sysml/src/sync/forward/icd_wbs_emitter.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `interface_matrix_md` contains the $N \times N$ component interconnect matrix with `---` diagonal cells; `signal_dictionary_md` contains the lexicographically sorted signal dictionary.
-///
-/// ## 3. Preconditions
-/// - Constructed by `try_compile_logical_icd_artifacts`.
-///
-/// ## 4. Postconditions
-/// - Holds validated Markdown payloads ready for atomic disk persistence.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(V^2 + E log E).
-/// - Space Complexity: O(V^2 + E).
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validated prior to construction.
-/// - State: Pure value container.
-/// - Action: Deterministic serialization.
-/// - Resource: Bounded string buffers.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-0604] | SysML v2: PartDef(IcdDocumentPair)
+/// Safety & Traceability: Realises: [REQ-0604]
+/// Contract: Holds validated `interface_matrix_md`, `signal_dictionary_md`, and sorted `rows`.
+/// Bounds & Faults: Pure value container with bounded string buffers.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct IcdDocumentPair {
     pub interface_matrix_md: String,
@@ -76,8 +65,6 @@ pub struct IcdDocumentPair {
 }
 
 /// Resolves `(component_name, endpoint_label)` from optional part and port strings on a `ConnectionDef`.
-/// Normalizes both `(Some("Comp"), "port")` and `(None, "Comp.port")` to `("Comp", "Comp.port")` without panicking on empty inputs.
-///
 /// Realises: [REQ-0604]
 pub(super) fn resolve_connection_endpoint(
     part_opt: Option<&str>,
@@ -104,42 +91,15 @@ pub(super) fn resolve_connection_endpoint(
     }
 }
 
-/// Compiles `ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md` from `pkg`, failing closed with `Diagnostic: E0200` on undeclared endpoints or empty interface models.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `try_compile_logical_icd_artifacts` in `crates/compile-sysml/src/sync/forward/icd_wbs_emitter.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Diagonal cells `(i, i)` in the $N \times N$ interconnect matrix are always `---`.
-/// - `rows` in `ICD_02_MASTER_SIGNAL_DICTIONARY.md` are sorted in strict lexicographical order.
-/// - Undeclared connection endpoints fail closed with `Diagnostic: E0200`.
-///
-/// ## 3. Preconditions
-/// - `pkg: &PackageDef` is a parsed SysML AST root package.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok(IcdDocumentPair)` on valid interface topology or `Err(String)` containing `Diagnostic: E0200`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(V^2 + E log E) where V is `PartDef` count and E is port/connection count.
-/// - Space Complexity: O(V^2 + E).
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Rejects undeclared endpoints and zero-interface models fail-closed (`Diagnostic: E0200`).
-/// - State: Pure function with zero filesystem mutation.
-/// - Action: Deterministic BTree traversal.
-/// - Resource: Bounded memory proportional to AST interface size.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-0604] | SysML v2: ActionDef(try_compile_logical_icd_artifacts)
-pub fn try_compile_logical_icd_artifacts(pkg: &PackageDef) -> Result<IcdDocumentPair, String> {
-    let all_packages = pkg.get_all_packages();
+/// Collects declared `PartDef` names and port-derived `SignalDictionaryRow` entries across `all_packages`.
+/// Realises: [REQ-0604]
+fn collect_declared_parts_and_port_rows(
+    all_packages: &[&PackageDef],
+) -> (BTreeSet<String>, Vec<SignalDictionaryRow>) {
     let mut declared_parts: BTreeSet<String> = BTreeSet::new();
     let mut rows: Vec<SignalDictionaryRow> = Vec::new();
-    let mut all_connections: Vec<(String, String, String, String, String)> = Vec::new();
-    let mut cell_links: BTreeMap<(String, String), BTreeSet<String>> = BTreeMap::new();
 
-    for p in &all_packages {
+    for p in all_packages {
         for part in &p.part_defs {
             declared_parts.insert(part.name.clone());
             for sub in &part.parts {
@@ -149,20 +109,16 @@ pub fn try_compile_logical_icd_artifacts(pkg: &PackageDef) -> Result<IcdDocument
                 }
             }
             for port in &part.ports {
-                let sig_name = if !port.type_name.trim().is_empty() {
-                    port.type_name.trim().to_string()
-                } else {
+                let sig_name = if port.type_name.trim().is_empty() {
                     port.name.trim().to_string()
-                };
-                let dir = if port.direction.trim().is_empty() {
-                    "inout".to_string()
                 } else {
-                    port.direction.trim().to_string()
+                    port.type_name.trim().to_string()
                 };
+                let dir = if port.direction.trim().is_empty() { "inout" } else { port.direction.trim() };
                 rows.push(SignalDictionaryRow {
                     signal_name: sig_name.clone(),
                     payload_type: sig_name,
-                    direction: dir,
+                    direction: dir.to_string(),
                     source_endpoint: format!("{}.{}", part.name, port.name),
                     target_endpoint: "-".to_string(),
                     package_name: p.name.clone(),
@@ -170,27 +126,36 @@ pub fn try_compile_logical_icd_artifacts(pkg: &PackageDef) -> Result<IcdDocument
             }
         }
         for port in &p.port_defs {
-            let sig_name = if !port.type_name.trim().is_empty() {
-                port.type_name.trim().to_string()
-            } else {
+            let sig_name = if port.type_name.trim().is_empty() {
                 port.name.trim().to_string()
+            } else {
+                port.type_name.trim().to_string()
             };
+            let dir = if port.direction.trim().is_empty() { "inout" } else { port.direction.trim() };
             rows.push(SignalDictionaryRow {
                 signal_name: sig_name.clone(),
                 payload_type: sig_name,
-                direction: if port.direction.trim().is_empty() {
-                    "inout".to_string()
-                } else {
-                    port.direction.trim().to_string()
-                },
+                direction: dir.to_string(),
                 source_endpoint: format!("{}.{}", p.name, port.name),
                 target_endpoint: "-".to_string(),
                 package_name: p.name.clone(),
             });
         }
     }
+    (declared_parts, rows)
+}
 
-    for p in &all_packages {
+/// Validates and collects all package and part `ConnectionDef` edges, failing closed with `Diagnostic: E0200` on undeclared endpoints.
+/// Realises: [REQ-0604]
+fn collect_verified_connections(
+    all_packages: &[&PackageDef],
+    declared_parts: &BTreeSet<String>,
+    rows: &mut Vec<SignalDictionaryRow>,
+) -> Result<(Vec<ConnectionRegisterRow>, CellLinkMap), String> {
+    let mut all_connections: Vec<ConnectionRegisterRow> = Vec::new();
+    let mut cell_links: CellLinkMap = BTreeMap::new();
+
+    for p in all_packages {
         let mut pkg_conns: Vec<&ConnectionDef> = p.connection_defs.iter().collect();
         for part in &p.part_defs {
             pkg_conns.extend(part.connections.iter());
@@ -229,7 +194,7 @@ pub fn try_compile_logical_icd_artifacts(pkg: &PackageDef) -> Result<IcdDocument
                 conn.name.trim().to_string()
             };
             cell_links
-                .entry((src_comp.clone(), dst_comp.clone()))
+                .entry((src_comp, dst_comp))
                 .or_default()
                 .insert(format!("`{}`", sig));
             all_connections.push((
@@ -253,6 +218,16 @@ pub fn try_compile_logical_icd_artifacts(pkg: &PackageDef) -> Result<IcdDocument
             });
         }
     }
+    Ok((all_connections, cell_links))
+}
+
+/// Compiles `ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md` from `pkg`, failing closed with `Diagnostic: E0200` on undeclared endpoints or empty interface models.
+/// Realises: [REQ-0604]
+pub fn try_compile_logical_icd_artifacts(pkg: &PackageDef) -> Result<IcdDocumentPair, String> {
+    let all_packages = pkg.get_all_packages();
+    let (declared_parts, mut rows) = collect_declared_parts_and_port_rows(&all_packages);
+    let (mut all_connections, cell_links) =
+        collect_verified_connections(&all_packages, &declared_parts, &mut rows)?;
 
     if rows.is_empty() && all_connections.is_empty() {
         return Err(
@@ -266,82 +241,9 @@ pub fn try_compile_logical_icd_artifacts(pkg: &PackageDef) -> Result<IcdDocument
     all_connections.sort();
 
     let part_list: Vec<String> = declared_parts.into_iter().collect();
-    let mut icd01 = String::new();
-    icd01.push_str("# ICD_01: System Interface Matrix\n\n");
-    icd01.push_str("## 1. N x N Subsystem & Component Interconnect Matrix\n\n");
-    if part_list.is_empty() {
-        icd01.push_str("| Component | System |\n| :--- | :--- |\n| **System** | --- |\n\n");
-    } else {
-        icd01.push_str("| Component |");
-        for col in &part_list {
-            icd01.push_str(&format!(" {} |", col));
-        }
-        icd01.push('\n');
-        icd01.push_str("| :--- |");
-        for _ in &part_list {
-            icd01.push_str(" :--- |");
-        }
-        icd01.push('\n');
-        for row_part in &part_list {
-            icd01.push_str(&format!("| **{}** |", row_part));
-            for col_part in &part_list {
-                if row_part == col_part {
-                    icd01.push_str(" --- |");
-                } else if let Some(sigs) = cell_links.get(&(row_part.clone(), col_part.clone())) {
-                    let joined: Vec<String> = sigs.iter().cloned().collect();
-                    icd01.push_str(&format!(" {} |", joined.join(", ")));
-                } else {
-                    icd01.push_str(" - |");
-                }
-            }
-            icd01.push('\n');
-        }
-        icd01.push('\n');
-    }
-
-    icd01.push_str("## 2. Point-to-Point Logical Connection Register\n\n");
-    icd01.push_str(
-        "| Connection ID | Source Endpoint | Target Endpoint | Signal / Item Flow | Package |\n",
-    );
-    icd01.push_str("| :--- | :--- | :--- | :--- | :--- |\n");
-    if all_connections.is_empty() {
-        for r in &rows {
-            icd01.push_str(&format!(
-                "| `PORT-{}` | `{}` | `{}` | `{}` | `{}` |\n",
-                sanitize_id(&r.signal_name),
-                r.source_endpoint,
-                r.target_endpoint,
-                r.signal_name,
-                r.package_name
-            ));
-        }
-    } else {
-        for (cid, src, dst, sig, pkg_name) in &all_connections {
-            icd01.push_str(&format!(
-                "| `{}` | `{}` | `{}` | `{}` | `{}` |\n",
-                cid, src, dst, sig, pkg_name
-            ));
-        }
-    }
-
-    let mut icd02 = String::new();
-    icd02.push_str("# ICD_02: Master Signal Dictionary\n\n");
-    icd02.push_str("## 1. Canonical Signal & Port Definitions\n\n");
-    icd02.push_str(
-        "| Signal Name | Payload Type | Direction | Source Endpoint | Target Endpoint | Package |\n",
-    );
-    icd02.push_str("| :--- | :--- | :--- | :--- | :--- | :--- |\n");
-    for r in &rows {
-        icd02.push_str(&format!(
-            "| `{}` | `{}` | `{}` | `{}` | `{}` | `{}` |\n",
-            r.signal_name,
-            r.payload_type,
-            r.direction,
-            r.source_endpoint,
-            r.target_endpoint,
-            r.package_name
-        ));
-    }
+    let icd01 =
+        render_icd01_matrix_and_register(&part_list, &cell_links, &all_connections, &rows);
+    let icd02 = render_icd02_signal_dictionary(&rows);
 
     Ok(IcdDocumentPair {
         interface_matrix_md: icd01,
@@ -351,31 +253,7 @@ pub fn try_compile_logical_icd_artifacts(pkg: &PackageDef) -> Result<IcdDocument
 }
 
 /// Compiles `ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md` as a `(String, String)` tuple.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `compile_logical_icd_artifacts` in `crates/compile-sysml/src/sync/forward/icd_wbs_emitter.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Delegates to `try_compile_logical_icd_artifacts` and returns deterministic Markdown strings.
-///
-/// ## 3. Preconditions
-/// - `pkg: &PackageDef` is a valid AST root package.
-///
-/// ## 4. Postconditions
-/// - Returns `(interface_matrix_md, signal_dictionary_md)`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(V^2 + E log E).
-/// - Space Complexity: O(V^2 + E).
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Embeds `Diagnostic: E0200` error text if `pkg` violates interface preconditions.
-/// - State: Pure function.
-/// - Action: Deterministic execution.
-/// - Resource: Bounded string buffers.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-0604] | SysML v2: ActionDef(compile_logical_icd_artifacts)
+/// Realises: [REQ-0604]
 pub fn compile_logical_icd_artifacts(pkg: &PackageDef) -> (String, String) {
     match try_compile_logical_icd_artifacts(pkg) {
         Ok(pair) => (pair.interface_matrix_md, pair.signal_dictionary_md),
@@ -384,31 +262,7 @@ pub fn compile_logical_icd_artifacts(pkg: &PackageDef) -> (String, String) {
 }
 
 /// Compiles and atomically persists `ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md` into `interfaces_dir`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `emit_logical_icd_artifacts` in `crates/compile-sysml/src/sync/forward/icd_wbs_emitter.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Uses `write_atomic` to guarantee crash-safe persistence without partial writes.
-///
-/// ## 3. Preconditions
-/// - `pkg: &PackageDef` satisfies `try_compile_logical_icd_artifacts` and `interfaces_dir: &Path` is writable.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok((icd01_path, icd02_path))` after both files exist on disk.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(V^2 + E log E).
-/// - Space Complexity: O(V^2 + E).
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Propagates `Diagnostic: E0200` or filesystem I/O errors via `Result::Err`.
-/// - State: Atomic file replacement via `write_atomic`.
-/// - Action: Zero silent error discards.
-/// - Resource: Bounded file buffers.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-0604] | SysML v2: ActionDef(emit_logical_icd_artifacts)
+/// Realises: [REQ-0604]
 pub fn emit_logical_icd_artifacts(
     pkg: &PackageDef,
     interfaces_dir: &Path,
@@ -429,32 +283,7 @@ pub fn emit_logical_icd_artifacts(
 }
 
 /// Evaluates CLI arguments for `--emit-icd <INTERFACES_DIR>` and `--emit-wbs <MANAGEMENT_DIR>` flags (`REQ-0604`).
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `execute_emit_cli_args` in `crates/compile-sysml/src/sync/forward/icd_wbs_emitter.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Returns `Ok(None)` when neither `--emit-icd` nor `--emit-wbs` is present so standard `clap` CLI execution proceeds unaltered.
-/// - Returns `Ok(Some(0))` when all requested ICD/WBS artifacts are emitted cleanly, or `Err` on failure.
-///
-/// ## 3. Preconditions
-/// - `args: &[String]` contains process command-line arguments.
-///
-/// ## 4. Postconditions
-/// - Emits requested ICD and/or WBS artifacts when `--emit-icd` or `--emit-wbs` is present.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N log N) over parsed SysML model.
-/// - Space Complexity: O(N).
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates argument pairs and schema file readability fail-closed.
-/// - State: Atomic file persistence via `emit_logical_icd_artifacts` and `emit_wbs_artifacts`.
-/// - Action: Deterministic CLI flag parsing.
-/// - Resource: Bounded memory and file handles.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-0604] | SysML v2: ActionDef(execute_emit_cli_args)
+/// Realises: [REQ-0604]
 pub fn execute_emit_cli_args(args: &[String]) -> Result<Option<i32>, String> {
     let mut emit_icd_dir: Option<PathBuf> = None;
     let mut emit_wbs_dir: Option<PathBuf> = None;
@@ -508,36 +337,11 @@ pub fn execute_emit_cli_args(args: &[String]) -> Result<Option<i32>, String> {
     if let Some(ref wbs_dir) = emit_wbs_dir {
         emit_wbs_artifacts(&pkg, wbs_dir)?;
     }
-
     Ok(Some(0))
 }
 
 /// Runs CLI pre-dispatch for `--emit-icd` / `--emit-wbs` and delegates to `default_runner` when neither flag is present.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `run_cli_with_emit_flags` in `crates/compile-sysml/src/sync/forward/icd_wbs_emitter.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves $v(G) = 1$ in `main.rs` while supporting `--emit-icd` and `--emit-wbs` CLI flags.
-///
-/// ## 3. Preconditions
-/// - `default_runner: F` is the standard `execute_cli(Cli::parse())` closure.
-///
-/// ## 4. Postconditions
-/// - Returns process exit code `0` on success or `1` on error.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N log N).
-/// - Space Complexity: O(N).
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Logs errors to `stderr` and returns exit code `1`.
-/// - State: Delegates cleanly to `default_runner` when emit flags are absent.
-/// - Action: Single-entry/single-exit status code resolution.
-/// - Resource: Bounded process argument collection.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-0604] | SysML v2: ActionDef(run_cli_with_emit_flags)
+/// Realises: [REQ-0604]
 pub fn run_cli_with_emit_flags<F: FnOnce() -> i32>(default_runner: F) -> i32 {
     let args: Vec<String> = std::env::args().collect();
     match execute_emit_cli_args(&args) {

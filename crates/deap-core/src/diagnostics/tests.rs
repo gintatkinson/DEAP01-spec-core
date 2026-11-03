@@ -1,9 +1,7 @@
 //! Unit tests for diagnostics, defect dossier synthesis, and source purity.
-#[cfg(test)]
-#[allow(clippy::module_inception)]
-mod tests {
-use super::super::*;
+use super::*;
 
+/// Verifies `Diagnostic` creation, location attachment, and JSON round-trip. Realises: [REQ-0608]
 #[test]
 fn test_diagnostic_creation_and_serialization() -> Result<(), Box<dyn std::error::Error>> {
     let diag = Diagnostic::new(
@@ -15,7 +13,6 @@ fn test_diagnostic_creation_and_serialization() -> Result<(), Box<dyn std::error
     assert_eq!(diag.severity, DiagnosticSeverity::Error);
     assert_eq!(diag.code, "E0301");
     assert_eq!(diag.line, Some(44));
-
     let json = serde_json::to_string(&diag)?;
     assert!(json.contains("E0301"));
     let deserialized: Diagnostic = serde_json::from_str(&json)?;
@@ -23,6 +20,7 @@ fn test_diagnostic_creation_and_serialization() -> Result<(), Box<dyn std::error
     Ok(())
 }
 
+/// Verifies `DefectDossier` Markdown rendering and JSON round-trip serialization. Realises: [REQ-0608]
 #[test]
 fn test_defect_dossier_markdown_and_json_synthesis() -> Result<(), Box<dyn std::error::Error>> {
     let dossier = DefectDossier {
@@ -44,7 +42,6 @@ fn test_defect_dossier_markdown_and_json_synthesis() -> Result<(), Box<dyn std::
         verification: "Verify with cargo test -p deap-core --lib markdown.".to_string(),
         regression_prevention: "Add continuous integration tests asserting 0 errors on REQ-0099.md.".to_string(),
     };
-
     let md = dossier.to_markdown();
     assert!(md.contains("## 1. Issue Summary"));
     assert!(md.contains("## 2. 5-Whys Root Cause Analysis"));
@@ -53,13 +50,13 @@ fn test_defect_dossier_markdown_and_json_synthesis() -> Result<(), Box<dyn std::
     assert!(md.contains("SEVERITY: Important"));
     assert!(md.contains("FILE_LOCATION: crates/deap-core/src/markdown.rs"));
     assert!(!md.contains('\u{2014}'), "Must not contain unicode em dash");
-
     let json = dossier.to_json()?;
     let loaded = DefectDossier::from_json(&json)?;
     assert_eq!(loaded, dossier);
     Ok(())
 }
 
+/// Verifies module-level 7-section inner Rustdoc on `diagnostics/mod.rs`. Realises: [REQ-0608]
 #[test]
 fn test_diagnostics_module_docstrings() {
     let sources = [
@@ -68,7 +65,6 @@ fn test_diagnostics_module_docstrings() {
         include_str!("item.rs"),
         include_str!("dossier.rs"),
     ];
-
     let mandatory_sections = [
         "## 1. Safety Intent & Regulatory Scope",
         "## 2. Invariants & Mathematical Properties",
@@ -78,7 +74,6 @@ fn test_diagnostics_module_docstrings() {
         "## 6. Failure Modes & Fault Tolerance",
         "## 7. Realization & Traceability",
     ];
-
     let mod_doc: String = sources[0]
         .lines()
         .take_while(|l| l.trim().starts_with("//!"))
@@ -93,12 +88,12 @@ fn test_diagnostics_module_docstrings() {
     }
 }
 
+/// Verifies production lines in `source` contain no regex, static string-slice arrays, or hollow stubs. Realises: [REQ-0608]
 fn check_file_source_purity(file_idx: usize, source: &str) {
     let pat_regex_colons = ["Reg", "ex::"].concat();
     let pat_inline_regex = ["reg", "ex::"].concat();
     let needle_slice_str = ["&[", "&str]"].concat();
     let needle_let_blank = ["let", " _ = "].concat();
-
     let prod = source.split("#[cfg(test)]").next().unwrap_or(source);
     for (idx, raw_line) in prod.lines().enumerate() {
         let line_no = idx + 1;
@@ -125,6 +120,7 @@ fn check_file_source_purity(file_idx: usize, source: &str) {
     }
 }
 
+/// Verifies every function declaration in `source` carries all 7 mandatory Rustdoc sections. Realises: [REQ-0608]
 fn check_file_7_section_rustdoc(
     file_idx: usize,
     source: &str,
@@ -133,7 +129,6 @@ fn check_file_7_section_rustdoc(
 ) {
     let prod = source.split("#[cfg(test)]").next().unwrap_or(source);
     let mut current_doc = Vec::new();
-
     for (idx, raw_line) in prod.lines().enumerate() {
         let line_no = idx + 1;
         let trimmed = raw_line.trim();
@@ -165,6 +160,7 @@ fn check_file_7_section_rustdoc(
     }
 }
 
+/// Verifies source purity across all `diagnostics` module files. Realises: [REQ-0608]
 #[test]
 fn test_diagnostics_source_purity() {
     let sources = [
@@ -178,6 +174,7 @@ fn test_diagnostics_source_purity() {
     }
 }
 
+/// Verifies 7-section Rustdoc coverage across all 9 functions in `diagnostics`. Realises: [REQ-0608]
 #[test]
 fn test_diagnostics_7_section_rustdoc() {
     let sources = [
@@ -205,6 +202,7 @@ fn test_diagnostics_7_section_rustdoc() {
     );
 }
 
+/// Verifies single-span and multi-span `ariadne` diagnostic rendering. Realises: [REQ-0608]
 #[test]
 fn test_render_diagnostic_with_ariadne_multispan_color_and_note() {
     let diag = Diagnostic::new(DiagnosticSeverity::Error, "E0301", "Power invariant violation")
@@ -214,7 +212,6 @@ fn test_render_diagnostic_with_ariadne_multispan_color_and_note() {
     assert!(rendered.contains("E0301"));
     assert!(rendered.contains("Power invariant violation"));
     assert!(rendered.contains("severity: Error"));
-
     let spans = vec![
         (0..15, "primary violation".to_string(), ariadne::Color::Red),
         (36..49, "dependent power expr".to_string(), ariadne::Color::Yellow),
@@ -230,4 +227,145 @@ fn test_render_diagnostic_with_ariadne_multispan_color_and_note() {
     assert!(multispan.contains("dependent power expr"));
     assert!(multispan.contains("DO-178C Level A invariant violated"));
 }
+
+/// Verifies UTF-8 char-boundary snapping and inverted range clamping. Realises: [REQ-0608]
+#[test]
+fn rejects_inverted_or_mid_codepoint_utf8_spans() {
+    let err = DiagnosticEmitError::InvalidUtf8Span;
+    assert_eq!(err.diagnostic_code(), "DEAP-E0801");
+    assert!(err.to_string().contains("DEAP-E0801"));
+    let src = "\u{03b1}\u{03b2} = 42;\n";
+    assert!(!src.is_char_boundary(1));
+    let mid = resolve_utf8_span(src, 1..99, "src\\main.rs");
+    assert_eq!(mid.file_name, "src/main.rs");
+    assert_eq!(mid.byte_start, 0);
+    assert_eq!(mid.byte_end, src.len());
+    assert!(src.is_char_boundary(mid.byte_start));
+    assert!(src.is_char_boundary(mid.byte_end));
+    let inverted = resolve_utf8_span(src, std::ops::Range { start: 4, end: 2 }, "src/main.rs");
+    assert_eq!(inverted.byte_start, 4);
+    assert_eq!(inverted.byte_end, 4);
+    assert_eq!(inverted.line_start, 1);
+    assert_eq!(inverted.column_start, 3);
+}
+
+/// Verifies single-line zero-ANSI NDJSON formatting of `RustcCompilerMessageEnvelope`. Realises: [REQ-0608]
+#[test]
+fn formats_single_line_zero_ansi_rustc_ndjson() -> Result<(), serde_json::Error> {
+    let mut span = resolve_utf8_span("let value = 10;\n", 4..9, "src/lib.rs");
+    span.suggested_replacement = Some(String::from("_value"));
+    span.suggestion_applicability = Some(Applicability::MachineApplicable);
+    let env = RustcCompilerMessageEnvelope {
+        message_type: String::new(),
+        message: String::from("unused variable `value`"),
+        code: Some(String::from("DEAP-E0801")),
+        level: String::from("warning"),
+        spans: vec![span],
+        children: Vec::new(),
+        rendered: Some(String::from("\x1b[33mwarning[DEAP-E0801]\x1b[0m\r\n")),
+    };
+    let line = format_ndjson_line(&env)?;
+    assert!(line.contains("\"$message_type\":\"diagnostic\""));
+    assert!(!line.contains('\n'));
+    assert!(!line.contains('\r'));
+    assert!(!line.contains('\x1b'));
+    assert!(!line.contains("\\u001b"));
+    let parsed: RustcCompilerMessageEnvelope = serde_json::from_str(&line)?;
+    assert_eq!(parsed.message_type, "diagnostic");
+    assert_eq!(parsed.code.as_deref(), Some("DEAP-E0801"));
+    Ok(())
+}
+
+/// Verifies reverse byte-order span splicing and overlap rejection. Realises: [REQ-0608]
+#[test]
+fn applies_reverse_byte_order_machine_fixes_and_rejects_overlaps() {
+    assert_eq!(
+        DiagnosticEmitError::OverlappingMachineFixSpan.diagnostic_code(),
+        "DEAP-E0802"
+    );
+    assert_eq!(
+        DiagnosticEmitError::PostFixSyntaxError(String::from("syntax")).diagnostic_code(),
+        "DEAP-E0803"
+    );
+    let src = "fn demo() { let a = 1; let b = 2; }\n";
+    let edits = [
+        crate::rust_cst::SpanSpliceEdit {
+            span: crate::rust_cst::Utf8ByteSpan {
+                byte_start: 16,
+                byte_end: 17,
+            },
+            replacement: String::from("_a"),
+        },
+        crate::rust_cst::SpanSpliceEdit {
+            span: crate::rust_cst::Utf8ByteSpan {
+                byte_start: 27,
+                byte_end: 28,
+            },
+            replacement: String::from("_b"),
+        },
+    ];
+    let fixed = crate::rust_cst::splice_disjoint_reverse_spans(src, &edits);
+    assert_eq!(
+        fixed.as_deref(),
+        Ok("fn demo() { let _a = 1; let _b = 2; }\n")
+    );
+    let overlapping = [
+        crate::rust_cst::SpanSpliceEdit {
+            span: crate::rust_cst::Utf8ByteSpan {
+                byte_start: 12,
+                byte_end: 20,
+            },
+            replacement: String::from("let x"),
+        },
+        crate::rust_cst::SpanSpliceEdit {
+            span: crate::rust_cst::Utf8ByteSpan {
+                byte_start: 16,
+                byte_end: 22,
+            },
+            replacement: String::from("_a = 1"),
+        },
+    ];
+    assert!(crate::rust_cst::splice_disjoint_reverse_spans(src, &overlapping).is_err());
+}
+
+/// Verifies NDJSON stream emission across all five CLI adapter envelopes. Realises: [REQ-0608]
+#[test]
+fn emits_locked_ndjson_across_all_five_cli_adapters() -> Result<(), serde_json::Error> {
+    assert_eq!(
+        DiagnosticEmitError::SerializationError(String::from("json")).diagnostic_code(),
+        "DEAP-E0804"
+    );
+    assert_eq!(
+        DiagnosticEmitError::IoError(String::from("stdout")).diagnostic_code(),
+        "DEAP-E0804"
+    );
+    let adapters = [
+        ("verify-baseline", "DEAP-E0801"),
+        ("compile-sysml", "DEAP-E0802"),
+        ("ingest-sysml", "DEAP-E0803"),
+        ("reconcile-backlog", "DEAP-E0804"),
+        ("assemble-conops", "DEAP-E0801"),
+    ];
+    let envelopes: Vec<RustcCompilerMessageEnvelope> = adapters
+        .iter()
+        .map(|(cli, code)| RustcCompilerMessageEnvelope {
+            message_type: String::from("diagnostic"),
+            message: format!("{cli} diagnostic check"),
+            code: Some((*code).to_string()),
+            level: String::from("error"),
+            spans: vec![resolve_utf8_span("package Demo {}\n", 0..7, "schema/demo.sysml")],
+            children: Vec::new(),
+            rendered: Some(format!("\x1b[31m{cli}: {code}\x1b[0m\n")),
+        })
+        .collect();
+    let stream = emit_cli_ndjson_stream(&envelopes);
+    let lines: Vec<&str> = stream.lines().collect();
+    assert_eq!(lines.len(), 5);
+    for (idx, line) in lines.iter().enumerate() {
+        assert!(!line.contains('\x1b'));
+        let decoded: RustcCompilerMessageEnvelope = serde_json::from_str(line)?;
+        assert_eq!(decoded.message_type, "diagnostic");
+        assert!(adapters.get(idx).is_some_and(|(name, _)| decoded.message.contains(name)));
+    }
+    Ok(())
 }

@@ -30,6 +30,10 @@ use serde::{Deserialize, Serialize};
 /// Type alias binding `DiagnosticItem` to `Diagnostic` for presentation compatibility.
 pub type DiagnosticItem = Diagnostic;
 
+/// Type alias binding `StructuredDiagnostic` to `Diagnostic` for Track-1 CLI NDJSON adapters.
+/// Realises: [REQ-0608]
+pub type StructuredDiagnostic = Diagnostic;
+
 /// Represents an individual compiler or linter diagnostic item.
 ///
 /// ## 1. Safety Intent & Regulatory Scope

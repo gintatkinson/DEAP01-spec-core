@@ -1,91 +1,40 @@
-//! User Story specification (`docs/user-stories/US-*.md`) synthesis from indexed SysML v2 `ActionDef` and `InteractionDef` behaviors.
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
+//! # User Story Specification Markdown Synthesis
 //!
-//! Safety & Traceability: Realises: [REQ-SYNC-FORWARD-STORY-EMITTER]
-//! Contract: Projects each allocated `StoryMeta` into a canonical User Story Markdown specification containing the behavioral statement, 3-Layer Definition of Done sections, Mermaid `sequenceDiagram`, BDD acceptance criteria, required Feature links, and normative source references.
-//! Bounds & Faults: Uses `BTreeSet` deduplication, checked slice accessors (`.get`, `.first`), and saturating index arithmetic (`saturating_sub`) with zero panics.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Realises: [REQ-0604], [REQ-SYNC-FORWARD-STORY-EMITTER]
+//! Projects each allocated `StoryMeta` into a canonical `docs/user-stories/US-*.md` specification
+//! containing the behavioral statement, 3-Layer Definition of Done sections, Mermaid
+//! `sequenceDiagram`, BDD acceptance criteria, required Feature links, and normative source references.
+//!
+//! ## 2. Preconditions, Postconditions & Mathematical Invariants
+//! - **Preconditions**: `index.story_metas` and `index.story_ast_contexts` are aligned 1:1.
+//! - **Postconditions**: Populates `generated_files` with `user-stories/US-XX-*.md` entries.
+//! - **Invariants**: Every User Story emits a valid Mermaid `sequenceDiagram` with `autonumber`.
+//!
+//! ## 3. Failure Modes, Degraded Operation & Recovery
+//! - Stories without an explicit actor default deterministically to `"Operator"`.
+//!
+//! ## 4. Concurrency, Memory & Resource Bounds
+//! - Single-threaded `O(S * R)` iteration over allocated stories and requirements.
+//!
+//! ## 5. Dependencies & Integration Contracts
+//! - Consumes `story_resolver`, `story_layers`, and `story_renderer`; invoked by `forward::sync_forward_to_map`.
+//!
+//! ## 6. Verification & Acceptance Criteria
+//! - Verified by User Story emission tests in `sync/forward/tests*.rs`.
+//!
+//! ## 7. Realization & Traceability
+//! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-STORY-EMITTER]
 
 use super::*;
 
-/// Resolved AST package, `ActionDef`, `InteractionDef`, and target `PartDef` handles for a single User Story.
-/// Realises: [REQ-SYNC-FORWARD-STORY-EMITTER]
-struct StoryAstHandles<'a> {
-    curr_pkg: Option<&'a PackageDef>,
-    act_opt: Option<&'a ActionDef>,
-    inter_opt: Option<&'a InteractionDef>,
-    target_part: Option<&'a PartDef>,
-}
-
-/// Trailing Markdown linkage blocks (`req_features`, `parent_epic_link`, `spec_source`, `source_refs`) for a User Story.
-/// Realises: [REQ-SYNC-FORWARD-STORY-EMITTER]
-struct StoryLinksAndSources {
-    req_features: String,
-    parent_epic_link: String,
-    spec_source: String,
-    source_refs: String,
-}
-
-/// Resolves borrowed AST package, action, interaction, and target part handles for `s_meta`.
-/// Realises: [REQ-SYNC-FORWARD-STORY-EMITTER]
-fn resolve_story_ast_handles<'a>(
-    s_meta: &StoryMeta,
-    index: &'a ForwardSyncIndex<'a>,
-) -> StoryAstHandles<'a> {
-    let story_ctx = index.story_ast_contexts.get(s_meta.s_num.saturating_sub(1));
-    let curr_pkg = story_ctx.map(|c| c.pkg).or_else(|| {
-        index
-            .part_packages
-            .iter()
-            .copied()
-            .find(|p| p.name == s_meta.pkg_name)
-            .or_else(|| {
-                index
-                    .all_packages
-                    .iter()
-                    .copied()
-                    .find(|p| p.name == s_meta.pkg_name)
-            })
-    });
-    let act_opt = story_ctx.and_then(|c| c.act_opt).or_else(|| {
-        curr_pkg.and_then(|cp| {
-            cp.action_defs
-                .iter()
-                .find(|a| strip_use_case_prefix(&a.name).eq_ignore_ascii_case(&s_meta.action_name))
-                .or_else(|| {
-                    cp.part_defs
-                        .iter()
-                        .flat_map(|pt| pt.actions.iter())
-                        .find(|a| {
-                            strip_use_case_prefix(&a.name).eq_ignore_ascii_case(&s_meta.action_name)
-                        })
-                })
-        })
-    });
-    let inter_opt = story_ctx.and_then(|c| c.inter_opt);
-    let target_part = curr_pkg
-        .and_then(|cp| {
-            cp.part_defs
-                .iter()
-                .find(|pt| pt.name == s_meta.engine_name)
-                .or_else(|| cp.part_defs.first())
-        })
-        .or_else(|| {
-            index
-                .part_contexts
-                .iter()
-                .find(|ctx| ctx.part.name == s_meta.engine_name)
-                .map(|ctx| ctx.part)
-        });
-
-    StoryAstHandles {
-        curr_pkg,
-        act_opt,
-        inter_opt,
-        target_part,
-    }
-}
-
 /// Resolves the sanitized User Story actor display token and Mermaid `sequenceDiagram` block.
-/// Realises: [REQ-SYNC-FORWARD-STORY-EMITTER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-STORY-EMITTER]
 fn resolve_story_actors_and_sequence(
     s_meta: &StoryMeta,
     parsed_doc: &ParsedStoryDoc,
@@ -156,168 +105,124 @@ fn resolve_story_actors_and_sequence(
     (story_actor, seq_diagram)
 }
 
-/// Collects deduplicated `RequirementDef` nodes governing `s_meta` across the target part, owning package, and global model.
-/// Realises: [REQ-SYNC-FORWARD-STORY-EMITTER]
-fn collect_story_requirements<'a>(
+/// Synthesizes the `(user_story_statement, three_layer_sections, bdd_criteria, seq_diagram)` body sections for `s_meta`.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-STORY-EMITTER]
+fn render_user_story_body_sections(
     s_meta: &StoryMeta,
-    handles: &StoryAstHandles<'a>,
-    all_requirements: &'a [RequirementDef],
-) -> Vec<&'a RequirementDef> {
-    let mut story_reqs: Vec<&'a RequirementDef> = Vec::new();
-    let mut seen_reqs: BTreeSet<(&'a str, &'a str)> = BTreeSet::new();
+    global_uc_actor: Option<&str>,
+    index: &ForwardSyncIndex<'_>,
+) -> (String, String, String, String) {
+    let handles = resolve_story_ast_handles(s_meta, index);
+    let parsed_doc = merge_story_docs(
+        parse_story_doc(handles.act_opt.and_then(|a| a.doc.as_deref())),
+        parse_story_doc(handles.inter_opt.and_then(|i| i.doc.as_deref())),
+    );
+    let (story_actor, seq_diagram) = resolve_story_actors_and_sequence(
+        s_meta,
+        &parsed_doc,
+        handles.curr_pkg,
+        global_uc_actor,
+    );
+
+    let story_reqs = collect_story_requirements(s_meta, &handles, &index.all_requirements);
+    let story_constraints = collect_story_constraints(&handles);
+    let mut pkg_states: Vec<&StateDef> = Vec::new();
     if let Some(pt) = handles.target_part {
-        for r in &pt.requirements {
-            if seen_reqs.insert((r.req_id.as_str(), r.name.as_str())) {
-                story_reqs.push(r);
-            }
-        }
+        pkg_states.extend(pt.states.iter());
     }
     if let Some(cp) = handles.curr_pkg {
-        for r in &cp.requirement_defs {
-            let satisfies_target = r
-                .satisfied_by
-                .iter()
-                .any(|s| s == &s_meta.engine_name || s == &s_meta.action_name);
-            if satisfies_target && seen_reqs.insert((r.req_id.as_str(), r.name.as_str())) {
-                story_reqs.push(r);
-            }
-        }
-        for r in &cp.requirement_defs {
-            if seen_reqs.insert((r.req_id.as_str(), r.name.as_str())) {
-                story_reqs.push(r);
-            }
-        }
+        pkg_states.extend(cp.state_defs.iter());
     }
-    for r in all_requirements {
-        let satisfies_target = r
-            .satisfied_by
-            .iter()
-            .any(|s| s == &s_meta.engine_name || s == &s_meta.action_name);
-        if satisfies_target && seen_reqs.insert((r.req_id.as_str(), r.name.as_str())) {
-            story_reqs.push(r);
-        }
-    }
-    story_reqs
+    let matched_transition = resolve_story_transition(&s_meta.action_name, &pkg_states);
+    let call_sig = format_action_call_with_params(&s_meta.action_name, handles.act_opt);
+
+    let proj_ctx = UserStoryProjectionCtx {
+        s_num: s_meta.s_num,
+        story_actor: &story_actor,
+        engine_name: &s_meta.engine_name,
+        action_name: &s_meta.action_name,
+        interaction_name: &s_meta.interaction_name,
+        reply_msg: &s_meta.reply_msg,
+        pkg_name: &s_meta.pkg_name,
+        call_sig: &call_sig,
+        parsed_doc: &parsed_doc,
+        act_opt: handles.act_opt,
+        curr_pkg: handles.curr_pkg,
+        target_part: handles.target_part,
+        states: &pkg_states,
+        matched_transition: matched_transition.as_ref(),
+        constraints: &story_constraints,
+        reqs: &story_reqs,
+    };
+
+    let user_story_statement = generate_user_story_statement(&proj_ctx);
+    let three_layer_sections = generate_user_story_three_layer_sections(&proj_ctx);
+    let bdd_criteria = generate_user_story_bdd(&proj_ctx);
+    (
+        user_story_statement,
+        three_layer_sections,
+        bdd_criteria,
+        seq_diagram,
+    )
 }
 
-/// Collects deduplicated `ConstraintDef` invariants across `handles.target_part` and `handles.curr_pkg`.
-/// Realises: [REQ-SYNC-FORWARD-STORY-EMITTER]
-fn collect_story_constraints<'a>(handles: &StoryAstHandles<'a>) -> Vec<&'a ConstraintDef> {
-    let mut story_constraints: Vec<&'a ConstraintDef> = Vec::new();
-    let mut seen_constraints: BTreeSet<(&'a str, &'a str)> = BTreeSet::new();
-    if let Some(pt) = handles.target_part {
-        for c in &pt.constraints {
-            if seen_constraints.insert((c.name.as_str(), c.expression.as_str())) {
-                story_constraints.push(c);
-            }
-        }
-    }
-    if let Some(cp) = handles.curr_pkg {
-        for c in &cp.constraint_defs {
-            if seen_constraints.insert((c.name.as_str(), c.expression.as_str())) {
-                story_constraints.push(c);
-            }
-        }
-    }
-    story_constraints
-}
-
-/// Builds the required Features checklist, Parent Epic link, Specification Source link, and Source References block for `s_meta`.
-/// Realises: [REQ-SYNC-FORWARD-STORY-EMITTER]
-fn build_story_links_and_sources(
+/// Renders a single `US-XX-*.md` specification document and returns `(rel_path, content)`.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-STORY-EMITTER]
+fn render_single_user_story_spec(
     root_pkg_name: &str,
     s_meta: &StoryMeta,
+    global_uc_actor: Option<&str>,
     index: &ForwardSyncIndex<'_>,
-) -> StoryLinksAndSources {
-    let mut req_features_list = Vec::new();
-    if let Some(c_num) = s_meta.caller_feat_num {
-        let c_subsys = index
-            .part_contexts
-            .get(c_num.saturating_sub(1))
-            .map(|c| c.subsys_display.as_str())
-            .unwrap_or(s_meta.subsys_display.as_str());
-        req_features_list.push(format!(
-            "- [ ] [Feature {:02}: [{}] {}](../features/FEAT-{:02}-{}.md)",
-            c_num, c_subsys, s_meta.caller_engine, c_num, s_meta.caller_engine
-        ));
-    }
-    if Some(s_meta.engine_feat_num) != s_meta.caller_feat_num {
-        let e_subsys = index
-            .part_contexts
-            .get(s_meta.engine_feat_num.saturating_sub(1))
-            .map(|c| c.subsys_display.as_str())
-            .unwrap_or(s_meta.subsys_display.as_str());
-        req_features_list.push(format!(
-            "- [ ] [Feature {:02}: [{}] {}](../features/FEAT-{:02}-{}.md)",
-            s_meta.engine_feat_num,
-            e_subsys,
-            s_meta.engine_name,
-            s_meta.engine_feat_num,
-            s_meta.engine_name
-        ));
-    }
-    if req_features_list.is_empty() {
-        req_features_list.push(format!(
-            "- [ ] [Feature {:02}: [{}] {}](../features/FEAT-{:02}-{}.md)",
-            s_meta.engine_feat_num,
-            s_meta.subsys_display,
-            s_meta.engine_name,
-            s_meta.engine_feat_num,
-            s_meta.engine_name
-        ));
-    }
+) -> (String, String) {
+    let s_num = s_meta.s_num;
+    let story_slug = sanitize_id(&s_meta.action_name);
+    let rel_path = format!("user-stories/US-{:02}-{}.md", s_num, story_slug);
+    let _us_date = resolve_date(&index.target_out_dir, &rel_path, index.today_iso);
+    let us_issue_id =
+        format_issue_id_cell(resolve_existing_issue_id(&index.target_out_dir, &rel_path));
+    let us_display_title = index
+        .story_display_titles
+        .get(&s_num)
+        .cloned()
+        .unwrap_or_else(|| to_display_name(&s_meta.action_name));
+    let title = format!("User Story {:02}: {}", s_num, us_display_title);
 
-    let parent_epic_link = if s_meta.pkg_name == root_pkg_name {
-        format!("[EPIC-01-{root_pkg_name}](../epics/EPIC-01-{root_pkg_name}.md)")
-    } else {
-        resolve_parent_epic_link(&index.ordered_packages, &s_meta.pkg_name)
-    };
+    let (user_story_statement, three_layer_sections, bdd_criteria, seq_diagram) =
+        render_user_story_body_sections(s_meta, global_uc_actor, index);
+    let links = build_story_links_and_sources(root_pkg_name, s_meta, index);
 
-    let subsys_dir = &s_meta.subsys_dir;
-    let spec_source = if !index.has_modular_schema {
-        "[schema/model.sysml](../../schema/model.sysml)".to_string()
-    } else if subsys_dir == "conops" {
-        "[schema/conops/activities.sysml](../../schema/conops/activities.sysml)".to_string()
-    } else {
-        format!(
-            "[schema/subsystems/{subsys_dir}/behavior.sysml](../../schema/subsystems/{subsys_dir}/behavior.sysml)"
-        )
-    };
-
-    let source_refs = if !index.has_modular_schema {
-        r#"- System Architecture Model: `schema/model.sysml`
-- Normative Systems Engineering Standard: ISO/IEC/IEEE 29148:2018 §6.4.2 Concept of Operations
-
-Authoritative user story flows and interaction lifelines derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 29148."#
-            .to_string()
-    } else if subsys_dir == "conops" {
-        r#"- ConOps Operational Activities: `schema/conops/activities.sysml`
-- System Architecture Model: `schema/model.sysml`
-- Normative Systems Engineering Standard: ISO/IEC/IEEE 29148:2018 §6.4.2 Concept of Operations
-
-Authoritative user story flows and interaction lifelines derive from `schema/conops/activities.sysml` pursuant to ISO/IEC/IEEE 29148."#
-            .to_string()
-    } else {
-        format!(
-            r#"- Subsystem Behavior Specification: `schema/subsystems/{subsys_dir}/behavior.sysml`
-- ConOps Operational Activities: `schema/conops/activities.sysml`
-- System Architecture Model: `schema/model.sysml`
-- Normative Systems Engineering Standard: ISO/IEC/IEEE 29148:2018 §6.4.2 Concept of Operations
-
-Authoritative user story flows and interaction lifelines derive from `schema/subsystems/{subsys_dir}/behavior.sysml` pursuant to ISO/IEC/IEEE 29148."#
-        )
-    };
-
-    StoryLinksAndSources {
-        req_features: req_features_list.join("\n"),
-        parent_epic_link,
-        spec_source,
-        source_refs,
-    }
+    let content = format!(
+        "| Attribute | Specification Detail |\n\
+| :--- | :--- |\n\
+| **Issue ID** | {us_issue_id} |\n\
+| **Title** | {title} |\n\
+| **Type** | user-story |\n\
+| **Parent Epic** | {parent_epic_link} |\n\
+| **SysML Interaction** | `{interaction_name}` |\n\
+| **SysML Test Case** | `Test_{action_name}` |\n\
+| **Generation Mode** | subagent |\n\
+| **Specification Source** | {spec_source} |\n\n\
+# {title}\n\n\
+## User Story\n\n{user_story_statement}\n\n\
+## Architectural Realization (3-Layer Definition of Done)\n\n{three_layer_sections}\n\n\
+## UML Sequence Diagram\n\n```mermaid\n{seq_diagram}\n```\n\n\
+## Acceptance Criteria (BDD)\n{bdd_criteria}\n\n\
+## Required Features\n{req_features}\n\n\
+## Source References\n\
+Operational concept definitions and system sequence interaction models:\n\
+{source_refs}\n",
+        action_name = s_meta.action_name,
+        interaction_name = s_meta.interaction_name,
+        parent_epic_link = links.parent_epic_link,
+        spec_source = links.spec_source,
+        req_features = links.req_features,
+        source_refs = links.source_refs,
+    );
+    (rel_path, content)
 }
 
 /// Synthesizes all `user-stories/US-XX-*.md` specifications from `index.story_metas` into `generated_files`.
-/// Realises: [REQ-SYNC-FORWARD-STORY-EMITTER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-STORY-EMITTER]
 pub(crate) fn emit_user_story_specs(
     pkg: &PackageDef,
     index: &ForwardSyncIndex<'_>,
@@ -329,113 +234,8 @@ pub(crate) fn emit_user_story_specs(
         .find_map(|p| extract_first_uc_actor(&p.use_case_defs));
 
     for s_meta in &index.story_metas {
-        let s_num = s_meta.s_num;
-        let story_slug = sanitize_id(&s_meta.action_name);
-        let rel_path = format!("user-stories/US-{:02}-{}.md", s_num, story_slug);
-        let _us_date = resolve_date(&index.target_out_dir, &rel_path, index.today_iso);
-        let us_issue_id =
-            format_issue_id_cell(resolve_existing_issue_id(&index.target_out_dir, &rel_path));
-        let us_display_title = index
-            .story_display_titles
-            .get(&s_num)
-            .cloned()
-            .unwrap_or_else(|| to_display_name(&s_meta.action_name));
-        let title = format!("User Story {:02}: {}", s_num, us_display_title);
-
-        let handles = resolve_story_ast_handles(s_meta, index);
-        let parsed_doc = merge_story_docs(
-            parse_story_doc(handles.act_opt.and_then(|a| a.doc.as_deref())),
-            parse_story_doc(handles.inter_opt.and_then(|i| i.doc.as_deref())),
-        );
-        let (story_actor, seq_diagram) = resolve_story_actors_and_sequence(
-            s_meta,
-            &parsed_doc,
-            handles.curr_pkg,
-            global_uc_actor.as_deref(),
-        );
-
-        let story_reqs = collect_story_requirements(s_meta, &handles, &index.all_requirements);
-        let story_constraints = collect_story_constraints(&handles);
-        let mut pkg_states: Vec<&StateDef> = Vec::new();
-        if let Some(pt) = handles.target_part {
-            pkg_states.extend(pt.states.iter());
-        }
-        if let Some(cp) = handles.curr_pkg {
-            pkg_states.extend(cp.state_defs.iter());
-        }
-        let matched_transition = resolve_story_transition(&s_meta.action_name, &pkg_states);
-        let call_sig = format_action_call_with_params(&s_meta.action_name, handles.act_opt);
-
-        let proj_ctx = UserStoryProjectionCtx {
-            s_num,
-            story_actor: &story_actor,
-            engine_name: &s_meta.engine_name,
-            action_name: &s_meta.action_name,
-            interaction_name: &s_meta.interaction_name,
-            reply_msg: &s_meta.reply_msg,
-            pkg_name: &s_meta.pkg_name,
-            call_sig: &call_sig,
-            parsed_doc: &parsed_doc,
-            act_opt: handles.act_opt,
-            curr_pkg: handles.curr_pkg,
-            target_part: handles.target_part,
-            states: &pkg_states,
-            matched_transition: matched_transition.as_ref(),
-            constraints: &story_constraints,
-            reqs: &story_reqs,
-        };
-
-        let user_story_statement = generate_user_story_statement(&proj_ctx);
-        let three_layer_sections = generate_user_story_three_layer_sections(&proj_ctx);
-        let bdd_criteria = generate_user_story_bdd(&proj_ctx);
-        let links = build_story_links_and_sources(&pkg.name, s_meta, index);
-
-        let content = format!(
-            r#"| Attribute | Specification Detail |
-| :--- | :--- |
-| **Issue ID** | {us_issue_id} |
-| **Title** | {title} |
-| **Type** | user-story |
-| **Parent Epic** | {parent_epic_link} |
-| **SysML Interaction** | `{interaction_name}` |
-| **SysML Test Case** | `Test_{action_name}` |
-| **Generation Mode** | subagent |
-| **Specification Source** | {spec_source} |
-
-# {title}
-
-## User Story
-
-{user_story_statement}
-
-## Architectural Realization (3-Layer Definition of Done)
-
-{three_layer_sections}
-
-## UML Sequence Diagram
-
-```mermaid
-{seq_diagram}
-```
-
-## Acceptance Criteria (BDD)
-{bdd_criteria}
-
-## Required Features
-{req_features}
-
-## Source References
-Operational concept definitions and system sequence interaction models:
-{source_refs}
-"#,
-            action_name = s_meta.action_name,
-            interaction_name = s_meta.interaction_name,
-            parent_epic_link = links.parent_epic_link,
-            spec_source = links.spec_source,
-            req_features = links.req_features,
-            source_refs = links.source_refs,
-        );
-
+        let (rel_path, content) =
+            render_single_user_story_spec(&pkg.name, s_meta, global_uc_actor.as_deref(), index);
         generated_files.insert(rel_path, content);
     }
 }

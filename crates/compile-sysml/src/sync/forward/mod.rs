@@ -1,25 +1,48 @@
-//! SysML v2 to Markdown Forward Synchronization Engine.
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
+//! # SysML v2 to Markdown Forward Synchronization Engine
 //!
-//! Safety & Traceability: Realises: [REQ-SYSML-FORWARD-SYNC-ENGINE]
-//! Contract: Synthesizes deterministic Agile Epics, Features, User Stories, Use Cases, ICD, WBS, and STPA specifications from SysML v2 `PackageDef` AST models while preserving authored prose and tracker metadata via checked slice accessors.
-//! Bounds & Faults: Enforces bounds-checked UTF-8 string slicing (`.get`, `.split_once`, `.strip_prefix`), saturating index arithmetic, and atomic specification persistence without runtime panics on malformed inputs.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Realises: [REQ-0604], [REQ-SYSML-FORWARD-SYNC-ENGINE]
+//! Synthesizes deterministic Agile Epics, Features, User Stories, Use Cases, ICD, WBS, and STPA
+//! specifications from SysML v2 `PackageDef` AST models while preserving authored prose and
+//! tracker metadata under ISO/IEC/IEEE 15288:2023 and ISO/IEC/IEEE 29148:2018.
 //!
-//! Generates canonical Agile markdown specifications dynamically from the SysML v2 SSOT AST:
-//! - Epics (docs/epics/EPIC-*.md) from PackageDef & CapabilityDef
-//! - Features (docs/features/FEAT-*.md) from structural PartDef
-//! - User Stories (docs/user-stories/US-*.md) from InteractionDef & ActionDef
-//! - Use Cases (docs/use-cases/UC-*.md) from UseCaseDef
-//! - Safety Matrix (docs/safety/STPA_MATRIX.md) from ConstraintDef & STPA Generator
+//! ## 2. Preconditions, Postconditions & Mathematical Invariants
+//! - **Preconditions**: Input `PackageDef` and `ForwardSyncOptions` are valid.
+//! - **Postconditions**: Emits deterministic CommonMark specifications into `BTreeMap<String, String>`.
+//! - **Invariants**: Zero wall-clock timestamps are invoked; outputs are bitwise-identical across runs.
+//!
+//! ## 3. Failure Modes, Degraded Operation & Recovery
+//! - Filesystem I/O errors during non-dry-run persistence return `Err(String)` without partial writes.
+//!
+//! ## 4. Concurrency, Memory & Resource Bounds
+//! - Linear `O(N)` traversal over AST elements with deterministic `BTreeMap` ordering.
+//!
+//! ## 5. Dependencies & Integration Contracts
+//! - Consumes `deap_core::sysml_ast`, `crate::stpa`, and `crate::semantic::digest::write_atomic`.
+//!
+//! ## 6. Verification & Acceptance Criteria
+//! - Verified by unit and round-trip tests in `sync/forward/tests*.rs`.
+//!
+//! ## 7. Realization & Traceability
+//! - Realises: [REQ-0604], [REQ-SYSML-FORWARD-SYNC-ENGINE]
 
 pub mod epic_diagrams;
 pub mod epic_emitter;
 pub mod epic_renderer;
+pub mod escaping_and_dates;
 pub mod feature_diagrams;
 pub mod feature_emitter;
 pub mod feature_layers;
 pub mod feature_renderer;
+pub mod feature_schema;
 pub mod icd_wbs_emitter;
 pub mod merge_and_cleanup;
+pub mod merge_boilerplate;
 pub mod model_indexer;
 pub mod naming_and_dates;
 pub mod story_allocator;
@@ -27,13 +50,20 @@ pub mod story_context;
 pub mod story_emitter;
 pub mod story_layers;
 pub mod story_renderer;
+pub mod story_resolver;
 pub mod use_case_clauses;
+pub mod use_case_diagrams;
 pub mod use_case_emitter;
 pub mod use_case_renderer;
 pub mod wbs_emitter;
+pub mod wbs_formatters;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_arch_and_root_specs;
+#[cfg(test)]
+mod tests_conops_non_destructive;
 #[cfg(test)]
 mod tests_diagrams_and_stories;
 #[cfg(test)]
@@ -55,46 +85,49 @@ pub(crate) use epic_diagrams::{
     extract_transition_endpoints, generate_epic_class_diagram, generate_epic_statechart,
 };
 pub(crate) use epic_emitter::emit_epic_specs;
-pub use epic_renderer::*;
 pub(crate) use epic_renderer::{
     render_epic_architecture, render_epic_context, render_epic_operational_considerations,
     render_epic_security_and_governance,
 };
-pub(crate) use feature_diagrams::generate_class_diagram;
+pub(crate) use escaping_and_dates::*;
+pub(crate) use feature_diagrams::{append_part_class_block, generate_class_diagram};
 pub(crate) use feature_emitter::emit_feature_specs;
 pub(crate) use feature_layers::*;
 pub use feature_renderer::*;
-pub(crate) use feature_renderer::{
-    collect_feature_constraint_obligations, generate_feature_bdd, generate_json_schema,
-};
+pub(crate) use feature_renderer::generate_feature_bdd;
+pub(crate) use feature_schema::*;
 pub use icd_wbs_emitter::*;
 pub use merge_and_cleanup::*;
 pub(crate) use merge_and_cleanup::{
     clean_colliding_prefix_specifications, clean_stale_specifications, extract_id_prefix,
     merge_existing_spec_content, read_existing_spec_content,
 };
+use merge_boilerplate::*;
 pub(crate) use model_indexer::*;
 pub(crate) use naming_and_dates::*;
+pub use story_allocator::{
+    collect_package_story_numbers, count_total_epics_inclusive, resolve_parent_epic_link,
+};
 pub(crate) use story_allocator::*;
 pub(crate) use story_context::*;
 pub(crate) use story_emitter::emit_user_story_specs;
 pub(crate) use story_layers::*;
-pub use story_renderer::*;
 pub(crate) use story_renderer::{generate_user_story_bdd, generate_user_story_statement};
+pub use story_resolver::StoryMeta;
+pub(crate) use story_resolver::*;
 pub(crate) use use_case_clauses::*;
+pub(crate) use use_case_diagrams::*;
 pub(crate) use use_case_emitter::emit_use_case_specs;
 pub(crate) use use_case_renderer::*;
 use walkdir::WalkDir;
 pub use wbs_emitter::*;
+use wbs_formatters::*;
 
 use crate::semantic::digest::write_atomic;
 use crate::stpa::uca::expand_cartesian_stpa;
 
 /// Configuration paths and execution mode flags controlling SysML v2 forward synchronization.
-///
-/// Safety & Traceability: Realises: [REQ-SYNC-FORWARD-FORWARDSYNCOPTIONS]
-/// Contract: Specifies the input `schema_path`, target `docs_dir`, optional `out_dir` override, `dry_run` preview flag, and `force` overwrite/stale-pruning flag.
-/// Bounds & Faults: Pure value struct holding owned `PathBuf` paths and boolean execution selectors with zero panics or side effects.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-FORWARDSYNCOPTIONS]
 #[derive(Debug, Clone)]
 pub struct ForwardSyncOptions {
     pub schema_path: PathBuf,
@@ -105,7 +138,7 @@ pub struct ForwardSyncOptions {
 }
 
 /// Synthesizes `safety/STPA_MATRIX.md` from `pkg` using Cartesian UCA expansion and FMECA token projection.
-/// Realises: [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
 fn emit_stpa_matrix_spec(pkg: &PackageDef, generated_files: &mut BTreeMap<String, String>) {
     let ucas = expand_cartesian_stpa(pkg);
     let fmeca_rows = crate::stpa::fmeca::generate_fmeca_matrix(pkg, None);
@@ -122,7 +155,7 @@ fn emit_stpa_matrix_spec(pkg: &PackageDef, generated_files: &mut BTreeMap<String
 }
 
 /// Merges existing authored sections when `!opts.force` and persists or previews `generated_files` according to `opts.dry_run`.
-/// Realises: [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
 fn merge_and_persist_specs(
     target_out_dir: &Path,
     opts: &ForwardSyncOptions,
@@ -173,10 +206,7 @@ fn merge_and_persist_specs(
 }
 
 /// Executes forward synchronization from the SysML v2 `PackageDef` model to Markdown specifications.
-///
-/// Safety & Traceability: Realises: [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
-/// Contract: Indexes `pkg` packages, parts, actions, interactions, and use cases, emits deterministic `EPIC-*.md`, `FEAT-*.md`, `US-*.md`, `UC-*.md`, and `safety/STPA_MATRIX.md` artifacts, preserves authored prose when `!opts.force`, and atomically writes files when `!opts.dry_run`.
-/// Bounds & Faults: Linear `O(N)` traversal over AST elements with deterministic `BTreeMap` ordering, zero wall-clock calls, and atomic filesystem persistence returning `Err(String)` on I/O failure.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
 pub fn forward_sync_sysml_to_specs(
     pkg: &PackageDef,
     opts: &ForwardSyncOptions,

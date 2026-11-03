@@ -31,7 +31,7 @@
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
 
 use logos::Logos;
-use rowan::{GreenNode, GreenNodeBuilder, Language, SyntaxKind, SyntaxNode};
+use rowan::{GreenNode, GreenNodeBuilder, Language, NodeOrToken, SyntaxKind, SyntaxNode, SyntaxToken};
 
 /// Lexical token kinds for RFC 6020 / RFC 7950 YANG specifications. Realises: [REQ-0201]
 #[derive(Logos, Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -42,10 +42,7 @@ pub enum YangToken {
     LineComment,
     #[regex(r"/\*([^*]|\*+[^*/])*\*+/", allow_greedy = true)]
     BlockComment,
-    #[regex(
-        r"module|submodule|container|list|leaf-list|leaf|grouping|uses|typedef|rpc|notification|augment|type|description|key|mandatory|config",
-        priority = 3
-    )]
+    #[regex(r"module|submodule|container|list|leaf-list|leaf|grouping|uses|typedef|rpc|notification|augment|type|description|key|mandatory|config", priority = 3)]
     Keyword,
     #[regex(r"[A-Za-z_][A-Za-z0-9_\-:\.]*", priority = 2)]
     Ident,
@@ -245,4 +242,133 @@ pub fn parse_yang_cst(source: &str) -> ParsedYangCst {
     let root: SyntaxNode<YangLanguage> = SyntaxNode::new_root(green.clone());
     let lossless_roundtrip_eq = root.text() == source;
     ParsedYangCst { green, statements, lossless_roundtrip_eq }
+}
+
+/// Intermediate structural AST representation of a parsed YANG statement. Realises: [REQ-TRANSLATORS-YANG-YANGSTMT]
+#[derive(Debug, Clone)]
+pub struct YangStmt {
+    pub keyword: String,
+    pub argument: Option<String>,
+    pub substatements: Vec<Self>,
+}
+
+impl YangStmt {
+    /// Returns the argument of the first substatement matching `kw`. Realises: [REQ-TRANSLATORS-YANG-YANGSTMT-GET-ARG]
+    #[must_use]
+    pub fn get_arg(&self, kw: &str) -> Option<&str> {
+        self.substatements.iter().find(|s| s.keyword == kw).and_then(|s| s.argument.as_deref())
+    }
+    /// Returns the arguments of all substatements matching `kw`. Realises: [REQ-TRANSLATORS-YANG-YANGSTMT-GET-ALL-ARGS]
+    #[must_use]
+    pub fn get_all_args(&self, kw: &str) -> Vec<&str> {
+        self.substatements.iter().filter(|s| s.keyword == kw).filter_map(|s| s.argument.as_deref()).collect()
+    }
+    /// Finds the first substatement with keyword `kw`. Realises: [REQ-TRANSLATORS-YANG-YANGSTMT-FIND-FIRST]
+    #[must_use]
+    pub fn find_first(&self, kw: &str) -> Option<&Self> {
+        self.substatements.iter().find(|s| s.keyword == kw)
+    }
+    /// Finds all substatements with keyword `kw`. Realises: [REQ-TRANSLATORS-YANG-YANGSTMT-FIND-ALL]
+    #[must_use]
+    pub fn find_all(&self, kw: &str) -> Vec<&Self> {
+        self.substatements.iter().filter(|s| s.keyword == kw).collect()
+    }
+}
+
+/// Unescapes a single-quoted or double-quoted YANG string literal token from the CST. Realises: [REQ-0015], [REQ-0201]
+fn unescape_yang_string(raw: &str) -> String {
+    if let Some(inner) = raw.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')) {
+        return inner.to_string();
+    }
+    let inner = raw.strip_prefix('"').and_then(|s| s.strip_suffix('"')).unwrap_or(raw);
+    let (mut out, mut chars) = (String::with_capacity(inner.len()), inner.chars());
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            match chars.next() {
+                Some('n') => out.push('\n'),
+                Some('t') => out.push('\t'),
+                Some('r') => out.push('\r'),
+                Some(c) => out.push(c),
+                None => out.push('\\'),
+            }
+        } else {
+            out.push(ch);
+        }
+    }
+    out
+}
+
+/// Coalesces non-trivia CST header tokens (before `;` or `{`) into `[keyword, optional_arg]`. Realises: [REQ-0015], [REQ-0201]
+fn coalesce_header_words(tokens: &[SyntaxToken<YangLanguage>]) -> Result<Vec<String>, String> {
+    let (mut words, mut prev_end, mut idx) = (Vec::<String>::new(), None, 0usize);
+    while let Some(tok) = tokens.get(idx) {
+        idx += 1;
+        if tok.kind() == YangSyntaxKind::Error && (tok.text().starts_with('"') || tok.text().starts_with('\'')) {
+            return Err("Unterminated quoted string in YANG statement".to_string());
+        }
+        if tok.kind() == YangSyntaxKind::StringLit {
+            let mut s = unescape_yang_string(tok.text());
+            while tokens.get(idx).is_some_and(|t| t.kind() == YangSyntaxKind::Punct && t.text() == "+") {
+                idx += 1;
+                let Some(next_str) = tokens.get(idx).filter(|t| t.kind() == YangSyntaxKind::StringLit) else {
+                    return Err("Expected string after '+' concatenation operator in YANG".to_string());
+                };
+                s.push_str(&unescape_yang_string(next_str.text()));
+                idx += 1;
+            }
+            words.push(s);
+            prev_end = None;
+        } else {
+            let (start, end) = (usize::from(tok.text_range().start()), usize::from(tok.text_range().end()));
+            if prev_end == Some(start) {
+                if let Some(last) = words.last_mut() {
+                    last.push_str(tok.text());
+                }
+            } else {
+                words.push(tok.text().to_string());
+            }
+            prev_end = Some(end);
+        }
+    }
+    Ok(words)
+}
+
+/// Lowers a single `rowan` CST `Statement` node into a recursive `YangStmt` AST node. Realises: [REQ-0015], [REQ-0201]
+fn lower_cst_statement(node: &SyntaxNode<YangLanguage>) -> Result<YangStmt, String> {
+    let direct_tokens: Vec<SyntaxToken<YangLanguage>> = node
+        .children_with_tokens()
+        .filter_map(NodeOrToken::into_token)
+        .filter(|t| !matches!(t.kind(), YangSyntaxKind::Whitespace | YangSyntaxKind::LineComment | YangSyntaxKind::BlockComment))
+        .collect();
+    let header_slice = match direct_tokens.as_slice() {
+        [head @ .., last] if last.kind() == YangSyntaxKind::Punct && last.text() == ";" => head,
+        [head @ .., open, close] if open.kind() == YangSyntaxKind::Punct && open.text() == "{" && close.kind() == YangSyntaxKind::Punct && close.text() == "}" => head,
+        _ if direct_tokens.iter().any(|t| t.kind() == YangSyntaxKind::Punct && t.text() == "{") => return Err("Unclosed YANG block: missing '}'".to_string()),
+        _ => return Err("Unexpected end of tokens in YANG statement".to_string()),
+    };
+    let mut words = coalesce_header_words(header_slice)?;
+    let (keyword, argument) = match words.len() {
+        1 => (words.remove(0), None),
+        2 => {
+            let arg = words.pop();
+            (words.remove(0), arg)
+        }
+        0 => return Err("Expected statement keyword in YANG statement".to_string()),
+        _ => return Err(format!("Expected ';' or '{{' after argument for '{}'", words.first().map_or("", String::as_str))),
+    };
+    let substatements = node.children().filter(|c| c.kind() == YangSyntaxKind::Statement).map(|c| lower_cst_statement(&c)).collect::<Result<Vec<_>, _>>()?;
+    Ok(YangStmt { keyword, argument, substatements })
+}
+
+/// Parses a YANG source string into top-level `YangStmt` trees via `parse_yang_cst`. Realises: [REQ-TRANSLATORS-YANG-PARSE-YANG-STATEMENTS]
+///
+/// # Errors
+/// Returns an `Err` if the YANG source contains unterminated strings, unclosed blocks, or malformed statements.
+pub fn parse_yang_statements(source: &str) -> Result<Vec<YangStmt>, String> {
+    let cst = parse_yang_cst(source);
+    let root: SyntaxNode<YangLanguage> = SyntaxNode::new_root(cst.green);
+    if root.children_with_tokens().filter_map(NodeOrToken::into_token).any(|t| !matches!(t.kind(), YangSyntaxKind::Whitespace | YangSyntaxKind::LineComment | YangSyntaxKind::BlockComment)) {
+        return Err("Unexpected top-level token outside YANG statement".to_string());
+    }
+    root.children().filter(|n| n.kind() == YangSyntaxKind::Statement).map(|n| lower_cst_statement(&n)).collect()
 }

@@ -30,28 +30,94 @@
 //! Realises: [REQ-VERIFY-BASELINE-CHECKS-MOD], [DO-330-TQL-4-CHECKS-MOD]
 
 pub mod codebase;
+pub mod codebase_gesture_gate;
+pub mod codebase_mock_gate;
+pub mod codebase_solver_gate;
+#[cfg(test)]
+mod codebase_tests_a;
+#[cfg(test)]
+mod codebase_tests_b;
+pub(crate) mod doc_gate_dart;
+pub(crate) mod doc_gate_rust;
+pub(crate) mod doc_gate_rust_classify;
+#[cfg(test)]
+mod doc_gate_tests;
+pub(crate) mod doc_gate_validate;
 pub mod docstring_cst_gate;
 pub mod docstring_gate;
 pub mod docstring_tier_rules;
+mod dod_ast_visitor;
 pub mod dod_gates;
 #[cfg(test)]
 mod dod_gates_tests;
 pub mod domain_cleanliness_gate;
+mod domain_cleanliness_rules;
 pub mod formal_stage2_dylint;
 pub mod formal_stage3_4_miri_kani;
 pub mod formal_stage5_ferrocene;
 pub mod math_katex;
 pub mod mermaid;
+#[cfg(test)]
+mod parity_check_a_tests;
+#[cfg(test)]
+mod parity_check_b_tests;
+#[cfg(test)]
+mod parity_check_c_tests;
+pub(crate) mod parity_check_conops_exec;
+pub(crate) mod parity_check_coverage;
+pub(crate) mod parity_check_cross_doc;
+#[cfg(test)]
+mod parity_check_d_tests;
+pub(crate) mod parity_check_discovery;
+pub(crate) mod parity_check_dual_ssot;
+#[cfg(test)]
+mod parity_check_e_tests;
+pub(crate) mod parity_check_grounding;
+pub(crate) mod parity_check_harvest;
+pub(crate) mod parity_check_icd_ast;
+pub(crate) mod parity_check_icd_gate;
+pub(crate) mod parity_check_icd_signals;
+pub(crate) mod parity_check_obligation;
+pub(crate) mod parity_check_ops_std;
+pub(crate) mod parity_check_semantic;
+pub(crate) mod parity_check_slicer;
 pub mod parity_gates;
 pub mod ratchet_table;
+pub(crate) mod safety_fmeca;
+pub(crate) mod safety_pillars;
 pub mod safety_stpa;
+#[cfg(test)]
+mod struct_check_a_tests;
+pub(crate) mod struct_check_audit;
+#[cfg(test)]
+mod struct_check_b_tests;
+#[cfg(test)]
+mod struct_check_c_tests;
+pub(crate) mod struct_check_clippy;
+#[cfg(test)]
+mod struct_check_d_tests;
+#[cfg(test)]
+mod struct_check_e_tests;
+#[cfg(test)]
+mod struct_check_f_tests;
+pub(crate) mod struct_check_feat42;
+pub(crate) mod struct_check_grounding;
+pub(crate) mod struct_check_handoff;
+pub(crate) mod struct_check_mask;
+pub(crate) mod struct_check_purity;
+pub(crate) mod struct_check_scripts;
+pub(crate) mod struct_check_upstream;
 pub mod structural;
 pub mod wbs_integrity;
 
 pub use codebase::*;
 pub use docstring_cst_gate::*;
 pub use docstring_gate::*;
-pub use dod_gates::check_dod_gates;
+pub use dod_gates::{
+    check_codegen_zero_concat, check_dod_gates, check_salsa_incremental_memoization,
+    check_sysml_clause8_coverage, check_upstream_self_hosting_parity,
+    check_zero_hand_rolled_lexers, check_zero_legacy_ratchet, Finding,
+};
 pub use domain_cleanliness_gate::*;
 pub use math_katex::check_latex_katex_syntax;
 pub use mermaid::check_mermaid_syntax;

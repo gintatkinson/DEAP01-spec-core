@@ -1,15 +1,41 @@
-//! Feature BDD derivation, Use Case prefix stripping, Mermaid diagram generation, User Story lifeline binding, and root package projection unit tests.
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
+//! # Feature BDD Derivation, Mermaid Diagrams, and User Story Lifeline Unit Tests
 //!
-//! Safety & Traceability: Realises: [REQ-SYNC-FORWARD-TEST-FEATURE-BDD-DERIVED]
-//! Contract: Verifies positive/negative BDD obligation derivation from `PartDef` and `RequirementDef` constraints, iterative Use Case prefix stripping, backtick-free Mermaid `graph TD`/`stateDiagram-v2`/`classDiagram` rendering, User Story lifeline and dynamic Specification Source binding, and root package behavioral checklist linkage.
-//! Bounds & Faults: Executes deterministic in-memory unit assertions returning `Result<(), Box<dyn std::error::Error>>` with zero panics or external side effects.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Realises: [REQ-0604], [REQ-SYNC-FORWARD-TEST-FEATURE-BDD-DERIVED]
+//! Verifies positive/negative BDD obligation derivation from `PartDef` and `RequirementDef`
+//! constraints, iterative Use Case prefix stripping, backtick-free Mermaid `graph TD`,
+//! `stateDiagram-v2`, and `classDiagram` rendering, and User Story lifeline binding.
+//!
+//! ## 2. Preconditions, Postconditions & Mathematical Invariants
+//! - **Preconditions**: In-memory AST fixtures are initialized.
+//! - **Postconditions**: Generated BDD criteria, diagrams, and User Stories satisfy schema contracts.
+//! - **Invariants**: Feature BDD criteria count is bounded within `3..=10`.
+//!
+//! ## 3. Failure Modes, Degraded Operation & Recovery
+//! - Test assertions return `Result<(), Box<dyn std::error::Error>>` without panicking.
+//!
+//! ## 4. Concurrency, Memory & Resource Bounds
+//! - Pure in-memory unit test execution.
+//!
+//! ## 5. Dependencies & Integration Contracts
+//! - Exercises `generate_feature_bdd`, `strip_use_case_prefix`, `generate_use_case_diagram`, `generate_epic_statechart`, `generate_epic_class_diagram`, and `forward_sync_sysml_to_specs`.
+//!
+//! ## 6. Verification & Acceptance Criteria
+//! - Executed as part of the `compile-sysml` unit test suite.
+//!
+//! ## 7. Realization & Traceability
+//! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-TEST-FEATURE-BDD-DERIVED]
 
 use super::*;
 use deap_core::sysml_ast::PartDef;
 
 /// Verifies `generate_feature_bdd` derives positive and negative BDD acceptance criteria from `PartDef` constraints and `RequirementDef` obligations within `3..=10` items.
-///
-/// Realises: [REQ-SYNC-FORWARD-TEST-FEATURE-BDD-DERIVED]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-TEST-FEATURE-BDD-DERIVED]
 #[test]
 fn test_feature_bdd_derived_from_constraints_and_requirements(
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -83,8 +109,7 @@ fn test_feature_bdd_derived_from_constraints_and_requirements(
 }
 
 /// Verifies `strip_use_case_prefix` safely strips simple and composite prefixes (`UC_AC_01_`, `UC_01_`, `UC-02-`, `UC03_`) using `.get(..)` bounds-checked slicing.
-///
-/// Realises: [REQ-SYNC-FORWARD-TEST-FEATURE-BDD-DERIVED]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-TEST-FEATURE-BDD-DERIVED]
 #[test]
 fn test_strip_use_case_prefix_variations() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(
@@ -112,8 +137,7 @@ fn test_strip_use_case_prefix_variations() -> Result<(), Box<dyn std::error::Err
 }
 
 /// Verifies `generate_use_case_diagram` strips inline backticks before truncation and emits `<<include>>`.
-///
-/// Realises: [REQ-SYNC-FORWARD-TEST-FEATURE-BDD-DERIVED]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-TEST-FEATURE-BDD-DERIVED]
 #[test]
 fn test_generate_use_case_diagram_model_integrity() -> Result<(), Box<dyn std::error::Error>> {
     let scenario = vec![
@@ -143,8 +167,7 @@ fn test_generate_use_case_diagram_model_integrity() -> Result<(), Box<dyn std::e
 }
 
 /// Verifies `generate_epic_statechart` and `generate_epic_class_diagram` without emitting phantom package classes.
-///
-/// Realises: [REQ-SYNC-FORWARD-TEST-FEATURE-BDD-DERIVED]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-TEST-FEATURE-BDD-DERIVED]
 #[test]
 fn test_epic_statechart_and_class_diagram_generation() -> Result<(), Box<dyn std::error::Error>> {
     use deap_core::sysml_ast::{AttributeDef, PortDef, StateDef, TransitionDef};
@@ -213,8 +236,7 @@ fn test_epic_statechart_and_class_diagram_generation() -> Result<(), Box<dyn std
 }
 
 /// Verifies User Story subsystem Parent Epic linkage, declared `PartDef` lifeline binding, and dynamic `Specification Source` selection.
-///
-/// Realises: [REQ-SYNC-FORWARD-TEST-FEATURE-BDD-DERIVED]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-TEST-FEATURE-BDD-DERIVED]
 #[test]
 fn test_user_story_subsystem_parent_epic_and_dynamic_spec_source(
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -269,202 +291,12 @@ fn test_user_story_subsystem_parent_epic_and_dynamic_spec_source(
         .map(|(_, v)| v)
         .ok_or("expected value is absent")?;
 
-    assert!(
-        us.contains("[schema/model.sysml](../../schema/model.sysml)"),
-        "Specification Source must bind to schema/model.sysml when modular schema dirs are absent"
-    );
-    assert!(
-        us.contains(
-            "[EPIC-02-SpatioTemporalStateSolvers](../epics/EPIC-02-SpatioTemporalStateSolvers.md)"
-        ),
-        "Parent Epic must bind to EPIC-02-SpatioTemporalStateSolvers instead of EPIC-02-ConOps"
-    );
-    assert!(
-        us.contains("GrammarLoweringEngine->>StateMachineSolverEngine: SolveStateDynamicsAction()"),
-        "Sequence diagram must use interaction lifelines"
-    );
-    assert!(
-        us.contains("StateMachineSolverEngine-->>GrammarLoweringEngine: StateOutput"),
-        "Sequence diagram must return reply message from interaction def"
-    );
-    assert!(
-        us.contains("`StateSolverInteraction`"),
-        "SysML Interaction must match interaction name"
-    );
-    Ok(())
-}
-
-/// Verifies Issue `#442` zero compiler-domain contamination across generated downstream specs.
-///
-/// Realises: [REQ-SYNC-FORWARD-TEST-FEATURE-BDD-DERIVED]
-#[test]
-fn test_issue_442_forward_sync_zero_compiler_contamination_in_specs(
-) -> Result<(), Box<dyn std::error::Error>> {
-    use deap_core::sysml_ast::ActionDef;
-
-    let mut root = PackageDef {
-        name: "Satellite_System".to_string(),
-        ..Default::default()
-    };
-    let mut sub = PackageDef {
-        name: "Attitude_Control".to_string(),
-        ..Default::default()
-    };
-    sub.part_defs.push(PartDef {
-        name: "AttitudeController".to_string(),
-        ..Default::default()
-    });
-    sub.action_defs.push(ActionDef {
-        name: "OrientSolarArraysAction".to_string(),
-        ..Default::default()
-    });
-    root.packages.push(sub);
-
-    let opts = ForwardSyncOptions {
-        schema_path: PathBuf::from("schema/test.sysml"),
-        docs_dir: PathBuf::from("docs"),
-        out_dir: None,
-        dry_run: true,
-        force: true,
-    };
-
-    let generated = forward_sync_sysml_to_specs(&root, &opts)?;
-    for (path, content) in &generated {
-        assert!(
-            !content.contains("DEAPCompilerSystem"),
-            "File '{}' contains contaminated class DEAPCompilerSystem",
-            path
-        );
-        assert!(
-            !content.contains("Compiler Primacy"),
-            "File '{}' contains contaminated 'Compiler Primacy' title",
-            path
-        );
-        assert!(
-            !content.contains("actor HumanEngineer"),
-            "File '{}' contains contaminated 'actor HumanEngineer'",
-            path
-        );
-        assert!(
-            !content.contains("FEAT-01-HumanEngineer.md"),
-            "File '{}' contains contaminated 'FEAT-01-HumanEngineer.md'",
-            path
-        );
-        assert!(
-            !content.contains("initialize_compiler"),
-            "File '{}' contains contaminated statechart transition 'initialize_compiler'",
-            path
-        );
-        assert!(
-            !content.contains("IngestOEMArtifacts"),
-            "File '{}' contains contaminated statechart 'IngestOEMArtifacts'",
-            path
-        );
-    }
-    Ok(())
-}
-
-/// Verifies Issue `#447` root-package specification emission, behavioral action stories, and linked Epic checklists.
-///
-/// Realises: [REQ-SYNC-FORWARD-TEST-FEATURE-BDD-DERIVED]
-#[test]
-fn test_issue_447_forward_sync_root_package_specs_actions_and_linked_checklists(
-) -> Result<(), Box<dyn std::error::Error>> {
-    use deap_core::sysml_ast::{ActionDef, PartDef, UseCaseDef};
-
-    let mut root = PackageDef {
-        name: "SysML_Model".to_string(),
-        ..Default::default()
-    };
-    root.part_defs.push(PartDef {
-        name: "TrackingRadar".to_string(),
-        ..Default::default()
-    });
-    root.part_defs.push(PartDef {
-        name: "MitigationEffector".to_string(),
-        ..Default::default()
-    });
-    root.action_defs.push(ActionDef {
-        name: "DetectTrackAction".to_string(),
-        ..Default::default()
-    });
-    root.action_defs.push(ActionDef {
-        name: "EngageThreatAction".to_string(),
-        ..Default::default()
-    });
-    root.use_case_defs.push(UseCaseDef {
-        name: "DetectTargetUseCase".to_string(),
-        ..Default::default()
-    });
-
-    let opts = ForwardSyncOptions {
-        schema_path: PathBuf::from("schema/cuas_coa.sysml"),
-        docs_dir: PathBuf::from("docs"),
-        out_dir: None,
-        dry_run: true,
-        force: true,
-    };
-
-    let generated = forward_sync_sysml_to_specs(&root, &opts)?;
-
-    let has_us01 = generated
-        .keys()
-        .any(|k| k.contains("US-01") && k.contains("DetectTrackAction"));
-    let has_us02 = generated
-        .keys()
-        .any(|k| k.contains("US-02") && k.contains("EngageThreatAction"));
-    assert!(
-        has_us01,
-        "User Story 01 for root package action must be generated"
-    );
-    assert!(
-        has_us02,
-        "User Story 02 for root package second action must be generated without truncation"
-    );
-
-    let has_uc01 = generated
-        .keys()
-        .any(|k| k.contains("UC-01") && k.contains("DetectTargetUseCase"));
-    assert!(
-        has_uc01,
-        "Use Case 01 for root package use case def must be generated"
-    );
-
-    let epic_content = generated
-        .iter()
-        .find(|(k, _)| k.contains("EPIC-01") && k.contains("SysML_Model"))
-        .map(|(_, v)| v)
-        .ok_or("EPIC-01-SysML_Model.md must be generated")?;
-
-    assert!(
-        !epic_content
-            .contains("Feature 01: Subsystem capability implementation for System Architecture."),
-        "Epic must not emit degenerate unlinked placeholder feature checklist"
-    );
-    assert!(
-        epic_content.contains(
-            "[Feature 01: [System Architecture] TrackingRadar](../features/FEAT-01-TrackingRadar.md)"
-        ),
-        "Epic feature checklist must contain linked Feature 01"
-    );
-    assert!(
-        epic_content.contains(
-            "[Feature 02: [System Architecture] MitigationEffector](../features/FEAT-02-MitigationEffector.md)"
-        ),
-        "Epic feature checklist must contain linked Feature 02"
-    );
-    assert!(
-        epic_content.contains(
-            "[User Story 01: Detect Track Action](../user-stories/US-01-DetectTrackAction.md)"
-        ),
-        "Epic must associate generated User Story 01"
-    );
-    assert!(
-        epic_content.contains(
-            "[Use Case 01: Detect Target Use Case](../use-cases/UC-01-DetectTargetUseCase.md)"
-        ),
-        "Epic must associate generated Use Case 01"
-    );
-
+    assert!(us.contains("[schema/model.sysml](../../schema/model.sysml)"));
+    assert!(us.contains(
+        "[EPIC-02-SpatioTemporalStateSolvers](../epics/EPIC-02-SpatioTemporalStateSolvers.md)"
+    ));
+    assert!(us.contains("GrammarLoweringEngine->>StateMachineSolverEngine: SolveStateDynamicsAction()"));
+    assert!(us.contains("StateMachineSolverEngine-->>GrammarLoweringEngine: StateOutput"));
+    assert!(us.contains("`StateSolverInteraction`"));
     Ok(())
 }

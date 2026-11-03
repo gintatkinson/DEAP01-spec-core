@@ -1,13 +1,40 @@
-//! Epic specification (`docs/epics/EPIC-*.md`) synthesis from ordered SysML v2 `PackageDef` nodes.
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
+//! # Epic Specification Markdown Synthesis
 //!
-//! Safety & Traceability: Realises: [REQ-SYNC-FORWARD-EPIC-EMITTER]
-//! Contract: Emits canonical Epic Markdown specifications for root, `ConOps`, and subsystem packages, assembling linked Feature checklists, associated Use Case and User Story links, 5-section architectural prose, and system-level Mermaid class/statechart diagrams.
-//! Bounds & Faults: Iterates deterministically over pre-indexed package and part slices using saturating index arithmetic (`saturating_add`) and non-panicking tracker issue ID lookups.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Realises: [REQ-0604], [REQ-SYNC-FORWARD-EPIC-EMITTER]
+//! Emits canonical `docs/epics/EPIC-*.md` specifications from ordered SysML v2 `PackageDef`
+//! nodes with linked Feature checklists, associated Use Case/User Story checklists, 5-section
+//! architectural prose, and system-level Mermaid class/statechart diagrams.
+//!
+//! ## 2. Preconditions, Postconditions & Mathematical Invariants
+//! - **Preconditions**: `index.ordered_packages` contains deduplicated package definitions.
+//! - **Postconditions**: Populates `generated_files` with `epics/EPIC-XX-*.md` entries.
+//! - **Invariants**: 1-based Epic numbering is computed via saturating arithmetic (`saturating_add(1)`).
+//!
+//! ## 3. Failure Modes, Degraded Operation & Recovery
+//! - Packages without allocated Features, Use Cases, or User Stories emit deterministic fallback lines.
+//!
+//! ## 4. Concurrency, Memory & Resource Bounds
+//! - Single-threaded `O(P * (F + U + S))` iteration over pre-indexed slices.
+//!
+//! ## 5. Dependencies & Integration Contracts
+//! - Consumes `epic_renderer` and `epic_diagrams`; invoked by `forward::sync_forward_to_map`.
+//!
+//! ## 6. Verification & Acceptance Criteria
+//! - Verified by forward-sync Epic generation tests in `sync/forward/tests*.rs`.
+//!
+//! ## 7. Realization & Traceability
+//! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-EPIC-EMITTER]
 
 use super::*;
 
 /// Scoped package metadata for synthesizing a single `EPIC-XX-*.md` specification.
-/// Realises: [REQ-SYNC-FORWARD-EPIC-EMITTER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-EPIC-EMITTER]
 struct EpicRenderCtx<'a> {
     root_pkg_name: &'a str,
     pkg: &'a PackageDef,
@@ -19,7 +46,7 @@ struct EpicRenderCtx<'a> {
 }
 
 /// Resolves the Epic title and workspace-relative `epics/EPIC-XX-*.md` destination path.
-/// Realises: [REQ-SYNC-FORWARD-EPIC-EMITTER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-EPIC-EMITTER]
 fn resolve_epic_title_and_path(ctx: &EpicRenderCtx<'_>) -> (String, String) {
     let p = ctx.pkg;
     let epic_num = ctx.epic_num;
@@ -51,7 +78,7 @@ fn resolve_epic_title_and_path(ctx: &EpicRenderCtx<'_>) -> (String, String) {
 }
 
 /// Assembles the Markdown Feature checklist (`- [ ] #<id> - [Feature XX: ...]`) allocated to `ctx.pkg`.
-/// Realises: [REQ-SYNC-FORWARD-EPIC-EMITTER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-EPIC-EMITTER]
 fn build_epic_feature_checklist(ctx: &EpicRenderCtx<'_>, index: &ForwardSyncIndex<'_>) -> String {
     let mut feat_checklist = Vec::new();
     for (f_idx, part_ctx) in index.part_contexts.iter().enumerate() {
@@ -97,7 +124,7 @@ fn build_epic_feature_checklist(ctx: &EpicRenderCtx<'_>, index: &ForwardSyncInde
 }
 
 /// Builds the associated Use Case and User Story checklist blocks for `ctx.pkg`.
-/// Realises: [REQ-SYNC-FORWARD-EPIC-EMITTER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-EPIC-EMITTER]
 fn build_epic_associated_backlog(
     ctx: &EpicRenderCtx<'_>,
     index: &ForwardSyncIndex<'_>,
@@ -159,7 +186,7 @@ fn build_epic_associated_backlog(
 }
 
 /// Formats normative `## 6. Source References` citations for an Epic based on modular vs single-file schema layout.
-/// Realises: [REQ-SYNC-FORWARD-EPIC-EMITTER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-EPIC-EMITTER]
 fn resolve_epic_source_refs(ctx: &EpicRenderCtx<'_>, has_modular_schema: bool) -> String {
     if !has_modular_schema {
         r#"- System Architecture Model: `schema/model.sysml`
@@ -194,8 +221,59 @@ Subsystem architectural composition and formal invariants derive from `schema/mo
     }
 }
 
+/// Renders a single `EPIC-XX-*.md` specification document and returns `(rel_path, content)`.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-EPIC-EMITTER]
+fn render_single_epic_spec(
+    ctx: &EpicRenderCtx<'_>,
+    index: &ForwardSyncIndex<'_>,
+) -> (String, String) {
+    let p = ctx.pkg;
+    let (title, rel_path) = resolve_epic_title_and_path(ctx);
+    let _epic_date = resolve_date(&index.target_out_dir, &rel_path, index.today_iso);
+    let epic_issue_id =
+        format_issue_id_cell(resolve_existing_issue_id(&index.target_out_dir, &rel_path));
+    let primary_engine = select_default_package_engine(p);
+
+    let feat_checklist_text = build_epic_feature_checklist(ctx, index);
+    let (assoc_uc_text, assoc_us_text) = build_epic_associated_backlog(ctx, index);
+    let context_text = render_epic_context(p, &ctx.subsys_display);
+    let architecture_text = render_epic_architecture(p);
+    let operational_text = render_epic_operational_considerations(p);
+    let governance_text = render_epic_security_and_governance(p, &index.all_requirements);
+    let source_refs = resolve_epic_source_refs(ctx, index.has_modular_schema);
+    let class_diagram_block = generate_epic_class_diagram(p, &primary_engine, ctx.is_root);
+    let state_diagram_block = generate_epic_statechart(p);
+
+    let content = format!(
+        "| Attribute | Specification Detail |\n\
+| :--- | :--- |\n\
+| **Issue ID** | {epic_issue_id} |\n\
+| **Title** | {title} |\n\
+| **Type** | epic |\n\
+| **Package** | {pkg_name} |\n\
+| **Subsystem** | {subsys_display} |\n\
+| **Generation Mode** | subagent |\n\
+| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |\n\n\
+# {title}\n\n\
+## 1. Context\n{context_text}\n\n\
+## 2. Requirements & Checklist\n{feat_checklist_text}\n\n\
+### Associated Use Cases & User Stories\n\n\
+#### Associated Use Cases\n{assoc_uc_text}\n\n\
+#### Associated User Stories\n{assoc_us_text}\n\n\
+## 3. Architecture\n{architecture_text}\n\n\
+## 4. Operational Considerations\n{operational_text}\n\n\
+## 5. Security & Governance\n{governance_text}\n\n\
+## 6. Source References\n{source_refs}\n\n\
+## System-Level UML Class Diagram\n\n```mermaid\n{class_diagram_block}\n```\n\n\
+## System State Machine Diagram\n\n```mermaid\n{state_diagram_block}\n```\n",
+        pkg_name = p.name,
+        subsys_display = ctx.subsys_display,
+    );
+    (rel_path, content)
+}
+
 /// Synthesizes all `epics/EPIC-XX-*.md` specifications from `index.ordered_packages` into `generated_files`.
-/// Realises: [REQ-SYNC-FORWARD-EPIC-EMITTER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-EPIC-EMITTER]
 pub(crate) fn emit_epic_specs(
     pkg: &PackageDef,
     index: &ForwardSyncIndex<'_>,
@@ -225,77 +303,7 @@ pub(crate) fn emit_epic_specs(
             subsys_display,
             subsys_dir,
         };
-        let (title, rel_path) = resolve_epic_title_and_path(&ctx);
-        let _epic_date = resolve_date(&index.target_out_dir, &rel_path, index.today_iso);
-        let epic_issue_id =
-            format_issue_id_cell(resolve_existing_issue_id(&index.target_out_dir, &rel_path));
-        let primary_engine = select_default_package_engine(p);
-
-        let feat_checklist_text = build_epic_feature_checklist(&ctx, index);
-        let (assoc_uc_text, assoc_us_text) = build_epic_associated_backlog(&ctx, index);
-        let context_text = render_epic_context(p, &ctx.subsys_display);
-        let architecture_text = render_epic_architecture(p);
-        let operational_text = render_epic_operational_considerations(p);
-        let governance_text = render_epic_security_and_governance(p, &index.all_requirements);
-        let source_refs = resolve_epic_source_refs(&ctx, index.has_modular_schema);
-        let class_diagram_block = generate_epic_class_diagram(p, &primary_engine, is_root);
-        let state_diagram_block = generate_epic_statechart(p);
-
-        let content = format!(
-            r#"| Attribute | Specification Detail |
-| :--- | :--- |
-| **Issue ID** | {epic_issue_id} |
-| **Title** | {title} |
-| **Type** | epic |
-| **Package** | {pkg_name} |
-| **Subsystem** | {subsys_display} |
-| **Generation Mode** | subagent |
-| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
-
-# {title}
-
-## 1. Context
-{context_text}
-
-## 2. Requirements & Checklist
-{feat_checklist_text}
-
-### Associated Use Cases & User Stories
-
-#### Associated Use Cases
-{assoc_uc_text}
-
-#### Associated User Stories
-{assoc_us_text}
-
-## 3. Architecture
-{architecture_text}
-
-## 4. Operational Considerations
-{operational_text}
-
-## 5. Security & Governance
-{governance_text}
-
-## 6. Source References
-{source_refs}
-
-## System-Level UML Class Diagram
-
-```mermaid
-{class_diagram_block}
-```
-
-## System State Machine Diagram
-
-```mermaid
-{state_diagram_block}
-```
-"#,
-            pkg_name = p.name,
-            subsys_display = ctx.subsys_display,
-        );
-
+        let (rel_path, content) = render_single_epic_spec(&ctx, index);
         generated_files.insert(rel_path, content);
     }
 }

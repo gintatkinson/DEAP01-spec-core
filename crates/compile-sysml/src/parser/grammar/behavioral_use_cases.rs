@@ -18,19 +18,7 @@ impl<'a> SysmlParser<'a> {
             self.advance();
         }
         let name = self.expect_ident()?;
-        let mut uc = UseCaseDef {
-            name,
-            doc,
-            subject: None,
-            actor: None,
-            actors: Vec::new(),
-            objective: None,
-            includes: Vec::new(),
-            extends: Vec::new(),
-            steps: Vec::new(),
-            preconditions: Vec::new(),
-            postconditions: Vec::new(),
-        };
+        let mut uc = UseCaseDef { name, doc, ..Default::default() };
         if self.check(&TokenKind::OpenBrace) {
             self.advance();
             while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
@@ -107,61 +95,6 @@ impl<'a> SysmlParser<'a> {
         Ok(())
     }
 
-    /// Parses a `capability` or `capability def` declaration and optional `subsystem` binding into a `CapabilityDef`.
-    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-CAPABILITY-DECL]
-    pub(crate) fn parse_capability_decl(
-        &mut self,
-        doc: Option<String>,
-    ) -> Result<CapabilityDef, ParseError> {
-        self.expect(&TokenKind::Capability)?;
-        if self.check(&TokenKind::Def) {
-            self.advance();
-        }
-        let name = self.expect_ident()?;
-        let mut cap_doc = doc;
-        let mut subsystem = None;
-
-        if self.check(&TokenKind::OpenBrace) {
-            self.advance();
-            while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
-                self.skip_trivia();
-                while let Some(d) = self.take_inner_doc_comment() {
-                    if cap_doc.is_none() {
-                        cap_doc = Some(d);
-                    }
-                    self.skip_trivia();
-                }
-                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
-                    break;
-                }
-                if self.check(&TokenKind::Subsystem) {
-                    self.advance();
-                    subsystem = Some(self.read_until_semi());
-                } else {
-                    let tok = self.peek();
-                    return Err(ParseError {
-                        message: format!(
-                            "Unexpected token '{:?}' in capability declaration body",
-                            tok.kind
-                        ),
-                        span: tok.span,
-                    });
-                }
-            }
-            self.expect(&TokenKind::CloseBrace)?;
-        } else {
-            self.expect_semi()?;
-        }
-
-        Ok(CapabilityDef {
-            name,
-            description: cap_doc.clone(),
-            subsystem,
-            package_ref: None,
-            doc: cap_doc,
-        })
-    }
-
     /// Parses parenthesized `(in/out name : Type = default, ...)` calculation header parameters into `in_params`.
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-CALC-DECL]
     fn parse_calc_header_params(
@@ -199,28 +132,16 @@ impl<'a> SysmlParser<'a> {
                         TokenKind::Ident(s) => pieces.push(s.clone()),
                         TokenKind::StringLit(s) => pieces.push(format!("\"{}\"", s)),
                         TokenKind::IntLit(n) => pieces.push(n.to_string()),
-                        TokenKind::RealLit(f) => {
-                            if f.fract() == 0.0 {
-                                pieces.push(format!("{:.1}", f));
-                            } else {
-                                pieces.push(f.to_string());
-                            }
-                        }
+                        TokenKind::RealLit(f) if f.fract() == 0.0 => pieces.push(format!("{:.1}", f)),
+                        TokenKind::RealLit(f) => pieces.push(f.to_string()),
                         TokenKind::BoolLit(b) => pieces.push(b.to_string()),
                         _ => pieces.push(tok.kind.as_str().to_string()),
                     }
                 }
                 default_value = Some(pieces.join(" "));
             }
-            in_params.push(AttributeDef {
-                name: p_name,
-                type_name: p_type,
-                default_value,
-                doc: None,
-            });
-            if self.check(&TokenKind::Comma) {
-                self.advance();
-            }
+            in_params.push(AttributeDef { name: p_name, type_name: p_type, default_value, doc: None });
+            self.eat(&TokenKind::Comma);
         }
         self.expect(&TokenKind::CloseParen)?;
         Ok(())
@@ -439,22 +360,9 @@ impl<'a> SysmlParser<'a> {
         let is_indexed = !is_composite && trimmed.contains('[') && !trimmed.ends_with("[]");
         let is_primitive = matches!(
             base,
-            "u8" | "u16"
-                | "u32"
-                | "u64"
-                | "u128"
-                | "usize"
-                | "i8"
-                | "i16"
-                | "i32"
-                | "i64"
-                | "i128"
-                | "isize"
-                | "f32"
-                | "f64"
-                | "bool"
-                | "str"
-                | "char"
+            "u8" | "u16" | "u32" | "u64" | "u128" | "usize"
+                | "i8" | "i16" | "i32" | "i64" | "i128" | "isize"
+                | "f32" | "f64" | "bool" | "str" | "char"
         );
         let is_named_type = base.starts_with(|c: char| c.is_ascii_uppercase())
             || base.contains("::")

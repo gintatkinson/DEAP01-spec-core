@@ -8,8 +8,7 @@
 use deap_core::markdown_ast::parse_markdown_ast;
 use std::collections::{BTreeMap, BTreeSet};
 
-/// SysML v2 reserved keywords that must not be used as bare identifiers in AST generation.
-/// Realises: [REQ-INGEST-SYSML-TABLE-RESERVED-KEYWORDS]
+/// SysML v2 reserved keywords that must not be used as bare identifiers in AST generation. Realises: [REQ-INGEST-SYSML-TABLE-RESERVED-KEYWORDS]
 pub const RESERVED_SYSML_KEYWORDS: &[&str] = &[
     "package", "part", "def", "port", "attribute", "action", "flow", "item", "connect", "connection",
     "interface", "doc", "assert", "constraint", "state", "requirement", "use", "case", "test", "in",
@@ -17,8 +16,7 @@ pub const RESERVED_SYSML_KEYWORDS: &[&str] = &[
     "step", "entry", "exit", "do", "transition", "assume", "require", "verify", "satisfy", "text",
 ];
 
-/// Keywords identifying structural or functional section headers that are not component names.
-/// Realises: [REQ-INGEST-SYSML-TABLE-NON-COMPONENT-KEYWORDS]
+/// Keywords identifying structural or functional section headers that are not component names. Realises: [REQ-INGEST-SYSML-TABLE-NON-COMPONENT-KEYWORDS]
 pub const NON_COMPONENT_SECTION_KEYWORDS: &[&str] = &[
     "bill of materials", "bom", "components", "parts", "subsystems", "interfaces", "ports", "signals",
     "signal interface", "interconnects", "parameters", "parametric limits", "limits", "constraints",
@@ -27,15 +25,13 @@ pub const NON_COMPONENT_SECTION_KEYWORDS: &[&str] = &[
     "system parameters", "system limits", "system constraints",
 ];
 
-/// Authoritative provenance column header names recognized during tabular extraction.
-/// Realises: [REQ-INGEST-SYSML-TABLE-PROVENANCE-COLUMNS]
+/// Authoritative provenance column header names recognized during tabular extraction. Realises: [REQ-INGEST-SYSML-TABLE-PROVENANCE-COLUMNS]
 pub const PROVENANCE_COLUMNS: &[&str] = &[
     "provenance_citation", "provenance", "source_reference", "oem_source_reference",
     "oem_document_citation", "citation", "reference", "source", "clause", "specification_reference",
 ];
 
-/// Classification archetype for Markdown tables based on structural schema patterns.
-/// Realises: [REQ-INGEST-SYSML-TABLE-TABLETYPE]
+/// Classification archetype for Markdown tables based on structural schema patterns. Realises: [REQ-INGEST-SYSML-TABLE-TABLETYPE]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TableType {
     Bom,
@@ -45,8 +41,7 @@ pub enum TableType {
     Generic,
 }
 
-/// Parsed, normalized in-memory representation of a Markdown table.
-/// Realises: [REQ-INGEST-SYSML-TABLE-MARKDOWNTABLE]
+/// Parsed, normalized in-memory representation of a Markdown table. Realises: [REQ-INGEST-SYSML-TABLE-MARKDOWNTABLE]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct MarkdownTable {
     pub raw_headers: Vec<String>,
@@ -55,20 +50,20 @@ pub struct MarkdownTable {
     pub rows: Vec<BTreeMap<String, String>>,
 }
 
-/// Sanitizes arbitrary text into a valid, deterministic SysML v2 / KerML identifier.
-/// Realises: [REQ-SYSML-INGEST-TABLE/sanitize_identifier]
+/// Sanitizes arbitrary text into a valid, deterministic SysML v2 / KerML identifier. Realises: [REQ-SYSML-INGEST-TABLE/sanitize_identifier]
 pub fn sanitize_identifier(text: &str, default_name: &str) -> String {
     if text.is_empty() {
         return default_name.to_string();
     }
     let stripped = strip_bracketed_content(text);
     let clean_cand = if stripped.is_empty() { text } else { &stripped };
-    let formatted: String = clean_cand
+    let clean_raw = clean_cand
         .chars()
         .map(|c| if matches!(c, '*' | '`' | '_' | '#') { ' ' } else { c })
-        .collect();
-    let clean_raw = formatted.trim().replace(|c: char| !c.is_ascii_alphanumeric() && c != '_', "_");
-    let mut clean = collapse_underscores(&clean_raw).trim_matches('_').to_string();
+        .collect::<String>()
+        .trim()
+        .replace(|c: char| !c.is_ascii_alphanumeric() && c != '_', "_");
+    let mut clean: String = clean_raw.split('_').filter(|s| !s.is_empty()).collect::<Vec<_>>().join("_");
     if clean.is_empty() {
         return default_name.to_string();
     }
@@ -81,17 +76,12 @@ pub fn sanitize_identifier(text: &str, default_name: &str) -> String {
     clean
 }
 
-/// Strips parenthesized, bracketed, or braced content from `text`.
-/// Realises: [REQ-INGEST-SYSML-TABLE-STRIP-BRACKETED-CONTENT]
+/// Strips parenthesized, bracketed, or braced content from `text`. Realises: [REQ-INGEST-SYSML-TABLE-STRIP-BRACKETED-CONTENT]
 fn strip_bracketed_content(text: &str) -> String {
-    let (mut out, mut chars) = (String::with_capacity(text.len()), text.chars().peekable());
+    let (mut out, mut chars) = (String::with_capacity(text.len()), text.chars());
     while let Some(c) = chars.next() {
         if matches!(c, '(' | '[' | '{') {
-            for inner in chars.by_ref() {
-                if matches!(inner, ')' | ']' | '}') {
-                    break;
-                }
-            }
+            let _ = chars.by_ref().find(|&inner| matches!(inner, ')' | ']' | '}'));
         } else {
             out.push(c);
         }
@@ -99,24 +89,9 @@ fn strip_bracketed_content(text: &str) -> String {
     out.trim().to_string()
 }
 
-/// Collapses consecutive underscore characters into a single underscore.
-/// Realises: [REQ-INGEST-SYSML-TABLE-COLLAPSE-UNDERSCORES]
-fn collapse_underscores(s: &str) -> String {
-    let (mut res, mut prev_under) = (String::with_capacity(s.len()), false);
-    for c in s.chars() {
-        if c != '_' || !prev_under {
-            res.push(c);
-        }
-        prev_under = c == '_';
-    }
-    res
-}
-
-/// Extracts measurement physical units enclosed in parentheses or brackets.
-/// Realises: [REQ-SYSML-INGEST-TABLE/extract_unit_from_header_or_val]
+/// Extracts measurement physical units enclosed in parentheses or brackets. Realises: [REQ-SYSML-INGEST-TABLE/extract_unit_from_header_or_val]
 pub fn extract_unit_from_header_or_val(header_or_val: &str) -> (String, String) {
-    let (mut unit, mut cleaned) = (String::new(), String::with_capacity(header_or_val.len()));
-    let mut chars = header_or_val.chars().peekable();
+    let (mut unit, mut cleaned, mut chars) = (String::new(), String::with_capacity(header_or_val.len()), header_or_val.chars());
     while let Some(c) = chars.next() {
         if c == '(' || c == '[' {
             let (mut inner, mut closed) = (String::new(), false);
@@ -127,11 +102,7 @@ pub fn extract_unit_from_header_or_val(header_or_val: &str) -> (String, String) 
                 }
                 inner.push(next_c);
             }
-            if closed
-                && unit.is_empty()
-                && !inner.is_empty()
-                && inner.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '/' | '°' | '^' | '%' | '-'))
-            {
+            if closed && unit.is_empty() && !inner.is_empty() && inner.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '/' | '°' | '^' | '%' | '-')) {
                 unit = inner.trim().to_string();
             }
         } else {
@@ -141,34 +112,23 @@ pub fn extract_unit_from_header_or_val(header_or_val: &str) -> (String, String) 
     (cleaned.trim().to_string(), unit)
 }
 
-/// Normalizes a column header into a canonical snake_case lookup key.
-/// Realises: [REQ-SYSML-INGEST-TABLE/normalize_col]
+/// Normalizes a column header into a canonical snake_case lookup key. Realises: [REQ-SYSML-INGEST-TABLE/normalize_col]
 pub fn normalize_col(name: &str) -> String {
     let (cleaned, _) = extract_unit_from_header_or_val(name);
-    let (mut clean, mut prev_under) = (String::with_capacity(cleaned.len()), false);
-    for c in cleaned.chars() {
-        let lower = c.to_ascii_lowercase();
-        if lower.is_ascii_alphanumeric() {
-            clean.push(lower);
-            prev_under = false;
-        } else if !prev_under {
-            clean.push('_');
-            prev_under = true;
-        }
-    }
-    clean.trim_matches('_').to_string()
+    cleaned
+        .to_ascii_lowercase()
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("_")
 }
 
-/// Replaces inline `<br>` / `<br/>` HTML line-break tags with spaces prior to CommonMark AST parsing.
-/// Realises: [REQ-INGEST-SYSML-TABLE-STRIP-HTML-TAGS]
+/// Replaces inline `<br>` / `<br/>` HTML line-break tags with spaces prior to CommonMark AST parsing. Realises: [REQ-INGEST-SYSML-TABLE-STRIP-HTML-TAGS]
 fn replace_br_tags_with_space(input: &str) -> String {
-    ["<br/>", "<br />", "<br>", "<BR/>", "<BR />", "<BR>"]
-        .into_iter()
-        .fold(input.to_string(), |acc, pat| acc.replace(pat, " "))
+    ["<br/>", "<br />", "<br>", "<BR/>", "<BR />", "<BR>"].into_iter().fold(input.to_string(), |acc, pat| acc.replace(pat, " "))
 }
 
-/// Strips Markdown hyperlinks, HTML tags, and inline formatting from a table cell value.
-/// Realises: [REQ-SYSML-INGEST-TABLE/clean_cell_value]
+/// Strips Markdown hyperlinks, HTML tags, and inline formatting from a table cell value. Realises: [REQ-SYSML-INGEST-TABLE/clean_cell_value]
 pub fn clean_cell_value(val: &str) -> String {
     let trimmed = val.trim();
     if trimmed.is_empty() {
@@ -182,33 +142,29 @@ pub fn clean_cell_value(val: &str) -> String {
         .map_or_else(|| normalized.trim().to_string(), |c| c.trim().to_string())
 }
 
-/// Parses a scalar string into numeric float, unit, and optional signed integer representation.
-/// Realises: [REQ-SYSML-INGEST-TABLE/parse_numeric_with_unit]
+/// Parses a scalar string into numeric float, unit, and optional signed integer representation. Realises: [REQ-SYSML-INGEST-TABLE/parse_numeric_with_unit]
 pub fn parse_numeric_with_unit(raw_val: &str) -> (Option<f64>, Option<String>, Option<i64>) {
     let clean: String = raw_val.chars().filter(|&c| c != '*' && c != '`').collect();
     let clean = clean.trim();
-    if let Some(hex_str) = clean.strip_prefix("0x").or_else(|| clean.strip_prefix("0X")) {
-        if !hex_str.is_empty() && hex_str.chars().all(|c| c.is_ascii_hexdigit()) {
-            if let Ok(val_int) = i64::from_str_radix(hex_str, 16) {
-                return (Some(val_int as f64), Some(String::new()), Some(val_int));
-            }
+    if let Some(hex) = clean.strip_prefix("0x").or_else(|| clean.strip_prefix("0X")).filter(|h| !h.is_empty() && h.chars().all(|c| c.is_ascii_hexdigit())) {
+        if let Ok(vi) = i64::from_str_radix(hex, 16) {
+            return (Some(vi as f64), Some(String::new()), Some(vi));
         }
     }
     if let Some((val_str, unit_str)) = split_number_and_unit(clean) {
         let unit_str = unit_str.to_string();
         if val_str.contains('.') || val_str.to_ascii_lowercase().contains('e') {
-            if let Ok(val_float) = val_str.parse::<f64>() {
-                return (Some(val_float), Some(unit_str), None);
+            if let Ok(vf) = val_str.parse::<f64>() {
+                return (Some(vf), Some(unit_str), None);
             }
-        } else if let Ok(val_int) = val_str.parse::<i64>() {
-            return (Some(val_int as f64), Some(unit_str), Some(val_int));
+        } else if let Ok(vi) = val_str.parse::<i64>() {
+            return (Some(vi as f64), Some(unit_str), Some(vi));
         }
     }
     (None, None, None)
 }
 
-/// Splits a trimmed cell into `(numeric_prefix, unit_suffix)` if valid.
-/// Realises: [REQ-INGEST-SYSML-TABLE-SPLIT-NUMBER-AND-UNIT]
+/// Splits a trimmed cell into `(numeric_prefix, unit_suffix)` if valid. Realises: [REQ-INGEST-SYSML-TABLE-SPLIT-NUMBER-AND-UNIT]
 fn split_number_and_unit(s: &str) -> Option<(&str, &str)> {
     let bytes = s.as_bytes();
     let (mut idx, mut has_digits) = (usize::from(matches!(bytes.first(), Some(b'+' | b'-'))), false);
@@ -246,8 +202,7 @@ fn split_number_and_unit(s: &str) -> Option<(&str, &str)> {
         .then_some((num_part, rest))
 }
 
-/// Parses range bounds string e.g. `[0.0, 100.0]`, `-20.0 to 60.0`, `18.0 .. 25.2`.
-/// Realises: [REQ-SYSML-INGEST-TABLE/parse_range_bounds]
+/// Parses range bounds string e.g. `[0.0, 100.0]`, `-20.0 to 60.0`, `18.0 .. 25.2`. Realises: [REQ-SYSML-INGEST-TABLE/parse_range_bounds]
 pub fn parse_range_bounds(range_text: &str) -> (Option<f64>, Option<f64>) {
     let clean: String = range_text.chars().filter(|&c| !matches!(c, '*' | '`' | '[' | ']' | '(' | ')')).collect();
     let parts = split_range_parts(clean.trim());
@@ -259,8 +214,7 @@ pub fn parse_range_bounds(range_text: &str) -> (Option<f64>, Option<f64>) {
     (None, None)
 }
 
-/// Splits a range string across `,`, `:`, `..`, or `to` delimiters.
-/// Realises: [REQ-INGEST-SYSML-TABLE-SPLIT-RANGE-PARTS]
+/// Splits a range string across `,`, `:`, `..`, or `to` delimiters. Realises: [REQ-INGEST-SYSML-TABLE-SPLIT-RANGE-PARTS]
 fn split_range_parts(s: &str) -> Vec<&str> {
     let (mut parts, mut start, mut i, s_bytes) = (Vec::new(), 0, 0, s.as_bytes());
     while i < s.len() {
@@ -284,8 +238,7 @@ fn split_range_parts(s: &str) -> Vec<&str> {
     parts
 }
 
-/// Extracts authoritative provenance citation from a row dictionary.
-/// Realises: [REQ-SYSML-INGEST-TABLE/extract_provenance_citation]
+/// Extracts authoritative provenance citation from a row dictionary. Realises: [REQ-SYSML-INGEST-TABLE/extract_provenance_citation]
 pub fn extract_provenance_citation(row: &BTreeMap<String, String>, headers: &[String]) -> String {
     headers
         .iter()
@@ -295,24 +248,20 @@ pub fn extract_provenance_citation(row: &BTreeMap<String, String>, headers: &[St
         .to_string()
 }
 
-/// Composes a grounded SysML v2 documentation string preserving description, unit, and OEM citation.
-/// Realises: [REQ-SYSML-INGEST-TABLE/compose_grounded_doc]
+/// Composes a grounded SysML v2 documentation string preserving description, unit, and OEM citation. Realises: [REQ-SYSML-INGEST-TABLE/compose_grounded_doc]
 pub fn compose_grounded_doc(description: &str, citation: &str, unit: &str) -> String {
-    let mut tokens = Vec::new();
-    if !description.trim().is_empty() {
-        tokens.push(description.trim().to_string());
-    }
-    if !unit.trim().is_empty() {
-        tokens.push(format!("[unit: {}]", unit.trim()));
-    }
-    if !citation.trim().is_empty() {
-        tokens.push(format!("[Source: {}]", citation.trim()));
-    }
-    tokens.join(" ").trim().to_string()
+    [
+        (!description.trim().is_empty()).then(|| description.trim().to_string()),
+        (!unit.trim().is_empty()).then(|| format!("[unit: {}]", unit.trim())),
+        (!citation.trim().is_empty()).then(|| format!("[Source: {}]", citation.trim())),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" ")
 }
 
-/// Classifies table type based purely on structural column header patterns.
-/// Realises: [REQ-SYSML-INGEST-TABLE/classify_table]
+/// Classifies table type based purely on structural column header patterns. Realises: [REQ-SYSML-INGEST-TABLE/classify_table]
 pub fn classify_table(headers: &[String]) -> TableType {
     let h_set: BTreeSet<&str> = headers.iter().map(String::as_str).collect();
     let has_any = |keys: &[&str]| keys.iter().any(|k| h_set.contains(k));
@@ -321,28 +270,25 @@ pub fn classify_table(headers: &[String]) -> TableType {
     if (has_bom_name && has_bom_attr) || (has_bom_name && headers.len() >= 3 && !has_any(&["direction", "dir", "port", "signal"])) {
         return TableType::Bom;
     }
-    let has_port = has_any(&["port", "port_name", "signal", "signal_name", "signal_id", "interface", "interface_name", "flow"]);
-    if has_port
+    if has_any(&["port", "port_name", "signal", "signal_name", "signal_id", "interface", "interface_name", "flow"])
         || (has_any(&["direction", "dir", "flow_direction"]) && has_any(&["type", "data_type", "payload", "rate", "protocol"]))
         || (h_set.contains("source_port") && h_set.contains("target_port"))
         || (h_set.contains("source") && h_set.contains("target"))
     {
         return TableType::Ports;
     }
-    let has_constraint = has_any(&["min", "max", "lower_bound", "upper_bound", "range", "valid_range", "limit", "bound", "bounds", "tolerance", "constraint", "assertion"]);
-    if has_constraint && (has_any(&["parameter", "param", "property", "metric", "variable", "name"]) || headers.len() >= 2) {
+    if has_any(&["min", "max", "lower_bound", "upper_bound", "range", "valid_range", "limit", "bound", "bounds", "tolerance", "constraint", "assertion"])
+        && (has_any(&["parameter", "param", "property", "metric", "variable", "name"]) || headers.len() >= 2)
+    {
         return TableType::Constraints;
     }
-    if let Some(first) = headers.first().filter(|_| (2..=3).contains(&headers.len())) {
-        if ["property", "parameter", "attribute", "key", "field", "name"].iter().any(|k| first.contains(k)) {
-            return TableType::Properties;
-        }
+    if headers.first().filter(|_| (2..=3).contains(&headers.len())).is_some_and(|f| ["property", "parameter", "attribute", "key", "field", "name"].iter().any(|k| f.contains(k))) {
+        return TableType::Properties;
     }
     TableType::Generic
 }
 
-/// Normalizes input lines into a GFM table-ready Markdown buffer.
-/// Realises: [REQ-SYSML-INGEST-TABLE/parse_markdown_tables]
+/// Normalizes input lines into a GFM table-ready Markdown buffer. Realises: [REQ-SYSML-INGEST-TABLE/parse_markdown_tables]
 fn prepare_table_markdown(lines: &[&str]) -> String {
     let (mut buf, mut in_tbl) = (String::new(), false);
     for (i, &raw) in lines.iter().enumerate() {
@@ -365,8 +311,7 @@ fn prepare_table_markdown(lines: &[&str]) -> String {
     buf
 }
 
-/// Parses lines of Markdown text into a sequence of structured [`MarkdownTable`] instances.
-/// Realises: [REQ-SYSML-INGEST-TABLE/parse_markdown_tables]
+/// Parses lines of Markdown text into a sequence of structured [`MarkdownTable`] instances. Realises: [REQ-SYSML-INGEST-TABLE/parse_markdown_tables]
 pub fn parse_markdown_tables(lines: &[&str]) -> Vec<MarkdownTable> {
     let markdown = replace_br_tags_with_space(&prepare_table_markdown(lines));
     let ast = parse_markdown_ast(&markdown);
@@ -397,13 +342,10 @@ pub fn parse_markdown_tables(lines: &[&str]) -> Vec<MarkdownTable> {
     tables
 }
 
-/// Checks if `s` is a GFM table alignment delimiter cell (`---`, `:---`, `:---:`, `---:`).
-/// Realises: [REQ-INGEST-SYSML-TABLE-IS-TABLE-DELIMITER-CELL]
+/// Checks if `s` is a GFM table alignment delimiter cell (`---`, `:---`, `:---:`, `---:`). Realises: [REQ-INGEST-SYSML-TABLE-IS-TABLE-DELIMITER-CELL]
 pub(crate) fn is_table_delimiter_cell(s: &str) -> bool {
-    let trimmed = s.trim();
-    let without_left = trimmed.strip_prefix(':').unwrap_or(trimmed);
-    let without_colons = without_left.strip_suffix(':').unwrap_or(without_left);
-    !without_colons.is_empty() && without_colons.chars().all(|c| c == '-')
+    let w = s.trim().trim_matches(':');
+    !w.is_empty() && w.chars().all(|c| c == '-')
 }
 
 #[cfg(test)]
@@ -411,28 +353,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_sanitize_identifier() {
-        assert_eq!(sanitize_identifier("Signal_Alpha (Hz)", "Item"), "Signal_Alpha");
-        assert_eq!(sanitize_identifier("[REQ-0001] Abstract Spec", "Item"), "Abstract_Spec");
-        assert_eq!(sanitize_identifier("1. Normative Statement", "Item"), "_1_Normative_Statement");
-        assert_eq!(sanitize_identifier("subsystem", "Item"), "subsystem_item");
-        assert_eq!(sanitize_identifier("AC-01: Pure Schema-Driven", "Item"), "AC_01_Pure_Schema_Driven");
-        assert_eq!(sanitize_identifier("port", "Item"), "port_item");
-        assert_eq!(sanitize_identifier("text", "Item"), "text_item");
-        assert_eq!(sanitize_identifier("", "Fallback"), "Fallback");
-    }
-
-    #[test]
-    fn test_extract_unit_and_normalize_col() {
+    fn test_sanitize_and_table_helpers() {
+        for (inp, fb, exp) in [("Signal_Alpha (Hz)", "Item", "Signal_Alpha"), ("[REQ-0001] Abstract Spec", "Item", "Abstract_Spec"), ("1. Normative Statement", "Item", "_1_Normative_Statement"), ("subsystem", "Item", "subsystem_item"), ("AC-01: Pure Schema-Driven", "Item", "AC_01_Pure_Schema_Driven"), ("port", "Item", "port_item"), ("text", "Item", "text_item"), ("", "Fallback", "Fallback")] {
+            assert_eq!(sanitize_identifier(inp, fb), exp);
+        }
         assert_eq!(extract_unit_from_header_or_val("Param_Alpha (kg)"), ("Param_Alpha".to_string(), "kg".to_string()));
         assert_eq!(extract_unit_from_header_or_val("Rate_Beta [MHz]"), ("Rate_Beta".to_string(), "MHz".to_string()));
         assert_eq!(normalize_col("Requirement ID"), "requirement_id");
         assert_eq!(normalize_col("**Deterministic UUIDv5**"), "deterministic_uuidv5");
         assert_eq!(normalize_col("Param_Alpha (kg)"), "param_alpha");
-    }
-
-    #[test]
-    fn test_clean_cell_numeric_and_range() {
         assert_eq!(clean_cell_value("[Standard 101](https://example.com)"), "Standard 101");
         assert_eq!(clean_cell_value("Line 1<br/>Line 2"), "Line 1 Line 2");
         assert_eq!(clean_cell_value("<b>Bold</b> text"), "Bold text");

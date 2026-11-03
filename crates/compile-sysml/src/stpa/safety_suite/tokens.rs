@@ -1,16 +1,41 @@
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
 //! Parameter token harvesting, constraint token extraction, and Markdown/Mermaid identifier sanitization.
 //!
-//! Safety & Traceability: Realises: [REQ-STPA-SAFETY-SUITE-TOKENS]
-//! Contract: Extracts deterministic `BTreeMap<String, String>` parameter bindings from SysML v2 package and part scopes, resolves case-insensitive token lookups, and sanitizes Mermaid IDs and single-line Markdown table cells.
-//! Bounds & Faults: Executes linear UTF-8-safe `.get(..)` and character-iterator passes with saturating arithmetic and zero panics, regular expressions, or direct slice indexing.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, IEC 61508, and ECSS-E-ST-40C
+//! safety transpilation objectives for module `crates/compile-sysml/src/stpa/safety_suite/tokens.rs`.
+//!
+//! ## 2. Invariants & Mathematical Properties
+//! - Extracts deterministic `BTreeMap<String, String>` parameter bindings from SysML v2 package and part scopes.
+//! - Resolves case-insensitive token lookups and sanitizes Mermaid IDs and single-line Markdown table cells.
+//!
+//! ## 3. Preconditions
+//! - Caller supplies a parsed `PackageDef` or UTF-8 string slice.
+//!
+//! ## 4. Postconditions
+//! - Returns sorted `BTreeMap<String, String>` parameter maps and sanitized identifiers/cells.
+//!
+//! ## 5. Algorithmic Complexity Bounds
+//! - Time Complexity: O(N * log T) over AST nodes N and extracted token count T.
+//! - Space Complexity: O(T) bounded auxiliary memory for extracted token bindings.
+//!
+//! ## 6. Failure Modes & Fault Tolerance
+//! - Interface: Handles multi-byte UTF-8 prefixes and empty expressions without mid-codepoint slicing.
+//! - State: Pure functional extraction and string sanitization.
+//! - Action: Executes linear UTF-8-safe `.get(..)` passes with saturating arithmetic and zero panics.
+//! - Resource: Bounded allocations proportional to AST attribute and constraint counts.
+//!
+//! ## 7. Realization & Traceability
+//! Realises: [REQ-0603], [REQ-STPA-SAFETY-SUITE-TOKENS] | SysML v2: PackageDef(safety_suite_tokens)
 
 use super::*;
 
 /// Collects symbolic parameter tokens from package- and part-scoped AST attribute defaults and constraint expressions.
-///
-/// Safety & Traceability: Realises: [REQ-STPA-SAFETY-SUITE-COLLECT-PARAMETER-TOKENS]
-/// Contract: Harvests package and subpackage `attribute_defs` with precedence over nested `PartDef.attributes`, then supplements unbound keys from package and part `ConstraintDef` relational expressions into a sorted `BTreeMap<String, String>`.
-/// Bounds & Faults: Bounded `O(N * log T)` traversal over AST nodes `N` and extracted token count `T` with zero panics or unbounded recursion.
+/// Realises: [REQ-STPA-SAFETY-SUITE-COLLECT-PARAMETER-TOKENS]
 pub fn collect_parameter_tokens(pkg: &PackageDef) -> BTreeMap<String, String> {
     let mut tokens = BTreeMap::new();
 
@@ -92,7 +117,7 @@ pub(super) fn find_token_prefix_ci<'a>(
 /// Realises: [REQ-STPA-SAFETY-SUITE-EXTRACT-CONSTRAINT-TOKENS]
 pub(super) fn extract_constraint_tokens(expr: &str, tokens: &mut BTreeMap<String, String>) {
     let operators = ["<=", ">=", "<", ">", "="];
-    let mut idx = 0;
+    let mut idx = 0usize;
     while let Some(tail) = expr.get(idx..) {
         if tail.is_empty() {
             break;
@@ -101,12 +126,13 @@ pub(super) fn extract_constraint_tokens(expr: &str, tokens: &mut BTreeMap<String
         if let Some(&op) = matched_op {
             let before = expr.get(..idx).unwrap_or("");
             let before_trimmed = before.trim_end();
-            let id_start = before_trimmed
-                .char_indices()
+            let trailing_id_len = before_trimmed
+                .as_bytes()
+                .iter()
                 .rev()
-                .take_while(|&(_, c)| c.is_ascii_alphanumeric() || c == '_')
-                .last()
-                .map_or(before_trimmed.len(), |(pos, _)| pos);
+                .take_while(|&&b| b.is_ascii_alphanumeric() || b == b'_')
+                .count();
+            let id_start = before_trimmed.len().saturating_sub(trailing_id_len);
             let key = before_trimmed.get(id_start..).unwrap_or("");
             let key_valid = key.as_bytes().split_first().is_some_and(|(&first, rest)| {
                 (first.is_ascii_alphabetic() || first == b'_')
@@ -138,10 +164,7 @@ pub(super) fn extract_constraint_tokens(expr: &str, tokens: &mut BTreeMap<String
 }
 
 /// Collects all `ConstraintDef` nodes across package, subpackage, and part scopes in deterministic traversal order.
-///
-/// Safety & Traceability: Realises: [REQ-STPA-SAFETY-SUITE-COLLECT-ALL-CONSTRAINTS]
-/// Contract: Delegates to `PackageDef::get_all_constraints` to return an owned `Vec<ConstraintDef>` preserving AST declaration order.
-/// Bounds & Faults: Linear `O(N)` traversal over package hierarchy nodes `N` with zero panics or side effects.
+/// Realises: [REQ-STPA-SAFETY-SUITE-COLLECT-ALL-CONSTRAINTS]
 pub fn collect_all_constraints(pkg: &PackageDef) -> Vec<ConstraintDef> {
     pkg.get_all_constraints()
 }

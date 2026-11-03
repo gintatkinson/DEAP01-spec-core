@@ -25,6 +25,7 @@
 //! Realises: [REQ-0608], [SC-01], [FLS: fls_cst_vfs_mod]
 //! SysML v2: part def RustCstSubsystem
 
+pub mod codemod;
 pub mod diagnostics_ndjson;
 pub mod doc_edit;
 pub mod doc_tier;
@@ -46,6 +47,14 @@ pub mod vfs;
 #[cfg(test)]
 mod cst_tests;
 
+pub use crate::workspace::lock_governor::{
+    parse_locked_manifest_snapshot, verify_pinned_cst_dependency_graph,
+};
+pub use codemod::{
+    inventory_extractable_items, list_rust_cst_items, splice_disjoint_reverse_spans, CodemodError,
+    RustCstInventoryError, RustCstItemDescriptor, RustItemDescriptor, RustItemInventory,
+    SpanSpliceEdit, Utf8ByteSpan, ZeroTokenCodemodConfig,
+};
 pub use diagnostics_ndjson::{
     apply_machine_applicable_fixes, emit_ndjson_line, render_ariadne_diagnostic,
     NdjsonDiagnostic, NdjsonSpan,

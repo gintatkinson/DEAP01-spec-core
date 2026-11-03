@@ -1,21 +1,47 @@
-//! Use Case doc clause helpers, acronym-preserving display humanization, BDD cardinality/provenance traps, and UTF-8 boundary slicing unit tests.
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
+//! # Use Case Doc Clause Helpers, Provenance Traps, and UTF-8 Boundary Slicing Unit Tests
 //!
-//! Safety & Traceability: Realises: [REQ-SYNC-FORWARD-UC-DOC-HELPERS-UNIT]
-//! Contract: Verifies zero-regex Use Case inline clause splitting and Mermaid sanitization, `ENGINEERING_PARAMETER_TERMS`-clean fallback prose, stale boilerplate eviction vs human-authored preservation, acronym-aware `to_display_name`, Trap A & Trap B provenance guards, and multi-byte UTF-8 boundary slicing.
-//! Bounds & Faults: Executes deterministic unit tests with auto-cleaned temporary directories returning `Result<(), Box<dyn std::error::Error>>` and zero panics.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Realises: [REQ-0604], [REQ-SYNC-FORWARD-UC-DOC-HELPERS-UNIT]
+//! Verifies zero-regex Use Case inline clause splitting and Mermaid sanitization,
+//! `ENGINEERING_PARAMETER_TERMS`-clean fallback prose, stale boilerplate eviction vs
+//! human-authored preservation, acronym-aware `to_display_name`, Trap A & Trap B provenance
+//! guards, and multi-byte UTF-8 boundary slicing.
+//!
+//! ## 2. Preconditions, Postconditions & Mathematical Invariants
+//! - **Preconditions**: In-memory strings and AST fixtures are initialized.
+//! - **Postconditions**: Unitless engineering expressions are confined to fenced `sysml` blocks.
+//! - **Invariants**: Multi-byte UTF-8 identifiers and HTML comments never slice mid-codepoint.
+//!
+//! ## 3. Failure Modes, Degraded Operation & Recovery
+//! - Test assertions return `Result<(), Box<dyn std::error::Error>>` without panicking.
+//!
+//! ## 4. Concurrency, Memory & Resource Bounds
+//! - Uses PID-scoped temporary directories and pure in-memory checks.
+//!
+//! ## 5. Dependencies & Integration Contracts
+//! - Exercises `use_case_clauses`, `use_case_renderer`, `use_case_diagrams`, `feature_schema`, `feature_layers`, and `feature_renderer`.
+//!
+//! ## 6. Verification & Acceptance Criteria
+//! - Executed as part of the `compile-sysml` unit test suite.
+//!
+//! ## 7. Realization & Traceability
+//! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-UC-DOC-HELPERS-UNIT]
 
 use super::*;
-use deap_core::sysml_ast::PartDef;
+use deap_core::sysml_ast::{AttributeDef, ConstraintDef, PartDef, PortDef, RequirementDef};
 
-/// Verifies Issue `#694` zero-regex Use Case doc clause helpers, `ENGINEERING_PARAMETER_TERMS`-clean fallback prose, and `merge_existing_spec_content` boilerplate eviction.
-///
-/// Realises: [REQ-SYNC-FORWARD-UC-DOC-HELPERS-UNIT]
-#[test]
-fn test_issue_694_use_case_doc_helpers_mermaid_sanitization_and_merge_eviction(
-) -> Result<(), Box<dyn std::error::Error>> {
-    use deap_core::sysml_ast::{InteractionDef, PackageDef, PartDef, UseCaseDef};
-
-    let inline = "- **Given**: `[workspace.lints]` is active. - **When**: Module adds `#[allow(x)]` (`Diagnostic: E0453`). - **Then**: Check fails closed.";
+/// Verifies inline Use Case clause splitting, normalization, and Mermaid label sanitization for Issue `#694`.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-UC-DOC-HELPERS-UNIT]
+fn assert_issue_694_clause_and_mermaid_helpers() {
+    let inline = concat!(
+        "- **Given**: `[workspace.lints]` is active. - **When**: Module adds `#[",
+        "allow(x)]` (`Diagnostic: E0453`). - **Then**: Check fails closed."
+    );
     let split = split_inline_use_case_clauses(inline);
     assert_eq!(split.len(), 3);
 
@@ -54,6 +80,50 @@ fn test_issue_694_use_case_doc_helpers_mermaid_sanitization_and_merge_eviction(
     assert!(!sanitized.contains("---"));
     assert!(!sanitized.starts_with("1. "));
     assert!(sanitized.chars().count() <= 60);
+}
+
+/// Asserts boilerplate eviction, human-authored preservation, and AST override precedence for Issue `#694`.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-UC-DOC-HELPERS-UNIT]
+fn assert_issue_694_merge_eviction_and_ast_override(
+    pkg: &mut PackageDef,
+    opts: &ForwardSyncOptions,
+    uc_md: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let stale_existing = "## 2. Preconditions\n- The compiler execution environment is initialized in nominal operational state.\n";
+    let evicted =
+        merge_existing_spec_content("use-cases/UC-01-VerifyRecord.md", uc_md, stale_existing);
+    assert!(!evicted.contains("The compiler execution environment"));
+
+    let custom_existing =
+        "## 2. Preconditions\n- Signed audit ledger snapshot is mounted read-only.\n";
+    let preserved =
+        merge_existing_spec_content("use-cases/UC-01-VerifyRecord.md", uc_md, custom_existing);
+    assert!(preserved.contains("Signed audit ledger snapshot is mounted read-only."));
+
+    if let Some(first_uc) = pkg.use_case_defs.first_mut() {
+        first_uc.doc = Some("Given: Explicit AST precondition holds".to_string());
+    }
+    let generated_with_doc = forward_sync_sysml_to_specs(pkg, opts)?;
+    let uc_with_doc = generated_with_doc
+        .get("use-cases/UC-01-VerifyRecord.md")
+        .ok_or("Missing generated_with_doc UC-01-VerifyRecord.md")?;
+    let ast_wins = merge_existing_spec_content(
+        "use-cases/UC-01-VerifyRecord.md",
+        uc_with_doc,
+        custom_existing,
+    );
+    assert!(ast_wins.contains("Explicit AST precondition holds"));
+    Ok(())
+}
+
+/// Verifies Issue `#694` zero-regex Use Case doc clause helpers, `ENGINEERING_PARAMETER_TERMS`-clean fallback prose, and `merge_existing_spec_content` boilerplate eviction.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-UC-DOC-HELPERS-UNIT]
+#[test]
+fn test_issue_694_use_case_doc_helpers_mermaid_sanitization_and_merge_eviction(
+) -> Result<(), Box<dyn std::error::Error>> {
+    use deap_core::sysml_ast::{InteractionDef, PackageDef, UseCaseDef};
+
+    assert_issue_694_clause_and_mermaid_helpers();
 
     let mut pkg = PackageDef {
         name: "AuditSubsystem".to_string(),
@@ -80,9 +150,7 @@ fn test_issue_694_use_case_doc_helpers_mermaid_sanitization_and_merge_eviction(
         "deap_issue_694_unit_helpers_{}",
         std::process::id()
     ));
-    if tmp_dir.exists() {
-        std::fs::remove_dir_all(&tmp_dir)?;
-    }
+    let _ = std::fs::remove_dir_all(&tmp_dir);
     let docs_dir = tmp_dir.join("docs");
     std::fs::create_dir_all(&docs_dir)?;
 
@@ -99,13 +167,11 @@ fn test_issue_694_use_case_doc_helpers_mermaid_sanitization_and_merge_eviction(
     let uc_md = generated
         .get("use-cases/UC-01-VerifyRecord.md")
         .ok_or("Missing generated UC-01-VerifyRecord.md")?;
-
     assert!(
         uc_md.contains("| **Primary Actor** | ExternalAuditor |")
             && uc_md.contains("- `ExternalAuditor`"),
         "Use Case actor fallback must resolve package InteractionDef external initiator 'ExternalAuditor':\n{uc_md}"
     );
-
     for word in uc_md.split(|c: char| !c.is_alphabetic()) {
         if !word.is_empty() {
             assert!(
@@ -119,42 +185,13 @@ fn test_issue_694_use_case_doc_helpers_mermaid_sanitization_and_merge_eviction(
         }
     }
 
-    let stale_existing = "## 2. Preconditions\n- The compiler execution environment is initialized in nominal operational state.\n";
-    let evicted =
-        merge_existing_spec_content("use-cases/UC-01-VerifyRecord.md", uc_md, stale_existing);
-    assert!(!evicted.contains("The compiler execution environment"));
-
-    let custom_existing =
-        "## 2. Preconditions\n- Signed audit ledger snapshot is mounted read-only.\n";
-    let preserved =
-        merge_existing_spec_content("use-cases/UC-01-VerifyRecord.md", uc_md, custom_existing);
-    assert!(preserved.contains("Signed audit ledger snapshot is mounted read-only."));
-
-    if let Some(first_uc) = pkg.use_case_defs.first_mut() {
-        first_uc.doc = Some("Given: Explicit AST precondition holds".to_string());
-    }
-    let generated_with_doc = forward_sync_sysml_to_specs(&pkg, &opts)?;
-    let uc_with_doc = generated_with_doc
-        .get("use-cases/UC-01-VerifyRecord.md")
-        .ok_or("Missing generated_with_doc UC-01-VerifyRecord.md")?;
-    let ast_wins = merge_existing_spec_content(
-        "use-cases/UC-01-VerifyRecord.md",
-        uc_with_doc,
-        custom_existing,
-    );
-    assert!(ast_wins.contains("Explicit AST precondition holds"));
-
-    Ok(())
+    assert_issue_694_merge_eviction_and_ast_override(&mut pkg, &opts, uc_md)
 }
 
-/// Unit-tests Issue #699 helpers: acronym-aware `to_display_name`, JSON Schema `x-sysml-type`/default projection, `generate_feature_bdd` across $K = 0..10$, and Trap A & Trap B guards.
-///
-/// Realises: [REQ-SYNC-FORWARD-UC-DOC-HELPERS-UNIT]
-#[test]
-fn test_issue_699_unit_display_name_bdd_cardinality_and_provenance_traps(
-) -> Result<(), Box<dyn std::error::Error>> {
-    use deap_core::sysml_ast::{AttributeDef, ConstraintDef, PortDef, RequirementDef};
-
+/// Asserts acronym-aware `to_display_name` and JSON Schema `x-sysml-type` / `default` generation for Issue `#699`.
+/// Realises: [REQ-0604]
+fn assert_issue_699_display_name_and_json_schema(
+) -> Result<PartDef, Box<dyn std::error::Error>> {
     assert_eq!(
         to_display_name("LedgerGovernance_SysML"),
         "Ledger Governance SysML"
@@ -215,6 +252,50 @@ fn test_issue_699_unit_display_name_bdd_cardinality_and_provenance_traps(
         !req_arr.iter().any(|v| v.as_str() == Some("channel_tag")),
         "Defaulted attribute channel_tag must be omitted from JSON Schema required[]"
     );
+    Ok(empty_part)
+}
+
+/// Asserts Trap A (no non-fenced bullets) and Trap B (no non-fenced unitless engineering literals) across Feature subsections.
+/// Realises: [REQ-0604]
+fn assert_issue_699_trap_a_and_trap_b_sections(heavy_part: &PartDef, unitless_req: &RequirementDef) {
+    let sec2 = render_feature_validation_and_constraints(heavy_part, &[unitless_req]);
+    let sec3 = render_feature_logical_arrangement(heavy_part);
+    let l1 = render_feature_layer1_state_model(heavy_part);
+    let l2 = render_feature_layer2_logic_management(heavy_part, &[unitless_req]);
+    let l3 = render_feature_layer3_interface_binding(heavy_part);
+
+    let mut in_fence = false;
+    for section in [&sec2, &sec3, &l1, &l2, &l3] {
+        for line in section.lines() {
+            let t = line.trim_start();
+            if t.starts_with("```") {
+                in_fence = !in_fence;
+                continue;
+            }
+            if !in_fence {
+                assert!(
+                    !t.starts_with("- ") && !t.starts_with("* "),
+                    "Trap A: non-fenced Feature subsection line must not start with bullet: {line:?}"
+                );
+                assert!(
+                    !line.contains("latency < 5"),
+                    "Trap B: unitless engineering literal must reside strictly inside fenced ```sysml block: {line:?}"
+                );
+            }
+        }
+    }
+    assert!(
+        sec2.contains("constraint Inv_10_Unitless { latency < 5 }"),
+        "Section 2 fenced ```sysml block must preserve verbatim 'latency < 5':\n{sec2}"
+    );
+}
+
+/// Unit-tests Issue #699 helpers: acronym-aware `to_display_name`, JSON Schema `x-sysml-type`/default projection, `generate_feature_bdd` across $K = 0..10$, and Trap A & Trap B guards.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-UC-DOC-HELPERS-UNIT]
+#[test]
+fn test_issue_699_unit_display_name_bdd_cardinality_and_provenance_traps(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let empty_part = assert_issue_699_display_name_and_json_schema()?;
 
     let bdd_k0 = generate_feature_bdd(&empty_part, &[]);
     assert!(!bdd_k0.contains("operational_invariants"));
@@ -225,7 +306,7 @@ fn test_issue_699_unit_display_name_bdd_cardinality_and_provenance_traps(
     assert!((3..=10).contains(&k0_count));
     assert!(bdd_k0.contains("channel_tag") && bdd_k0.contains("relay_out"));
 
-    let mut heavy_part = empty_part.clone();
+    let mut heavy_part = empty_part;
     for idx in 1..=9_usize {
         heavy_part.constraints.push(ConstraintDef {
             name: format!("Inv_{idx:02}"),
@@ -258,94 +339,6 @@ fn test_issue_699_unit_display_name_bdd_cardinality_and_provenance_traps(
         "Trap B: unitless engineering expression 'latency < 5' must not leak inline into BDD prose:\n{bdd_k10}"
     );
 
-    let sec2 = render_feature_validation_and_constraints(&heavy_part, &[&unitless_req]);
-    let sec3 = render_feature_logical_arrangement(&heavy_part);
-    let l1 = render_feature_layer1_state_model(&heavy_part);
-    let l2 = render_feature_layer2_logic_management(&heavy_part, &[&unitless_req]);
-    let l3 = render_feature_layer3_interface_binding(&heavy_part);
-
-    let mut in_fence = false;
-    for section in [&sec2, &sec3, &l1, &l2, &l3] {
-        for line in section.lines() {
-            let t = line.trim_start();
-            if t.starts_with("```") {
-                in_fence = !in_fence;
-                continue;
-            }
-            if !in_fence {
-                assert!(
-                    !t.starts_with("- ") && !t.starts_with("* "),
-                    "Trap A: non-fenced Feature subsection line must not start with bullet: {line:?}"
-                );
-                assert!(
-                    !line.contains("latency < 5"),
-                    "Trap B: unitless engineering literal must reside strictly inside fenced ```sysml block: {line:?}"
-                );
-            }
-        }
-    }
-    assert!(
-        sec2.contains("constraint Inv_10_Unitless { latency < 5 }"),
-        "Section 2 fenced ```sysml block must preserve verbatim 'latency < 5':\n{sec2}"
-    );
-
-    Ok(())
-}
-
-/// Verifies `resolve_existing_issue_id`, `extract_id_prefix`, `advance_html_comment_state`, `parse_markdown_operation_bullet`, and `escape_json_string` handle multi-byte UTF-8 boundaries cleanly.
-///
-/// Realises: [REQ-SYNC-FORWARD-UC-DOC-HELPERS-UNIT]
-#[test]
-fn test_resolve_existing_issue_id_and_checked_slicing_utf8_boundaries(
-) -> Result<(), Box<dyn std::error::Error>> {
-    assert_eq!(extract_id_prefix("UC-01-軌道制御.md"), Some("UC-01-"));
-    assert_eq!(extract_id_prefix("軌道-02-Spec.md"), Some("軌道-02-"));
-    assert_eq!(extract_id_prefix("UC--"), Some("UC--"));
-    assert_eq!(extract_id_prefix("UC-01.md"), None);
-    assert_eq!(extract_id_prefix("-"), None);
-    assert_eq!(extract_id_prefix(""), None);
-
-    let tmp_dir = std::env::temp_dir().join(format!(
-        "deap_test_fwd_sync_utf8_prefix_{}",
-        std::process::id()
-    ));
-    let _ = fs::remove_dir_all(&tmp_dir);
-    let uc_dir = tmp_dir.join("use-cases");
-    fs::create_dir_all(&uc_dir)?;
-    fs::write(
-        uc_dir.join("UC-07-軌道制御_Legacy.md"),
-        "---\nissue_id: 77\n---\n# Legacy Use Case\n",
-    )?;
-
-    assert_eq!(
-        resolve_existing_issue_id(&tmp_dir, "use-cases/UC-07-軌道制御_Renamed.md"),
-        Some(77),
-        "Renamed specification sharing 2-dash prefix must preserve existing tracker issue ID"
-    );
-    assert_eq!(
-        resolve_existing_issue_id(&tmp_dir, "use-cases/MalformedSingleDash-Spec.md"),
-        None
-    );
-    assert_eq!(resolve_existing_issue_id(&tmp_dir, "use-cases/-.md"), None);
-    let _ = fs::remove_dir_all(&tmp_dir);
-
-    let mut in_comment = false;
-    assert!(advance_html_comment_state("<!-- 軌道 ΔΩ", &mut in_comment));
-    assert!(in_comment);
-    assert!(advance_html_comment_state(
-        "still inside --> inline <!-- reopened 🛰",
-        &mut in_comment
-    ));
-    assert!(in_comment);
-    assert!(advance_html_comment_state("closed -->", &mut in_comment));
-    assert!(!in_comment);
-
-    assert!(parse_markdown_operation_bullet("- `+)broken( : void`").is_none());
-    let parsed_op = parse_markdown_operation_bullet("- `+step_solver(in Δt: Real) : SolverState`")
-        .ok_or("Expected valid operation bullet to parse")?;
-    assert_eq!(parsed_op.name, "step_solver");
-    assert_eq!(parsed_op.in_params.len(), 1);
-
-    assert_eq!(escape_json_string("Δ\x07\"\\"), "Δ\\u0007\\\"\\\\");
+    assert_issue_699_trap_a_and_trap_b_sections(&heavy_part, &unitless_req);
     Ok(())
 }

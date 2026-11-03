@@ -50,7 +50,8 @@ pub mod workspace;
 
 pub use diagnostics::{
     emit_cli_ndjson_stream, format_ndjson_line, resolve_utf8_span, Applicability, DefectDossier,
-    Diagnostic, DiagnosticSeverity, RustcCompilerMessageEnvelope, RustcDiagnosticSpan, WhyEntry,
+    Diagnostic, DiagnosticEmitError, DiagnosticSeverity, RustcCompilerMessageEnvelope,
+    RustcDiagnosticSpan, StructuredDiagnostic, WhyEntry,
 };
 pub use digest::{compute_sha256, compute_sha256_bytes};
 pub use error::{CoreError, CoreResult};
@@ -66,12 +67,16 @@ pub use rules::{
 pub use rust_cst::{
     analyze_cst_v2_metrics, classify_cfg_test_excluded_doc_tier, evaluate_metrics,
     evaluate_metrics_and_format_ndjson, extract_callable_v2_metrics,
+    inventory_extractable_items, list_rust_cst_items, parse_locked_manifest_snapshot,
     parse_verified_lossless_cst, run_offline_locked_workspace_gate,
-    validate_metrics_thresholds, verify_analyzer_envelope_and_seal_receipt,
-    ClassifiedDocTierItem, CstComplexityEnvelope, CstMetricsError, CstMetricsThresholds,
-    DeapV2AstMetricsReport, DocTier, DocTierInventory, FnAstMetrics, LockManifestSnapshot,
-    LockedPackageRecord, OfflineLockGovernanceError, PackageSourceKind,
-    SupplyChainVerificationReceipt, VerifiedLosslessCst,
+    splice_disjoint_reverse_spans, validate_metrics_thresholds,
+    verify_analyzer_envelope_and_seal_receipt, verify_pinned_cst_dependency_graph,
+    ClassifiedDocTierItem, CodemodError, CstComplexityEnvelope, CstMetricsError,
+    CstMetricsThresholds, DeapV2AstMetricsReport, DocTier, DocTierInventory, FnAstMetrics,
+    LockManifestSnapshot, LockedPackageRecord, OfflineLockGovernanceError, PackageSourceKind,
+    RustCstInventoryError, RustCstItemDescriptor, RustItemDescriptor, RustItemInventory,
+    SpanSpliceEdit, SupplyChainVerificationReceipt, Utf8ByteSpan, VerifiedLosslessCst,
+    ZeroTokenCodemodConfig,
 };
 pub use salsa_db::{
     create_vfs_salsa_input, file_diagnostics_query, parse_cst_query, semantic_metrics_query,

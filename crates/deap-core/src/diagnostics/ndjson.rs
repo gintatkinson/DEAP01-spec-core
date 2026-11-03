@@ -43,6 +43,62 @@ fn default_diagnostic_message_type() -> String {
     String::from("diagnostic")
 }
 
+/// [DOC-TIER: A] Fail-closed error taxonomy for `rustc` NDJSON diagnostic emission and machine-applicable fixes (`TD-08..TD-11`).
+///
+/// Safety & Traceability: Realises: [REQ-DIAG-MODULE], [REQ-0608]
+/// Contract: Classifies UTF-8 span validation, overlapping machine-fix spans, post-fix syntax verification, serialization, and stream I/O faults under `DEAP-E0801`..`DEAP-E0804`.
+/// Bounds & Faults: O(1) error code lookup and deterministic `Display` formatting without panicking.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DiagnosticEmitError {
+    /// Span is inverted, out of bounds, or splits a multi-byte UTF-8 code-point (`DEAP-E0801`).
+    InvalidUtf8Span,
+    /// Two or more machine-applicable replacement spans overlap in byte range (`DEAP-E0802`).
+    OverlappingMachineFixSpan,
+    /// Spliced source failed post-fix CST/syntax verification (`DEAP-E0803`).
+    PostFixSyntaxError(String),
+    /// Envelope serialization failed or emitted forbidden control bytes (`DEAP-E0804`).
+    SerializationError(String),
+    /// Output stream write or lock operation failed (`DEAP-E0804`).
+    IoError(String),
+}
+
+impl DiagnosticEmitError {
+    /// [DOC-TIER: A] Returns the canonical `DEAP-E0801`..`DEAP-E0804` diagnostic code for this error variant.
+    ///
+    /// Safety & Traceability: Realises: [REQ-DIAG-MODULE], [REQ-0608]
+    /// Contract: Maps each `DiagnosticEmitError` variant deterministically to its static diagnostic identifier.
+    /// Bounds & Faults: O(1) `const fn` lookup; never panics.
+    #[must_use]
+    pub const fn diagnostic_code(&self) -> &'static str {
+        match self {
+            Self::InvalidUtf8Span => "DEAP-E0801",
+            Self::OverlappingMachineFixSpan => "DEAP-E0802",
+            Self::PostFixSyntaxError(_) => "DEAP-E0803",
+            Self::SerializationError(_) | Self::IoError(_) => "DEAP-E0804",
+        }
+    }
+}
+
+impl std::fmt::Display for DiagnosticEmitError {
+    /// Formats the diagnostic emission error prefixed by its canonical `DEAP-E08xx` code.
+    /// Realises: [REQ-0608]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let code = self.diagnostic_code();
+        match self {
+            Self::InvalidUtf8Span => write!(f, "{code}: invalid or mid-codepoint UTF-8 byte span"),
+            Self::OverlappingMachineFixSpan => {
+                write!(f, "{code}: overlapping machine-applicable fix spans")
+            }
+            Self::PostFixSyntaxError(msg) => write!(f, "{code}: post-fix syntax error: {msg}"),
+            Self::SerializationError(msg) => write!(f, "{code}: NDJSON serialization error: {msg}"),
+            Self::IoError(msg) => write!(f, "{code}: NDJSON stream I/O error: {msg}"),
+        }
+    }
+}
+
+impl std::error::Error for DiagnosticEmitError {}
+
 /// [DOC-TIER: A] Machine-fix applicability classification matching `rustc` JSON diagnostics.
 ///
 /// Safety & Traceability: Realises: [REQ-DIAG-MODULE], [REQ-0608]

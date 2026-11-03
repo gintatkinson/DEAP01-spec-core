@@ -1,25 +1,46 @@
-//! Feature Mermaid `classDiagram` lowering and bijective `ActionDef` operation signature and bullet codecs.
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
+//! # Feature Mermaid Class Diagram and Operation Bullet Codecs
 //!
-//! Safety & Traceability: Realises: [REQ-SYNC-FORWARD-GENERATE-CLASS-DIAGRAM]
-//! Contract: Synthesizes Check 13B compliant Mermaid `classDiagram` blocks from `PartDef` classifiers and provides symmetric `ActionDef` Mermaid signature formatting, Feature Markdown operation bullet formatting, and fail-closed reverse bullet parsing.
-//! Bounds & Faults: Enforces bounds-checked UTF-8 slicing (`.get`, `.strip_prefix`, `.split_once`) and saturating index offsets (`saturating_add`), returning `None` on malformed Markdown operation bullets without panicking.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-CLASS-DIAGRAM]
+//! Synthesizes Check 13B compliant Mermaid `classDiagram` blocks and bijective `ActionDef`
+//! operation signature and bullet codecs under ISO/IEC/IEEE 15288:2023.
+//!
+//! ## 2. Preconditions, Postconditions & Mathematical Invariants
+//! - **Preconditions**: Input `PartDef`, `ActionDef`, or Markdown bullet slices are valid UTF-8.
+//! - **Postconditions**: Emits Mermaid class blocks and bijective Markdown operation bullets.
+//! - **Invariants**: Operation signatures emit zero secondary colons or curly braces in Mermaid members.
+//!
+//! ## 3. Failure Modes, Degraded Operation & Recovery
+//! - Malformed Markdown operation bullets return `None` fail-closed without panicking.
+//!
+//! ## 4. Concurrency, Memory & Resource Bounds
+//! - Pure single-threaded `O(N)` formatting and parsing over member slices and bullet lines.
+//!
+//! ## 5. Dependencies & Integration Contracts
+//! - Consumed by `feature_emitter`, `epic_diagrams`, and `reverse::extractor`.
+//!
+//! ## 6. Verification & Acceptance Criteria
+//! - Verified by forward/reverse round-trip unit tests in `sync/forward/tests*.rs`.
+//!
+//! ## 7. Realization & Traceability
+//! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-CLASS-DIAGRAM]
 
 use super::*;
 
-/// Generates a Check 13B compliant Mermaid `classDiagram` lowered from `PartDef` members and subparts.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-CLASS-DIAGRAM]
-pub(crate) fn generate_class_diagram(part: &PartDef) -> String {
-    let mut lines = Vec::new();
-    lines.push("classDiagram".to_string());
-
+/// Appends a single `PartDef` Mermaid `class` declaration (ports, attributes, operations, and actions) to `lines`.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-CLASS-DIAGRAM]
+pub(crate) fn append_part_class_block(lines: &mut Vec<String>, part: &PartDef) {
     let has_members = !part.ports.is_empty()
         || !part.attributes.is_empty()
         || !part.operations.is_empty()
         || !part.actions.is_empty();
-
     if has_members {
         lines.push(format!("    class {} {{", part.name));
-
         for port in &part.ports {
             let dir_prefix = if port.direction == "in" {
                 "in"
@@ -38,7 +59,6 @@ pub(crate) fn generate_class_diagram(part: &PartDef) -> String {
                 p_type, port.name, dir_prefix
             ));
         }
-
         for attr in &part.attributes {
             let a_type = if attr.type_name.is_empty() {
                 "String"
@@ -47,7 +67,6 @@ pub(crate) fn generate_class_diagram(part: &PartDef) -> String {
             };
             lines.push(format!("        +{} {}", a_type, attr.name));
         }
-
         let mut emitted_ops = BTreeSet::new();
         for op in &part.operations {
             let ret = op.return_type.as_deref().unwrap_or("void");
@@ -55,7 +74,6 @@ pub(crate) fn generate_class_diagram(part: &PartDef) -> String {
                 lines.push(format!("        +{}() {}", op.name, ret));
             }
         }
-
         for act in &part.actions {
             if emitted_ops.insert(act.name.as_str()) {
                 lines.push(format!(
@@ -64,12 +82,17 @@ pub(crate) fn generate_class_diagram(part: &PartDef) -> String {
                 ));
             }
         }
-
         lines.push("    }".to_string());
     } else {
         lines.push(format!("    class {}", part.name));
     }
+}
 
+/// Generates a Check 13B compliant Mermaid `classDiagram` lowered from `PartDef` members and subparts.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-CLASS-DIAGRAM]
+pub(crate) fn generate_class_diagram(part: &PartDef) -> String {
+    let mut lines = vec!["classDiagram".to_string()];
+    append_part_class_block(&mut lines, part);
     for subpart in &part.parts {
         let target_type = subpart.type_name.as_deref().unwrap_or(&subpart.name);
         lines.push(format!(
@@ -77,15 +100,11 @@ pub(crate) fn generate_class_diagram(part: &PartDef) -> String {
             part.name, target_type, subpart.name
         ));
     }
-
     lines.join("\n")
 }
 
 /// Formats an `ActionDef` as a Mermaid `classDiagram` operation signature preserving `in_params` and `out_params`.
-///
-/// Safety & Traceability: Realises: [REQ-0604]
-/// Contract: Emits `+ActionName(in_p_T, out_q_U) ReturnType` with zero secondary colons (`:`) or curly braces (`{}`) inside the Mermaid class member line, defaulting empty `out_params` return types to `"void"`.
-/// Bounds & Faults: Executes in `O(P)` time and space over total parameter count `P` with zero fallible operations or direct indexing.
+/// Realises: [REQ-0604]
 pub fn format_mermaid_operation_signature(action: &ActionDef) -> String {
     let mut params = Vec::new();
     for p in &action.in_params {
@@ -108,10 +127,7 @@ pub fn format_mermaid_operation_signature(action: &ActionDef) -> String {
 }
 
 /// Formats an `ActionDef` as a Feature Markdown operation bullet preserving `in_params` and `out_params`.
-///
-/// Safety & Traceability: Realises: [REQ-0604]
-/// Contract: Emits `` - `+ActionName(in p: T, out q: U) : ReturnType` `` bijectively round-trippable through `parse_markdown_operation_bullet`, defaulting empty `out_params` return types to `"void"`.
-/// Bounds & Faults: Executes in `O(P)` time and space over total parameter count `P` with zero fallible operations or direct indexing.
+/// Realises: [REQ-0604]
 pub fn format_markdown_operation_bullet(action: &ActionDef) -> String {
     let mut params = Vec::new();
     for p in &action.in_params {
@@ -133,7 +149,7 @@ pub fn format_markdown_operation_bullet(action: &ActionDef) -> String {
     )
 }
 
-/// Parses one comma-delimited `[in|out] name: Type` parameter token into `in_params` or `out_params`, returning `None` if malformed.
+/// Parses one comma-delimited `[in|out] name: Type` parameter token into `in_params` or `out_params`.
 /// Realises: [REQ-0604]
 fn parse_operation_bullet_parameter(
     raw_param: &str,
@@ -171,10 +187,7 @@ fn parse_operation_bullet_parameter(
 }
 
 /// Parses a Feature Markdown operation bullet (`` - `+ActionName(in p: T, out q: U) : ReturnType` ``) back into an `ActionDef`.
-///
-/// Safety & Traceability: Realises: [REQ-0604]
-/// Contract: Reconstructs `ActionDef` `name`, `in_params`, and `out_params` (synthesizing a default `result: ReturnType` `out_param` when `out_params` is empty and `ReturnType != "void"`).
-/// Bounds & Faults: Executes a single `O(|line|)` linear scan using bounds-checked `.get(..)`, `.strip_prefix(..)`, `.split_once(..)`, and `saturating_add`, returning `None` fail-closed on malformed syntax.
+/// Realises: [REQ-0604]
 pub fn parse_markdown_operation_bullet(line: &str) -> Option<ActionDef> {
     let trimmed = line
         .trim()

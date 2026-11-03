@@ -1,8 +1,36 @@
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
 //! Bounded-depth precedence-climbing parser for SysML v2 expression token streams.
 //!
-//! Safety & Traceability: Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING]
-//! Contract: Parses `SysmlToken` slices into `SysmlExprAst` trees respecting SysML v2 prefix, postfix, and 11-tier infix operator precedence while requiring complete token consumption.
-//! Bounds & Faults: Caps recursion depth strictly at `MAX_EXPR_DEPTH = 64` and advances cursor state exclusively via `.get()` and `.saturating_add(1)`, returning `None` on malformed syntax or depth overflow.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, IEC 61508, and ECSS-E-ST-40C
+//! formal expression parsing objectives for module `crates/compile-sysml/src/stpa/safety_suite/expr_lowering_parser.rs`.
+//!
+//! ## 2. Invariants & Mathematical Properties
+//! - Parses `SysmlToken` slices into `SysmlExprAst` trees respecting SysML v2 prefix, postfix,
+//!   and 11-tier infix operator precedence while requiring complete token consumption.
+//!
+//! ## 3. Preconditions
+//! - Caller supplies a borrowed `&[SysmlToken]` slice produced by `tokenize_sysml_expr`.
+//!
+//! ## 4. Postconditions
+//! - Returns `Some(SysmlExprAst)` iff the token stream forms a complete valid expression within `MAX_EXPR_DEPTH`.
+//!
+//! ## 5. Algorithmic Complexity Bounds
+//! - Time Complexity: O(T) linear in token count T.
+//! - Space Complexity: O(D + T) bounded by `MAX_EXPR_DEPTH = 64` call stack and AST node count.
+//!
+//! ## 6. Failure Modes & Fault Tolerance
+//! - Interface: Returns `None` on empty slices, syntax errors, trailing tokens, or depth overflow.
+//! - State: Local cursor state confined to `SysmlExprParser`.
+//! - Action: Advances cursor exclusively via `.get()` and `.saturating_add(1)` with zero panics.
+//! - Resource: Bounded stack recursion depth (`<= 64`).
+//!
+//! ## 7. Realization & Traceability
+//! Realises: [REQ-0603], [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: PackageDef(expr_lowering_parser)
 
 use super::expr_lowering::{
     binary_binding_power, SysmlExprAst, SysmlToken, SysmlUnaryOp, MAX_EXPR_DEPTH,
@@ -89,6 +117,33 @@ impl<'a> SysmlExprParser<'a> {
         Some(lhs)
     }
 
+    /// Parses comma-separated argument or index expressions terminated by `closing`.
+    /// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING]
+    fn parse_delimited_list(
+        &mut self,
+        closing: &SysmlToken,
+        allow_empty: bool,
+        depth: usize,
+    ) -> Option<Vec<SysmlExprAst>> {
+        let mut items = Vec::new();
+        if allow_empty && self.peek() == Some(closing) {
+            let _ = self.next_token();
+            return Some(items);
+        }
+        let first = self.parse_expr(0, depth.saturating_add(1))?;
+        items.push(first);
+        while matches!(self.peek(), Some(SysmlToken::Comma)) {
+            let _ = self.next_token();
+            let next_item = self.parse_expr(0, depth.saturating_add(1))?;
+            items.push(next_item);
+        }
+        if self.next_token() == Some(closing) {
+            Some(items)
+        } else {
+            None
+        }
+    }
+
     /// Parses primary atoms (`(expr)`, `Ident`, `Number`, `StringLit`) and left-associative postfix chains (`fn(args)`, `base.field`, `base[idx]`).
     /// Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING]
     fn parse_postfix_primary(&mut self, depth: usize) -> Option<SysmlExprAst> {
@@ -114,19 +169,7 @@ impl<'a> SysmlExprParser<'a> {
             match self.peek() {
                 Some(SysmlToken::LParen) => {
                     let _ = self.next_token();
-                    let mut args = Vec::new();
-                    if !matches!(self.peek(), Some(SysmlToken::RParen)) {
-                        let first_arg = self.parse_expr(0, depth.saturating_add(1))?;
-                        args.push(first_arg);
-                        while matches!(self.peek(), Some(SysmlToken::Comma)) {
-                            let _ = self.next_token();
-                            let next_arg = self.parse_expr(0, depth.saturating_add(1))?;
-                            args.push(next_arg);
-                        }
-                    }
-                    if !matches!(self.next_token(), Some(SysmlToken::RParen)) {
-                        return None;
-                    }
+                    let args = self.parse_delimited_list(&SysmlToken::RParen, true, depth)?;
                     node = SysmlExprAst::Call {
                         callee: Box::new(node),
                         args,
@@ -144,17 +187,7 @@ impl<'a> SysmlExprParser<'a> {
                 }
                 Some(SysmlToken::LBracket) => {
                     let _ = self.next_token();
-                    let mut indices = Vec::new();
-                    let first_idx = self.parse_expr(0, depth.saturating_add(1))?;
-                    indices.push(first_idx);
-                    while matches!(self.peek(), Some(SysmlToken::Comma)) {
-                        let _ = self.next_token();
-                        let next_idx = self.parse_expr(0, depth.saturating_add(1))?;
-                        indices.push(next_idx);
-                    }
-                    if !matches!(self.next_token(), Some(SysmlToken::RBracket)) {
-                        return None;
-                    }
+                    let indices = self.parse_delimited_list(&SysmlToken::RBracket, false, depth)?;
                     node = SysmlExprAst::Index {
                         base: Box::new(node),
                         indices,

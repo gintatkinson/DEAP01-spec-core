@@ -1,13 +1,39 @@
-//! Package ordering, structural part indexing, and use-case allocation tables for SysML v2 forward synchronization.
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
+//! # Forward Sync Model Indexer and Package Traversal Ordering
 //!
-//! Safety & Traceability: Realises: [REQ-SYNC-FORWARD-MODEL-INDEX]
-//! Contract: Builds deterministic package traversal orders, `PartContext` structural indices, `StoryMeta` behavioral allocations, and `UseCaseMeta` traceability tables from a root `PackageDef` prior to Markdown specification emission.
-//! Bounds & Faults: Enforces linear traversal over bounded AST slices using saturating index arithmetic (`saturating_add`) and checked slice accessors with zero panics or wall-clock calls.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Realises: [REQ-0604], [REQ-SYNC-FORWARD-MODEL-INDEX]
+//! Builds deterministic package traversal orders, `PartContext` structural indices, `StoryMeta`
+//! behavioral allocations, and `UseCaseMeta` traceability tables from a root `PackageDef`.
+//!
+//! ## 2. Preconditions, Postconditions & Mathematical Invariants
+//! - **Preconditions**: Input `PackageDef` and `ForwardSyncOptions` are valid.
+//! - **Postconditions**: Produces a complete `ForwardSyncIndex` lookup table with 1-based numbering.
+//! - **Invariants**: All 1-based indices use saturating arithmetic (`saturating_add(1)`).
+//!
+//! ## 3. Failure Modes, Degraded Operation & Recovery
+//! - Missing subject engines or unallocated packages fall back deterministically to index `1`.
+//!
+//! ## 4. Concurrency, Memory & Resource Bounds
+//! - Single-threaded `O(P + F + S + U)` indexing over bounded AST slices.
+//!
+//! ## 5. Dependencies & Integration Contracts
+//! - Consumes `story_allocator` and `use_case_renderer`; consumed by all forward-sync emitters.
+//!
+//! ## 6. Verification & Acceptance Criteria
+//! - Verified by forward-sync ordering and traceability tests in `sync/forward/tests*.rs`.
+//!
+//! ## 7. Realization & Traceability
+//! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-MODEL-INDEX]
 
 use super::*;
 
 /// Resolved package, engine feature number, and paired User Story index for a projected `UseCaseDef`.
-/// Realises: [REQ-SYNC-FORWARD-USECASEMETA]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-USECASEMETA]
 pub(crate) struct UseCaseMeta<'a> {
     pub(crate) uc: &'a UseCaseDef,
     pub(crate) pkg: &'a PackageDef,
@@ -20,7 +46,7 @@ pub(crate) struct UseCaseMeta<'a> {
 }
 
 /// Pre-computed AST package, part, requirement, user-story, and use-case lookup tables shared across forward-sync emitters.
-/// Realises: [REQ-SYNC-FORWARD-MODEL-INDEX]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-MODEL-INDEX]
 pub(crate) struct ForwardSyncIndex<'a> {
     pub(crate) target_out_dir: PathBuf,
     pub(crate) today_iso: &'static str,
@@ -38,8 +64,38 @@ pub(crate) struct ForwardSyncIndex<'a> {
     pub(crate) uc_metas: Vec<UseCaseMeta<'a>>,
 }
 
+/// Selects the canonical root `PackageDef` from `all_packages` for `pkg`.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-MODEL-INDEX]
+fn select_root_package<'a>(
+    pkg: &'a PackageDef,
+    all_packages: &[&'a PackageDef],
+) -> Option<&'a PackageDef> {
+    let is_empty_synthetic_root = pkg.name == "SysML_Model"
+        && !pkg.packages.is_empty()
+        && pkg.part_defs.is_empty()
+        && pkg.action_defs.is_empty()
+        && pkg.use_case_defs.is_empty()
+        && pkg.requirement_defs.is_empty();
+
+    if is_empty_synthetic_root {
+        all_packages
+            .iter()
+            .copied()
+            .find(|p| p.name != "SysML_Model" && p.name != "ConOps" && !p.imports.is_empty())
+            .or_else(|| all_packages.iter().copied().find(|p| p.name != "SysML_Model" && p.name != "ConOps"))
+            .or_else(|| all_packages.iter().copied().find(|p| p.name != "SysML_Model"))
+    } else {
+        all_packages
+            .iter()
+            .copied()
+            .find(|p| p.name == pkg.name)
+            .or_else(|| all_packages.iter().copied().find(|p| p.name == "SysML_Model"))
+            .or_else(|| all_packages.first().copied())
+    }
+}
+
 /// Resolves the canonical Epic package ordering: root package first, `ConOps` second, imported packages in AST order, then remaining packages.
-/// Realises: [REQ-SYNC-FORWARD-MODEL-INDEX]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-MODEL-INDEX]
 fn collect_ordered_packages<'a>(
     pkg: &'a PackageDef,
     all_packages: &[&'a PackageDef],
@@ -48,44 +104,7 @@ fn collect_ordered_packages<'a>(
     Option<&'a PackageDef>,
     Vec<&'a PackageDef>,
 ) {
-    let is_empty_synthetic_root = pkg.name == "SysML_Model"
-        && !pkg.packages.is_empty()
-        && pkg.part_defs.is_empty()
-        && pkg.action_defs.is_empty()
-        && pkg.use_case_defs.is_empty()
-        && pkg.requirement_defs.is_empty();
-
-    let root_pkg = if is_empty_synthetic_root {
-        all_packages
-            .iter()
-            .copied()
-            .find(|p| p.name != "SysML_Model" && p.name != "ConOps" && !p.imports.is_empty())
-            .or_else(|| {
-                all_packages
-                    .iter()
-                    .copied()
-                    .find(|p| p.name != "SysML_Model" && p.name != "ConOps")
-            })
-            .or_else(|| {
-                all_packages
-                    .iter()
-                    .copied()
-                    .find(|p| p.name != "SysML_Model")
-            })
-    } else {
-        all_packages
-            .iter()
-            .copied()
-            .find(|p| p.name == pkg.name)
-            .or_else(|| {
-                all_packages
-                    .iter()
-                    .copied()
-                    .find(|p| p.name == "SysML_Model")
-            })
-            .or_else(|| all_packages.first().copied())
-    };
-
+    let root_pkg = select_root_package(pkg, all_packages);
     let conops_pkg = all_packages.iter().copied().find(|p| p.name == "ConOps");
     let mut ordered_packages: Vec<&'a PackageDef> = Vec::new();
 
@@ -125,7 +144,7 @@ fn collect_ordered_packages<'a>(
 }
 
 /// Orders packages for structural `PartDef`, User Story, and Use Case projection (`ConOps` first, root package second, then subsystem packages).
-/// Realises: [REQ-SYNC-FORWARD-MODEL-INDEX]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-MODEL-INDEX]
 fn collect_part_packages<'a>(
     root_pkg: Option<&'a PackageDef>,
     conops_pkg: Option<&'a PackageDef>,
@@ -149,7 +168,7 @@ fn collect_part_packages<'a>(
 }
 
 /// Resolves the canonical `(subsys_display, subsys_dir)` tuple for package `pkg_name` relative to `root_pkg_name`.
-/// Realises: [REQ-SYNC-FORWARD-PARTCONTEXT]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-PARTCONTEXT]
 pub(crate) fn resolve_package_subsystem_labels(
     root_pkg_name: &str,
     pkg_name: &str,
@@ -170,7 +189,7 @@ pub(crate) fn resolve_package_subsystem_labels(
 }
 
 /// Collects ordered `PartContext` entries across `part_packages` to assign 1-based Feature numbers (`FEAT-XX-*`).
-/// Realises: [REQ-SYNC-FORWARD-PARTCONTEXT]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-PARTCONTEXT]
 fn collect_part_contexts<'a>(
     root_pkg_name: &str,
     part_packages: &[&'a PackageDef],
@@ -191,7 +210,7 @@ fn collect_part_contexts<'a>(
 }
 
 /// Resolves the 1-based `FEAT-XX` index of `part_name` within `pkg_name` (falling back to global `part_contexts` match).
-/// Realises: [REQ-SYNC-FORWARD-MODEL-INDEX]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-MODEL-INDEX]
 pub(crate) fn lookup_part_feature_number(
     part_contexts: &[PartContext<'_>],
     pkg_name: &str,
@@ -209,7 +228,7 @@ pub(crate) fn lookup_part_feature_number(
 }
 
 /// Allocates 1-based `UseCaseMeta` descriptors across `part_packages`, pairing each `UseCaseDef` with its subject engine Feature and package User Story.
-/// Realises: [REQ-SYNC-FORWARD-USECASEMETA]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-USECASEMETA]
 fn collect_use_case_allocations<'a>(
     root_pkg_name: &str,
     part_packages: &[&'a PackageDef],
@@ -264,7 +283,7 @@ fn collect_use_case_allocations<'a>(
 }
 
 /// Selects the primary `*Engine` `PartDef` in `p` (falling back to the first `PartDef` or sanitized package name).
-/// Realises: [REQ-SYNC-FORWARD-MODEL-INDEX]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-MODEL-INDEX]
 pub(crate) fn select_default_package_engine(p: &PackageDef) -> String {
     p.part_defs
         .iter()
@@ -275,7 +294,7 @@ pub(crate) fn select_default_package_engine(p: &PackageDef) -> String {
 }
 
 /// Constructs the complete `ForwardSyncIndex` lookup table for `pkg` and `opts`.
-/// Realises: [REQ-SYNC-FORWARD-MODEL-INDEX]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-MODEL-INDEX]
 pub(crate) fn build_forward_sync_index<'a>(
     pkg: &'a PackageDef,
     opts: &ForwardSyncOptions,

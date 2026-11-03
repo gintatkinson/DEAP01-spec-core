@@ -1,16 +1,43 @@
-//! User Story 3-layer Definition of Done architectural binding section renderers.
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
+//! # User Story 3-Layer Definition of Done Architectural Renderers
 //!
-//! Safety & Traceability: Realises: [REQ-SYNC-FORWARD-GENERATE-US-3LAYER]
-//! Contract: Projects owning `PartDef` attributes and boundary ports, `PackageDef` attribute/port definitions, `ActionDef` typed `in`/`out` parameters, `StateDef` lifecycle models and transition guards, `ConstraintDef`/`RequirementDef` invariants, and `InteractionDef` bindings into `US-*.md` Layers 1..=3 with zero `"N/A"` placeholders.
-//! Bounds & Faults: Enforces deterministic deduplication, provenance-safe invariant formatting, and bounds-checked transition endpoint parsing with zero regular expressions, direct slice indexing, or runtime panics.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-US-3LAYER]
+//! Projects owning `PartDef` attributes and boundary ports, `PackageDef` attribute/port
+//! definitions, `ActionDef` typed `in`/`out` parameters, `StateDef` lifecycle models and
+//! transition guards, `ConstraintDef`/`RequirementDef` invariants, and `InteractionDef`
+//! bindings into `US-*.md` Layers 1..=3 with zero `"N/A"` placeholders.
+//!
+//! ## 2. Preconditions, Postconditions & Mathematical Invariants
+//! - **Preconditions**: Input `UserStoryProjectionCtx` references valid AST slices.
+//! - **Postconditions**: Emits non-empty Layer 1, Layer 2, and Layer 3 Markdown bullet blocks.
+//! - **Invariants**: Zero `"N/A"` placeholders are emitted across any layer.
+//!
+//! ## 3. Failure Modes, Degraded Operation & Recovery
+//! - Missing attributes, states, transitions, invariants, or ports emit deterministic structural bindings.
+//!
+//! ## 4. Concurrency, Memory & Resource Bounds
+//! - Pure single-threaded `O(N)` formatting over AST attributes, states, constraints, and ports.
+//!
+//! ## 5. Dependencies & Integration Contracts
+//! - Consumed by `story_emitter`.
+//!
+//! ## 6. Verification & Acceptance Criteria
+//! - Verified by User Story 3-layer tests in `sync/forward/tests*.rs`.
+//!
+//! ## 7. Realization & Traceability
+//! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-US-3LAYER]
 
 use super::*;
 
-/// Renders the Layer 1 domain state attribute bullet and typed `ActionDef` parameter contract bullet for a User Story.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-US-3LAYER]
-fn render_story_layer1_attrs_and_params(ctx: &UserStoryProjectionCtx<'_>) -> (String, String) {
+/// Renders the Layer 1 domain state attribute bullet for a User Story.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-US-3LAYER]
+fn render_story_layer1_attrs(ctx: &UserStoryProjectionCtx<'_>) -> String {
     let engine_name = ctx.engine_name;
-    let action_name = ctx.action_name;
     let pkg_name = ctx.pkg_name;
 
     let mut attr_items: Vec<String> = Vec::new();
@@ -43,7 +70,7 @@ fn render_story_layer1_attrs_and_params(ctx: &UserStoryProjectionCtx<'_>) -> (St
             }
         }
     }
-    let layer1_attrs = if attr_items.is_empty() {
+    if attr_items.is_empty() {
         format!(
             "- Domain state record: `{engine_name}` structural state representation within `{pkg_name}`."
         )
@@ -52,9 +79,16 @@ fn render_story_layer1_attrs_and_params(ctx: &UserStoryProjectionCtx<'_>) -> (St
             "- Domain state attributes on `{engine_name}`: {}.",
             attr_items.join(", ")
         )
-    };
+    }
+}
 
-    let layer1_params = if let Some(act) = ctx
+/// Renders the Layer 1 typed `ActionDef` parameter contract bullet for a User Story.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-US-3LAYER]
+fn render_story_layer1_params(ctx: &UserStoryProjectionCtx<'_>) -> String {
+    let engine_name = ctx.engine_name;
+    let action_name = ctx.action_name;
+
+    if let Some(act) = ctx
         .act_opt
         .filter(|a| !a.in_params.is_empty() || !a.out_params.is_empty())
     {
@@ -101,13 +135,11 @@ fn render_story_layer1_attrs_and_params(ctx: &UserStoryProjectionCtx<'_>) -> (St
         format!(
             "- Action `{action_name}` invocation message envelope bound to `{engine_name}` typed domain schema."
         )
-    };
-
-    (layer1_attrs, layer1_params)
+    }
 }
 
 /// Renders the Layer 1 declared lifecycle state enumeration bullet across `ctx.states`.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-US-3LAYER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-US-3LAYER]
 fn render_story_layer1_states(ctx: &UserStoryProjectionCtx<'_>) -> String {
     let mut state_names: Vec<String> = Vec::new();
     for st in ctx.states {
@@ -149,7 +181,7 @@ fn render_story_layer1_states(ctx: &UserStoryProjectionCtx<'_>) -> String {
 }
 
 /// Renders the Layer 2 state-transition management bullet from `ctx.matched_transition`.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-US-3LAYER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-US-3LAYER]
 fn render_story_layer2_transition(ctx: &UserStoryProjectionCtx<'_>) -> String {
     let Some(m) = ctx.matched_transition else {
         return format!(
@@ -209,7 +241,7 @@ fn render_story_layer2_transition(ctx: &UserStoryProjectionCtx<'_>) -> String {
 }
 
 /// Renders the Layer 2 deduplicated constraint and requirement invariant bullet for a User Story.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-US-3LAYER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-US-3LAYER]
 fn render_story_layer2_invariants(ctx: &UserStoryProjectionCtx<'_>) -> String {
     let mut inv_items: Vec<String> = Vec::new();
     for c in ctx.constraints {
@@ -244,7 +276,7 @@ fn render_story_layer2_invariants(ctx: &UserStoryProjectionCtx<'_>) -> String {
 }
 
 /// Renders the Layer 3 component port binding, interaction routing, and diagnostic fault surface bullets.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-US-3LAYER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-US-3LAYER]
 fn render_story_layer3_interface_binding(ctx: &UserStoryProjectionCtx<'_>) -> String {
     let engine_name = ctx.engine_name;
     let action_name = ctx.action_name;
@@ -253,42 +285,23 @@ fn render_story_layer3_interface_binding(ctx: &UserStoryProjectionCtx<'_>) -> St
     let interaction_name = ctx.interaction_name;
 
     let mut port_items: Vec<String> = Vec::new();
-    if let Some(pt) = ctx.target_part {
-        for port in &pt.ports {
-            let n = port.name.trim();
-            let t = port.type_name.trim();
-            let d = if port.direction.trim().is_empty() {
-                "inout"
+    let ports_slice = ctx
+        .target_part
+        .filter(|pt| !pt.ports.is_empty())
+        .map(|pt| pt.ports.as_slice())
+        .or_else(|| ctx.curr_pkg.map(|cp| cp.port_defs.as_slice()))
+        .unwrap_or(&[]);
+    for port in ports_slice {
+        let n = port.name.trim();
+        let t = port.type_name.trim();
+        let d = if port.direction.trim().is_empty() { "inout" } else { port.direction.trim() };
+        if !n.is_empty() {
+            let formatted = if t.is_empty() {
+                format!("`{n} ({d})`")
             } else {
-                port.direction.trim()
+                format!("`{n}: {t} ({d})`")
             };
-            if !n.is_empty() {
-                if t.is_empty() {
-                    port_items.push(format!("`{n} ({d})`"));
-                } else {
-                    port_items.push(format!("`{n}: {t} ({d})`"));
-                }
-            }
-        }
-    }
-    if port_items.is_empty() {
-        if let Some(cp) = ctx.curr_pkg {
-            for port in &cp.port_defs {
-                let n = port.name.trim();
-                let t = port.type_name.trim();
-                let d = if port.direction.trim().is_empty() {
-                    "inout"
-                } else {
-                    port.direction.trim()
-                };
-                if !n.is_empty() {
-                    if t.is_empty() {
-                        port_items.push(format!("`{n} ({d})`"));
-                    } else {
-                        port_items.push(format!("`{n}: {t} ({d})`"));
-                    }
-                }
-            }
+            port_items.push(formatted);
         }
     }
 
@@ -313,9 +326,10 @@ fn render_story_layer3_interface_binding(ctx: &UserStoryProjectionCtx<'_>) -> St
 }
 
 /// Synthesizes the explicit 3-layer Definition of Done architectural binding sections for a User Story.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-US-3LAYER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-US-3LAYER]
 pub(crate) fn generate_user_story_three_layer_sections(ctx: &UserStoryProjectionCtx<'_>) -> String {
-    let (layer1_attrs, layer1_params) = render_story_layer1_attrs_and_params(ctx);
+    let layer1_attrs = render_story_layer1_attrs(ctx);
+    let layer1_params = render_story_layer1_params(ctx);
     let layer1_states = render_story_layer1_states(ctx);
     let layer2_exec = format!(
         "- Behavioral execution contract: invokes `{}` on `{}` with atomic precondition verification.",

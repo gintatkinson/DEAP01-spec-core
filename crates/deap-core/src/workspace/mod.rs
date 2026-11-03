@@ -30,10 +30,12 @@ pub mod checks;
 pub mod clippy_gate;
 pub mod dylint_gate;
 pub mod ferrocene_gate;
+pub mod lock_governor;
 pub mod ratchet_table;
 
 #[cfg(test)]
-mod workspace_tests;
+#[path = "workspace_tests.rs"]
+mod tests;
 
 pub use cargo_tooling::{
     evaluate_cargo_platform, load_cargo_lockfile, parse_cargo_toml_lossless,
@@ -59,4 +61,8 @@ pub use ferrocene_gate::{
     verify_dual_toolchain_parity, verify_fls_traceability,
     verify_three_ring_coupling_and_monitor, CoverageSummary, DualToolchainSpec,
     FerroceneGateError, SafetyMonitorEnvelope, Stage5FerroceneReceipt,
+};
+pub use lock_governor::{
+    parse_locked_manifest_snapshot, verify_pinned_cst_dependency_graph, LockManifestSnapshot,
+    LockedPackageRecord, OfflineLockGovernanceError, PackageSourceKind,
 };

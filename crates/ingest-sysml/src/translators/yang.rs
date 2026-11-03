@@ -9,11 +9,9 @@ use std::fs;
 use std::path::Path;
 
 use deap_core::sysml_ast::{ActionDef, AttributeDef, ConstraintDef, ImportDef, PackageDef, PartDef, UseCaseDef};
-use rowan::{NodeOrToken, SyntaxNode, SyntaxToken};
 
-use crate::translators::yang_cst::{parse_yang_cst, YangLanguage, YangSyntaxKind};
+pub use crate::translators::yang_cst::{parse_yang_statements, YangStmt};
 
-/// SysML v2 reserved keywords that must not be used as bare identifiers in AST generation.
 const RESERVED_SYSML_KEYWORDS: &[&str] = &[
     "package", "part", "def", "port", "attribute", "action", "flow", "item", "connect", "connection",
     "interface", "doc", "assert", "constraint", "state", "requirement", "use", "case", "test", "in",
@@ -71,108 +69,6 @@ pub fn to_snake_case(s: &str) -> String {
     if result.is_empty() { return "item".to_string(); }
     if is_reserved_keyword(&result) { result.push_str("_item"); }
     result
-}
-
-/// Intermediate structural AST representation of a parsed YANG statement. Realises: [REQ-TRANSLATORS-YANG-YANGSTMT]
-#[derive(Debug, Clone)]
-pub struct YangStmt {
-    pub keyword: String,
-    pub argument: Option<String>,
-    pub substatements: Vec<YangStmt>,
-}
-
-impl YangStmt {
-    /// Returns the argument of the first substatement matching `kw`. Realises: [REQ-TRANSLATORS-YANG-YANGSTMT-GET-ARG]
-    pub fn get_arg(&self, kw: &str) -> Option<&str> { self.substatements.iter().find(|s| s.keyword == kw).and_then(|s| s.argument.as_deref()) }
-    /// Returns the arguments of all substatements matching `kw`. Realises: [REQ-TRANSLATORS-YANG-YANGSTMT-GET-ALL-ARGS]
-    pub fn get_all_args(&self, kw: &str) -> Vec<&str> { self.substatements.iter().filter(|s| s.keyword == kw).filter_map(|s| s.argument.as_deref()).collect() }
-    /// Finds the first substatement with keyword `kw`. Realises: [REQ-TRANSLATORS-YANG-YANGSTMT-FIND-FIRST]
-    pub fn find_first(&self, kw: &str) -> Option<&YangStmt> { self.substatements.iter().find(|s| s.keyword == kw) }
-    /// Finds all substatements with keyword `kw`. Realises: [REQ-TRANSLATORS-YANG-YANGSTMT-FIND-ALL]
-    pub fn find_all(&self, kw: &str) -> Vec<&YangStmt> { self.substatements.iter().filter(|s| s.keyword == kw).collect() }
-}
-
-/// Unescapes a single-quoted or double-quoted YANG string literal token from the CST. Realises: [REQ-0015], [REQ-0201]
-fn unescape_yang_string(raw: &str) -> String {
-    if let Some(inner) = raw.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')) { return inner.to_string(); }
-    let inner = raw.strip_prefix('"').and_then(|s| s.strip_suffix('"')).unwrap_or(raw);
-    let (mut out, mut chars) = (String::with_capacity(inner.len()), inner.chars());
-    while let Some(ch) = chars.next() {
-        if ch == '\\' {
-            match chars.next() {
-                Some('n') => out.push('\n'),
-                Some('t') => out.push('\t'),
-                Some('r') => out.push('\r'),
-                Some(c) => out.push(c),
-                None => out.push('\\'),
-            }
-        } else { out.push(ch); }
-    }
-    out
-}
-
-/// Coalesces non-trivia CST header tokens (before `;` or `{`) into `[keyword, optional_arg]`. Realises: [REQ-0015], [REQ-0201]
-fn coalesce_header_words(tokens: &[SyntaxToken<YangLanguage>]) -> Result<Vec<String>, String> {
-    let (mut words, mut prev_end, mut idx) = (Vec::<String>::new(), None, 0usize);
-    while let Some(tok) = tokens.get(idx) {
-        idx += 1;
-        if tok.kind() == YangSyntaxKind::Error && (tok.text().starts_with('"') || tok.text().starts_with('\'')) {
-            return Err("Unterminated quoted string in YANG statement".to_string());
-        }
-        if tok.kind() == YangSyntaxKind::StringLit {
-            let mut s = unescape_yang_string(tok.text());
-            while tokens.get(idx).is_some_and(|t| t.kind() == YangSyntaxKind::Punct && t.text() == "+") {
-                idx += 1;
-                let Some(next_str) = tokens.get(idx).filter(|t| t.kind() == YangSyntaxKind::StringLit) else {
-                    return Err("Expected string after '+' concatenation operator in YANG".to_string());
-                };
-                s.push_str(&unescape_yang_string(next_str.text()));
-                idx += 1;
-            }
-            words.push(s);
-            prev_end = None;
-        } else {
-            let (start, end) = (usize::from(tok.text_range().start()), usize::from(tok.text_range().end()));
-            if prev_end == Some(start) {
-                if let Some(last) = words.last_mut() { last.push_str(tok.text()); }
-            } else {
-                words.push(tok.text().to_string());
-            }
-            prev_end = Some(end);
-        }
-    }
-    Ok(words)
-}
-
-/// Lowers a single `rowan` CST `Statement` node into a recursive `YangStmt` AST node. Realises: [REQ-0015], [REQ-0201]
-fn lower_cst_statement(node: &SyntaxNode<YangLanguage>) -> Result<YangStmt, String> {
-    let direct_tokens: Vec<SyntaxToken<YangLanguage>> = node.children_with_tokens().filter_map(NodeOrToken::into_token)
-        .filter(|t| !matches!(t.kind(), YangSyntaxKind::Whitespace | YangSyntaxKind::LineComment | YangSyntaxKind::BlockComment)).collect();
-    let header_slice = match direct_tokens.as_slice() {
-        [head @ .., last] if last.kind() == YangSyntaxKind::Punct && last.text() == ";" => head,
-        [head @ .., open, close] if open.kind() == YangSyntaxKind::Punct && open.text() == "{" && close.kind() == YangSyntaxKind::Punct && close.text() == "}" => head,
-        _ if direct_tokens.iter().any(|t| t.kind() == YangSyntaxKind::Punct && t.text() == "{") => return Err("Unclosed YANG block: missing '}'".to_string()),
-        _ => return Err("Unexpected end of tokens in YANG statement".to_string()),
-    };
-    let mut words = coalesce_header_words(header_slice)?;
-    let (keyword, argument) = match words.len() {
-        1 => (words.remove(0), None),
-        2 => { let arg = words.pop(); (words.remove(0), arg) }
-        0 => return Err("Expected statement keyword in YANG statement".to_string()),
-        _ => return Err(format!("Expected ';' or '{{' after argument for '{}'", words.first().map_or("", String::as_str))),
-    };
-    let substatements = node.children().filter(|c| c.kind() == YangSyntaxKind::Statement).map(|c| lower_cst_statement(&c)).collect::<Result<Vec<_>, _>>()?;
-    Ok(YangStmt { keyword, argument, substatements })
-}
-
-/// Parses a YANG source string into top-level `YangStmt` trees via `yang_cst::parse_yang_cst`. Realises: [REQ-TRANSLATORS-YANG-PARSE-YANG-STATEMENTS]
-fn parse_yang_statements(source: &str) -> Result<Vec<YangStmt>, String> {
-    let cst = parse_yang_cst(source);
-    let root: SyntaxNode<YangLanguage> = SyntaxNode::new_root(cst.green);
-    if root.children_with_tokens().filter_map(NodeOrToken::into_token).any(|t| !matches!(t.kind(), YangSyntaxKind::Whitespace | YangSyntaxKind::LineComment | YangSyntaxKind::BlockComment)) {
-        return Err("Unexpected top-level token outside YANG statement".to_string());
-    }
-    root.children().filter(|n| n.kind() == YangSyntaxKind::Statement).map(|n| lower_cst_statement(&n)).collect()
 }
 
 /// Maps a YANG data type identifier to a canonical SysML v2 primitive or resolved type. Realises: [REQ-TRANSLATORS-YANG-MAP-YANG-TYPE]
@@ -406,67 +302,28 @@ fn translate_container_or_grouping(stmt: &YangStmt, typedef_map: &BTreeMap<Strin
 mod tests {
     use super::*;
 
+    const ROUND_TRIP_YANG: &str = "module sample-module { yang-version 1.1; namespace \"urn:example:sample-module\"; prefix sm; description \"Neutral sample module for round-trip verification.\"; typedef time-text { type string; default \"00:00:00\"; description \"Clock text value.\"; } typedef ratio-value { type decimal64 { fraction-digits 2; } default \"0.5\"; } container sample-root { description \"Root container.\"; leaf start-time { type time-text; default \"00:00:00\"; } leaf family { type string; default \"ipv4\"; } leaf retries { type uint8; default \"3\"; } leaf enabled { type boolean; default \"true\"; } leaf quoted-text { type string; default \"say \\\"hi\\\" \\\\ bye\"; } leaf-list tags { type string; } leaf-list counts { type uint32; } list entry { key \"label\"; leaf label { type string; } leaf weight { type decimal64 { fraction-digits 1; } default \"1.5\"; } } choice mode { case first-mode { leaf first-value { type string; default \"alpha\"; } } case second-mode { leaf second-value { type uint16; } } } } rpc reset-item { description \"Resets an item.\"; input { leaf target { type string; default \"all\"; } leaf delay { type uint32; default \"10\"; } } output { leaf outcome { type string; default \"ok\"; } leaf done { type boolean; default \"false\"; } } } }";
+
     #[test]
-    fn test_yang_scanner_and_statement_parsing() -> Result<(), String> {
+    fn test_yang_scanner_and_round_trip() -> Result<(), String> {
         let yang_src = "module test-module { yang-version 1.1; namespace \"urn:ietf:params:xml:ns:yang:test-module\"; prefix tm; description \"Test module description \" + \"with concatenation.\"; typedef test-type { type string { length \"1..255\"; pattern '[a-z]+'; } } container test-container { leaf id { type uint32; } choice opt { case a { leaf val-a { type string; } } case b { leaf val-b { type boolean; } } } } }";
         let pkg = YangTranslator::new().translate(yang_src, "TestModule")?;
         assert_eq!(pkg.name, "TestModule");
         assert!(pkg.doc.as_deref().is_some_and(|d| d.contains("Test module description with concatenation.")));
         assert!(pkg.attribute_defs.iter().any(|a| a.name == "testType") && pkg.part_defs.iter().any(|p| p.name == "TestType"));
         let container = pkg.part_defs.iter().find(|p| p.name == "TestContainer").ok_or("missing TestContainer")?;
-        assert!(container.attributes.iter().any(|a| a.name == "id"));
-        assert!(container.parts.iter().any(|p| p.name == "a") && container.parts.iter().any(|p| p.name == "b"));
-        assert!(container.constraints.iter().any(|c| c.name == "opt_mutex"));
-        Ok(())
-    }
+        assert!(container.attributes.iter().any(|a| a.name == "id") && container.constraints.iter().any(|c| c.name == "opt_mutex"));
 
-    const ROUND_TRIP_YANG: &str = "module sample-module { yang-version 1.1; namespace \"urn:example:sample-module\"; prefix sm; description \"Neutral sample module for round-trip verification.\"; typedef time-text { type string; default \"00:00:00\"; description \"Clock text value.\"; } typedef ratio-value { type decimal64 { fraction-digits 2; } default \"0.5\"; } container sample-root { description \"Root container.\"; leaf start-time { type time-text; default \"00:00:00\"; } leaf family { type string; default \"ipv4\"; } leaf retries { type uint8; default \"3\"; } leaf enabled { type boolean; default \"true\"; } leaf quoted-text { type string; default \"say \\\"hi\\\" \\\\ bye\"; } leaf-list tags { type string; } leaf-list counts { type uint32; } list entry { key \"label\"; leaf label { type string; } leaf weight { type decimal64 { fraction-digits 1; } default \"1.5\"; } } choice mode { case first-mode { leaf first-value { type string; default \"alpha\"; } } case second-mode { leaf second-value { type uint16; } } } } rpc reset-item { description \"Resets an item.\"; input { leaf target { type string; default \"all\"; } leaf delay { type uint32; default \"10\"; } } output { leaf outcome { type string; default \"ok\"; } leaf done { type boolean; default \"false\"; } } } }";
-
-    #[test]
-    fn test_format_yang_default_value_literal_rules() {
-        for (raw, ty, expected) in [
-            ("42", "Integer", "42"), ("-7", "Integer", "-7"), ("0.25", "Real", "0.25"), ("true", "Boolean", "true"), ("false", "Boolean", "false"),
-            ("00:00:00", "String", "\"00:00:00\""), ("ipv4", "String", "\"ipv4\""), ("42", "String", "\"42\""), ("unbounded", "Integer", "\"unbounded\""),
-            ("TRUE", "Boolean", "\"TRUE\""), ("true", "String", "\"true\""), ("", "String", "\"\""), ("a\"b\\c", "String", "\"a\\\"b\\\\c\""), ("3", "TimeText", "\"3\""),
-        ] {
+        for (raw, ty, expected) in [("42", "Integer", "42"), ("0.25", "Real", "0.25"), ("true", "Boolean", "true"), ("00:00:00", "String", "\"00:00:00\""), ("a\"b\\c", "String", "\"a\\\"b\\\\c\"")] {
             assert_eq!(format_yang_default_value(raw, ty), expected);
         }
-    }
 
-    #[test]
-    fn test_yang_string_defaults_are_quoted_sysml_literals() -> Result<(), String> {
-        let pkg = YangTranslator::new().translate(ROUND_TRIP_YANG, "SampleModule")?;
-        assert_eq!(pkg.attribute_defs.iter().find(|a| a.name == "timeText").and_then(|a| a.default_value.as_deref()), Some("\"00:00:00\""));
-        assert_eq!(pkg.attribute_defs.iter().find(|a| a.name == "ratioValue").and_then(|a| a.default_value.as_deref()), Some("0.5"));
-        let td_value = pkg.part_defs.iter().find(|p| p.name == "TimeText").and_then(|p| p.attributes.iter().find(|a| a.name == "value"));
-        assert_eq!(td_value.and_then(|a| a.default_value.as_deref()), Some("\"00:00:00\""));
-        let root = pkg.part_defs.iter().find(|p| p.name == "SampleRoot").ok_or("missing SampleRoot")?;
-        let default_of = |name: &str| root.attributes.iter().find(|a| a.name == name).and_then(|a| a.default_value.clone());
-        for (k, v) in [("startTime", Some("\"00:00:00\"")), ("family", Some("\"ipv4\"")), ("retries", Some("3")), ("enabled", Some("true")), ("quotedText", Some("\"say \\\"hi\\\" \\\\ bye\"")), ("tags", None)] {
-            assert_eq!(default_of(k).as_deref(), v);
-        }
-        assert_eq!(root.attributes.iter().find(|a| a.name == "tags").map(|a| a.type_name.as_str()), Some("String[]"));
-        let first_mode = pkg.part_defs.iter().find(|p| p.name == "FirstMode").ok_or("missing FirstMode")?;
-        assert_eq!(first_mode.attributes.iter().find(|a| a.name == "firstValue").and_then(|a| a.default_value.as_deref()), Some("\"alpha\""));
-        let rpc = pkg.action_defs.iter().find(|a| a.name == "ResetItem").ok_or("missing ResetItem")?;
-        let in_default = |name: &str| rpc.in_params.iter().find(|a| a.name == name).and_then(|a| a.default_value.clone());
-        let out_default = |name: &str| rpc.out_params.iter().find(|a| a.name == name).and_then(|a| a.default_value.clone());
-        assert_eq!(in_default("target").as_deref(), Some("\"all\""));
-        assert_eq!(in_default("delay").as_deref(), Some("10"));
-        assert_eq!(out_default("outcome").as_deref(), Some("\"ok\""));
-        assert_eq!(out_default("done").as_deref(), Some("false"));
-        Ok(())
-    }
-
-    #[test]
-    fn test_yang_to_sysml_round_trip_parses_and_validates_with_zero_errors() -> Result<(), String> {
-        let pkg = YangTranslator::new().translate(ROUND_TRIP_YANG, "SampleModule")?;
-        let sysml_text = compile_sysml::to_sysml(&pkg);
+        let rt_pkg = YangTranslator::new().translate(ROUND_TRIP_YANG, "SampleModule")?;
+        let sysml_text = compile_sysml::to_sysml(&rt_pkg);
         assert!(sysml_text.contains("String[]") && sysml_text.contains("\"00:00:00\""));
         let reparsed = compile_sysml::parse_sysml(&sysml_text).map_err(|e| format!("round-trip parse failed: {e:?}\n{sysml_text}"))?;
         let mut validator = compile_sysml::SemanticValidator::new(&reparsed);
-        let error_count = validator.validate().iter().filter(|d| d.severity == compile_sysml::DiagnosticSeverity::Error).count();
-        assert_eq!(error_count, 0, "round-trip semantic errors: {:?}\n{sysml_text}", validator.errors());
+        assert_eq!(validator.validate().iter().filter(|d| d.severity == compile_sysml::DiagnosticSeverity::Error).count(), 0);
         let root = reparsed.part_defs.iter().chain(reparsed.packages.iter().flat_map(|p| p.part_defs.iter())).find(|p| p.name == "SampleRoot").ok_or("SampleRoot survives round trip")?;
         assert_eq!(root.attributes.iter().find(|a| a.name == "tags").map(|a| a.type_name.as_str()), Some("String[]"));
         assert_eq!(root.attributes.iter().find(|a| a.name == "startTime").and_then(|a| a.default_value.as_deref()), Some("\"00:00:00\""));

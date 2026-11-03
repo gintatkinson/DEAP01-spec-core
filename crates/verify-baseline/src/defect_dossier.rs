@@ -42,37 +42,12 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-VERIFY-BASELINE-DEFECT-DOSSIER], [DO-330-TQL-4-DEFECT-GATE]
 
-use deap_core::markdown::check_mermaid_syntax;
-use deap_core::workspace::is_upstream_compiler;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+pub use crate::defect_dossier_publish::publish_or_edit_github_issue;
+
 /// Canonical 7-section headers required in every Adversarial Code Auditor defect dossier.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C structural problem report taxonomy controls.
-/// Replaces untyped string arrays with a closed, compile-time checked enumeration of the seven
-/// mandatory defect dossier section headings.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Bijective mapping between the 7 enum variants in `DossierSection::ALL` and the 7 exact
-///   Markdown H2 headings `## 1.` through `## 7.`.
-///
-/// ## 3. Preconditions
-/// - Variants are constructed via `DossierSection::ALL` or explicit enum discriminants.
-///
-/// ## 4. Postconditions
-/// - Every variant projects deterministically to its canonical Markdown H2 string literal via `header`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$ discriminant lookup.
-/// - Space Complexity: $O(1)$ zero-allocation static representation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Exhaustive `match` arms guarantee compile-time rejection of any unhandled section variant.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-DOSSIER-SECTION-ENUM]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum DossierSection {
@@ -105,29 +80,6 @@ impl DossierSection {
     ];
 
     /// Projects a `DossierSection` variant onto its exact required Markdown H2 heading literal.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A. Enforces character-for-character section header identity
-    /// for Step D Check 1 without using regular expressions or untyped string slice arrays.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Injective mapping from the 7 `DossierSection` variants to 7 distinct `'static` strings
-    ///   prefixed with `## 1.` through `## 7.`.
-    ///
-    /// ## 3. Preconditions
-    /// - `self` is a valid `DossierSection` enum value.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns the exact non-empty `'static` heading string required on its own line in a dossier.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(1)$ constant-time branch table lookup.
-    /// - Space Complexity: $O(1)$ static read-only data reference.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Infallible `const fn`; cannot panic or allocate heap memory.
-    ///
-    /// ## 7. Realization & Traceability
     /// Realises: [REQ-DEFECT-DOSSIER-SECTION-HEADER]
     pub const fn header(self) -> &'static str {
         match self {
@@ -143,30 +95,6 @@ impl DossierSection {
 }
 
 /// Strongly typed enumeration of permitted `SEVERITY:` classifications in an adversarial audit dossier.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ISO 26262 ASIL D defect criticality classification rules.
-/// Guarantees that every validated finding maps deterministically to its tracker label (`bug` vs
-/// `enhancement`) so forward-looking suggestions never deadlock the `debug-protocol` loop.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Partition Invariant: `{Critical, Important}` map to `bug` and require Section 4 Mermaid UML;
-///   `{Suggestion, Nitpick}` map to `enhancement` and permit `N/A -- ` in Section 4.
-///
-/// ## 3. Preconditions
-/// - Parsed from the trimmed value following `SEVERITY:` in the `## Audit Source` footer.
-///
-/// ## 4. Postconditions
-/// - Provides total projections to canonical severity string, Mermaid requirement flag, and tracker label.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$ per classification query.
-/// - Space Complexity: $O(1)$ stack-allocated discriminant.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Unknown severity tokens evaluate to `None` in `DossierSeverity::parse` without panicking.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-DOSSIER-SEVERITY-ENUM]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum DossierSeverity {
@@ -182,29 +110,6 @@ pub enum DossierSeverity {
 
 impl DossierSeverity {
     /// Parses a trimmed `SEVERITY:` token into a strongly typed `DossierSeverity` variant.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A. Enforces Step D Check 3 (`SEVERITY: (Critical|Important|Suggestion|Nitpick)`)
-    /// using an exhaustive lexical match with zero regular expressions.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Accepts only exact canonical tokens `"Critical"`, `"Important"`, `"Suggestion"`, or `"Nitpick"`.
-    /// - Rejects placeholders such as `"[Critical | Important | Suggestion | Nitpick]"`.
-    ///
-    /// ## 3. Preconditions
-    /// - `raw` is a UTF-8 string slice representing the text after `SEVERITY:`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Some(DossierSeverity)` on exact canonical match, or `None` otherwise.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(L)$ where $L$ is the byte length of `raw.trim()`.
-    /// - Space Complexity: $O(1)$ zero heap allocation.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Total non-panicking parser; malformed or empty strings return `None`.
-    ///
-    /// ## 7. Realization & Traceability
     /// Realises: [REQ-DEFECT-DOSSIER-SEVERITY-PARSE]
     pub fn parse(raw: &str) -> Option<Self> {
         match raw.trim() {
@@ -217,28 +122,6 @@ impl DossierSeverity {
     }
 
     /// Returns the canonical ASCII string literal for this `DossierSeverity` variant.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A. Ensures round-trip identity between parsed `DossierSeverity`
-    /// variants and serialized `DefectSchemaValidation::severity` strings.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - For all `s: DossierSeverity`, `DossierSeverity::parse(s.as_str()) == Some(s)`.
-    ///
-    /// ## 3. Preconditions
-    /// - `self` is a valid `DossierSeverity` variant.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `"Critical"`, `"Important"`, `"Suggestion"`, or `"Nitpick"`.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(1)$.
-    /// - Space Complexity: $O(1)$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Infallible `const fn`; never panics.
-    ///
-    /// ## 7. Realization & Traceability
     /// Realises: [REQ-DEFECT-DOSSIER-SEVERITY-AS-STR]
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -250,57 +133,12 @@ impl DossierSeverity {
     }
 
     /// Determines whether this severity level mandates a fenced Mermaid diagram in Section 4.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A. Mechanically separates Step D Check 7 (`Critical`/`Important`
-    /// require a syntactically valid Mermaid diagram) from Check 8 (`Suggestion`/`Nitpick` allow `N/A -- `).
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Returns `true` if and only if `self` is `Self::Critical` or `Self::Important`.
-    ///
-    /// ## 3. Preconditions
-    /// - `self` is an initialized `DossierSeverity` value.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns a deterministic boolean predicate with zero side effects.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(1)$.
-    /// - Space Complexity: $O(1)$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Total `const fn` over a 4-variant enum; cannot fail.
-    ///
-    /// ## 7. Realization & Traceability
     /// Realises: [REQ-DEFECT-DOSSIER-SEVERITY-MERMAID-GATE]
     pub const fn requires_mermaid(self) -> bool {
         matches!(self, Self::Critical | Self::Important)
     }
 
     /// Maps `DossierSeverity` to its mandatory GitHub issue tracker label (`bug` or `enhancement`).
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A and issue #287 loop-termination invariants. Prevents non-bug
-    /// `Suggestion` and `Nitpick` findings from entering the `debug-protocol` `--label bug` queue.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Maps `Critical` and `Important` to `"bug"`.
-    /// - Maps `Suggestion` and `Nitpick` to `"enhancement"`.
-    ///
-    /// ## 3. Preconditions
-    /// - `self` is a valid `DossierSeverity`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `"bug"` or `"enhancement"` as a `'static` ASCII slice.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(1)$.
-    /// - Space Complexity: $O(1)$.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Infallible `const fn`; never panics or allocates.
-    ///
-    /// ## 7. Realization & Traceability
     /// Realises: [REQ-DEFECT-DOSSIER-SEVERITY-LABEL]
     pub const fn github_label(self) -> &'static str {
         match self {
@@ -311,292 +149,69 @@ impl DossierSeverity {
 }
 
 /// Command-line arguments for `verify-baseline check-defect`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 CLI qualification requirements. Defines the
-/// command-line interface for validating defect dossiers, persisting `.pipeline/defects/` artifacts,
-/// and publishing or editing GitHub SSOT issues with closed-loop verification.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Either `body_file` (`--body-file`) or `target` (`BODY_FILE`) identifies the input markdown path.
-/// - Ephemeral `/tmp/` paths outside `.pipeline/defects/` are unconditionally rejected regardless of
-///   `--dry-run`, `--publish`, or `--issue`, and validated dossiers are persisted in `.pipeline/defects/` prior to GitHub sync.
-///
-/// ## 3. Preconditions
-/// - Populated by `clap::Parser` or constructed directly by integration tests.
-///
-/// ## 4. Postconditions
-/// - Carries all configuration parameters required by `run_check_defect`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$ field access.
-/// - Space Complexity: $O(P + T)$ where $P$ is path length and $T$ is title string length.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Missing required file paths or invalid flags are rejected fail-closed by `run_check_defect`.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-DOSSIER-CLI-ARGS]
 #[derive(Debug, Clone)]
 pub struct DefectDossierArgs {
-    /// Path to markdown defect dossier body file
     pub body_file: Option<PathBuf>,
-
-    /// Title of the defect issue (`[AUDIT] [file.ext]: <description>`)
     pub title: Option<String>,
-
-    /// Repository identifier (`<owner>/<repo>`); auto-resolved from `git remote get-url origin` when omitted
     pub repo: Option<String>,
-
-    /// Override label to apply
     pub label: Option<String>,
-
-    /// Issue tracker provider (github or gitlab)
     pub provider: String,
-
-    /// Validate defect dossier schema without persisting to `.pipeline/defects/` or submitting to remote tracker
     pub dry_run: bool,
-
-    /// Explicit publication flag (publishing to remote GitHub SSOT and closed-loop verification are active by default whenever `--dry-run` is not passed)
     pub publish: bool,
-
-    /// Existing GitHub issue number to overwrite atomically (`gh issue edit`) and verify closed-loop
     pub issue: Option<u64>,
-
-    /// Positional body file path
     pub target: Option<PathBuf>,
 }
 
 /// Validated metadata extracted from a compliant 7-section adversarial defect dossier.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A traceability controls. Encapsulates the verified severity,
-/// file location, derived tracker label, symptom summary, and test-target path extracted during
-/// `validate_defect_dossier`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `severity` is guaranteed to be one of `"Critical"`, `"Important"`, `"Suggestion"`, or `"Nitpick"`.
-/// - `suggested_label` is `"bug"` for `Critical`/`Important` and `"enhancement"` for `Suggestion`/`Nitpick`.
-/// - `test_target` matches both `<!-- test-target: ... -->` and `- **Test-Target**:` in Section 1.
-///
-/// ## 3. Preconditions
-/// - Constructed exclusively upon successful completion of all 12 checks in `validate_defect_dossier`.
-///
-/// ## 4. Postconditions
-/// - Exposes immutable, non-empty metadata fields for downstream CLI reporting and tracker publishing.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$ struct construction and field access.
-/// - Space Complexity: $O(M)$ where $M$ is the sum of extracted metadata string lengths.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Never constructed when any schema or Mermaid check fails.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-DOSSIER-VALIDATION-RECORD]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DefectSchemaValidation {
-    /// Verified severity level (`Critical`, `Important`, `Suggestion`, or `Nitpick`).
     pub severity: String,
-    /// Verified `FILE_LOCATION` value (`<path>:<line>`).
     pub file_location: String,
-    /// Mandatory GitHub tracker label (`bug` or `enhancement`) mapped from `severity`.
     pub suggested_label: String,
-    /// Verified `- **Symptom**:` description from Section 1.
     pub symptom: String,
-    /// Verified test target path matched across HTML comment and `- **Test-Target**:` bullet.
     pub test_target: String,
 }
 
 /// Checks whether a trimmed metadata value is an unfilled template placeholder such as `[path]` or `[...]`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A. Prevents unpopulated Section 2 skeleton placeholders (`[description]`,
-/// `[language]`, `[path]:[line-line]`) from passing automated defect dossier verification.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Returns `true` if `val` is empty or begins with `'['` and ends with `']'`.
-///
-/// ## 3. Preconditions
-/// - `val` is a borrowed UTF-8 string slice.
-///
-/// ## 4. Postconditions
-/// - Returns `true` when `val` represents an unfilled bracketed template token, `false` otherwise.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$ prefix and suffix byte inspection after trimming.
-/// - Space Complexity: $O(1)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Total function; never panics on empty or multi-byte UTF-8 inputs.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-DOSSIER-PLACEHOLDER-GUARD]
-fn is_unfilled_placeholder(val: &str) -> bool {
+pub(crate) fn is_unfilled_placeholder(val: &str) -> bool {
     let trimmed = val.trim();
     trimmed.is_empty() || (trimmed.starts_with('[') && trimmed.ends_with(']'))
 }
 
 /// Extracts the file basename (e.g. `bridge.cpp` or `SKILL.md`) from a `FILE_LOCATION` specification.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A. Normalizes `FILE_LOCATION` strings of the form
-/// `path/to/file.ext:56-61` into their terminal filename component `file.ext` for Step D Check 11
-/// title verification (`[AUDIT] [<file.ext>]: <description>`).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Strips surrounding backticks and whitespace.
-/// - Strips trailing `:<line>` or `:<start>-<end>` suffixes when the segment after `:` begins with an ASCII digit.
-/// - Extracts the substring after the final `'/'` or `'\\'` path separator.
-///
-/// ## 3. Preconditions
-/// - `file_location` is a valid UTF-8 string slice.
-///
-/// ## 4. Postconditions
-/// - Returns the extracted filename string (or empty `String` if `file_location` is blank).
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(L)$ where $L$ is the byte length of `file_location`.
-/// - Space Complexity: $O(L)$ for the owned basename string.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking total function using `rsplit_once` and `rsplit`.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-DOSSIER-BASENAME-EXTRACTOR]
 pub fn extract_file_basename(file_location: &str) -> String {
     let cleaned = file_location.trim().trim_matches('`').trim();
     if cleaned.is_empty() {
         return String::new();
     }
-
     let without_line = match cleaned.rsplit_once(':') {
         Some((before, after))
             if !before.is_empty()
-                && after
-                    .chars()
-                    .next()
-                    .map(|c| c.is_ascii_digit())
-                    .unwrap_or(false) =>
+                && after.chars().next().is_some_and(|c| c.is_ascii_digit()) =>
         {
             before
         }
         _ => cleaned,
     };
-
-    let after_slash = without_line
+    without_line
         .rsplit(['/', '\\'])
         .next()
         .unwrap_or(without_line)
-        .trim();
-    after_slash.to_string()
+        .trim()
+        .to_string()
 }
 
 /// Validates that a defect issue title conforms to Step D Check 11 (`[AUDIT] [<file.ext>]: <description>`).
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C tracker configuration management rules.
-/// Enforces that every published or edited adversarial audit issue carries a standardized
-/// `[AUDIT] [<file.ext>]: <description>` title whose `<file.ext>` matches the basename of `FILE_LOCATION`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Title must contain zero Unicode em dashes (`\u2014`).
-/// - Title must begin with `"[AUDIT] ["` and contain `"]: "` separating `<file.ext>` and `<description>`.
-/// - `<file.ext>` must equal `extract_file_basename(file_location)` whenever `file_location` is non-empty.
-/// - `<description>` must be non-empty and not an unfilled `[...]` placeholder.
-///
-/// ## 3. Preconditions
-/// - `title` and `file_location` are valid UTF-8 string slices.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok(())` if `title` satisfies all Check 11 formatting and basename parity rules.
-/// - Returns `Err(String)` describing the exact title violation otherwise.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(T + F)$ where $T$ is `title.len()` and $F$ is `file_location.len()`.
-/// - Space Complexity: $O(F)$ for basename normalization.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Uses `strip_prefix` and `split_once` with zero panicking slice operations.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-DOSSIER-TITLE-VALIDATOR]
 pub fn validate_defect_title(title: &str, file_location: &str) -> Result<(), String> {
-    let trimmed = title.trim();
-    if trimmed.contains('\u{2014}') {
-        return Err(
-            "Defect title contains forbidden Unicode em dash (\\u2014); use ASCII '--' instead."
-                .to_string(),
-        );
-    }
-
-    let Some(after_prefix) = trimmed.strip_prefix("[AUDIT] [") else {
-        return Err(format!(
-            "Invalid title '{}': must match '[AUDIT] [<file.ext>]: <description>' (Check 11).",
-            trimmed
-        ));
-    };
-
-    let Some((file_part, desc_part)) = after_prefix.split_once("]: ") else {
-        return Err(format!(
-            "Invalid title '{}': missing ']: ' separator in '[AUDIT] [<file.ext>]: <description>' (Check 11).",
-            trimmed
-        ));
-    };
-
-    let file_token = file_part.trim();
-    let desc_token = desc_part.trim();
-    if file_token.is_empty() || is_unfilled_placeholder(file_token) {
-        return Err(format!(
-            "Invalid title '{}': '<file.ext>' bracket token must be non-empty (Check 11).",
-            trimmed
-        ));
-    }
-
-    if desc_token.is_empty() || is_unfilled_placeholder(desc_token) {
-        return Err(format!(
-            "Invalid title '{}': '<description>' after ']: ' must be non-empty and not a placeholder (Check 11).",
-            trimmed
-        ));
-    }
-
-    let expected_basename = extract_file_basename(file_location);
-    if !expected_basename.is_empty() && file_token != expected_basename {
-        return Err(format!(
-            "Title filename mismatch (Check 11): title specifies '[{}]' but FILE_LOCATION basename is '{}'.",
-            file_token, expected_basename
-        ));
-    }
-
-    Ok(())
+    crate::defect_dossier_repo::validate_defect_title_impl(title, file_location)
 }
 
 /// Derives a compliant `[AUDIT] [<file.ext>]: <description>` title from `FILE_LOCATION` and `Symptom`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A. Guarantees that invocations of `verify-baseline check-defect`
-/// omitting `--title` automatically synthesize a Check 11-compliant issue title grounded in
-/// the dossier's `FILE_LOCATION` basename and Section 1 `Symptom`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Output always starts with `"[AUDIT] ["`, embeds `extract_file_basename(file_location)`,
-///   and appends the first line of `symptom` after `"]: "`.
-/// - Output satisfies `validate_defect_title(&output, file_location).is_ok()` for any non-placeholder inputs.
-///
-/// ## 3. Preconditions
-/// - `file_location` and `symptom` are UTF-8 string slices extracted from a validated dossier.
-///
-/// ## 4. Postconditions
-/// - Returns an owned `String` formatted as `[AUDIT] [<file.ext>]: <description>`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(F + S)$ where $F$ is `file_location.len()` and $S$ is `symptom.len()`.
-/// - Space Complexity: $O(F + S)$ for the synthesized title string.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Falls back to `"dossier.md"` and `"Adversarial audit finding"` if inputs are empty; never panics.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-DOSSIER-TITLE-DERIVATION]
 pub fn derive_defect_title(file_location: &str, symptom: &str) -> String {
     let basename = extract_file_basename(file_location);
@@ -605,601 +220,22 @@ pub fn derive_defect_title(file_location: &str, symptom: &str) -> String {
     } else {
         basename.as_str()
     };
-
     let first_line = symptom.lines().next().unwrap_or("").trim();
     let desc_part = if first_line.is_empty() || is_unfilled_placeholder(first_line) {
         "Adversarial audit finding"
     } else {
         first_line
     };
-
     format!("[AUDIT] [{}]: {}", file_part, desc_part)
-}
-
-/// Validates Section 1 (`## 1. Context and References`) for Check 5 and Check 12 compliance.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A traceability controls. Enforces that Section 1 contains the
-/// machine-readable `<!-- test-target: <path> -->` HTML annotation followed by all four mandatory
-/// bold-labeled bullets (`File`, `Pillar`, `Symptom`, `Test-Target`), and verifies that both
-/// test-target paths are identical for automated execution by `reconcile-backlog`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - `<!-- test-target: <path> -->` must contain a non-empty, whitespace-free path and precede
-///   the Section 1 bullet list.
-/// - All four bullets (`- **File**:`, `- **Pillar**:`, `- **Symptom**:`, `- **Test-Target**:`)
-///   must be present on separate lines with non-empty, non-placeholder values.
-/// - Normalized `comment_test_target` must equal normalized `bullet_test_target`.
-///
-/// ## 3. Preconditions
-/// - `sec1_lines` contains the slice of lines between `## 1. Context and References` and `## 2.`.
-///
-/// ## 4. Postconditions
-/// - Appends any Section 1 violations to `errors` and returns `(symptom, test_target)`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(L_1)$ where $L_1$ is the number of lines in Section 1.
-/// - Space Complexity: $O(M)$ where $M$ is the byte length of extracted Section 1 metadata values.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking line scanner; records all missing or mismatched fields into `errors`.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEFECT-DOSSIER-SECTION1-VALIDATOR]
-fn validate_section_1_context(sec1_lines: &[String], errors: &mut Vec<String>) -> (String, String) {
-    let mut comment_target: Option<(usize, String)> = None;
-    let mut first_bullet_idx: Option<usize> = None;
-    let mut file_bullet: Option<String> = None;
-    let mut pillar_bullet: Option<String> = None;
-    let mut symptom_bullet: Option<String> = None;
-    let mut test_target_bullet: Option<String> = None;
-
-    for (idx, raw_line) in sec1_lines.iter().enumerate() {
-        let trimmed = raw_line.trim();
-        if trimmed.starts_with("<!--") && trimmed.ends_with("-->") {
-            let inner = trimmed
-                .strip_prefix("<!--")
-                .and_then(|s| s.strip_suffix("-->"))
-                .unwrap_or("")
-                .trim();
-            if let Some(after_tag) = inner.strip_prefix("test-target:") {
-                let target_val = after_tag.trim().trim_matches('`').trim();
-                if !target_val.is_empty()
-                    && !is_unfilled_placeholder(target_val)
-                    && !target_val.chars().any(char::is_whitespace)
-                {
-                    comment_target = Some((idx, target_val.to_string()));
-                }
-            }
-            continue;
-        }
-
-        let bullet_rest = trimmed
-            .strip_prefix("- ")
-            .or_else(|| trimmed.strip_prefix("* "))
-            .map(str::trim_start);
-
-        if let Some(rest) = bullet_rest {
-            if first_bullet_idx.is_none() {
-                first_bullet_idx = Some(idx);
-            }
-            if let Some(val) = rest.strip_prefix("**File**:") {
-                let clean = val.trim().trim_matches('`').trim();
-                if !clean.is_empty() && !is_unfilled_placeholder(clean) {
-                    file_bullet = Some(clean.to_string());
-                }
-            } else if let Some(val) = rest.strip_prefix("**Pillar**:") {
-                let clean = val.trim();
-                if !clean.is_empty() && !is_unfilled_placeholder(clean) {
-                    pillar_bullet = Some(clean.to_string());
-                }
-            } else if let Some(val) = rest.strip_prefix("**Symptom**:") {
-                let clean = val.trim();
-                if !clean.is_empty() && !is_unfilled_placeholder(clean) {
-                    symptom_bullet = Some(clean.to_string());
-                }
-            } else if let Some(val) = rest.strip_prefix("**Test-Target**:") {
-                let clean = val.trim().trim_matches('`').trim();
-                if !clean.is_empty()
-                    && !is_unfilled_placeholder(clean)
-                    && !clean.chars().any(char::is_whitespace)
-                {
-                    test_target_bullet = Some(clean.to_string());
-                }
-            }
-        }
-    }
-
-    if file_bullet.is_none() {
-        errors.push("Section 1 missing mandatory '- **File**:' bullet (Check 5).".to_string());
-    }
-    if pillar_bullet.is_none() {
-        errors.push("Section 1 missing mandatory '- **Pillar**:' bullet (Check 5).".to_string());
-    }
-    if symptom_bullet.is_none() {
-        errors.push("Section 1 missing mandatory '- **Symptom**:' bullet (Check 5).".to_string());
-    }
-    if test_target_bullet.is_none() {
-        errors.push(
-            "Section 1 missing mandatory '- **Test-Target**:' bullet with valid path (Check 5 / Check 12)."
-                .to_string(),
-        );
-    }
-
-    match (&comment_target, &test_target_bullet) {
-        (None, _) => {
-            errors.push(
-                "Section 1 missing mandatory '<!-- test-target: <path> -->' annotation (Check 12)."
-                    .to_string(),
-            );
-        }
-        (Some((c_idx, c_path)), Some(b_path)) => {
-            if let Some(b_idx) = first_bullet_idx {
-                if *c_idx > b_idx {
-                    errors.push(
-                        "Section 1 '<!-- test-target: <path> -->' must precede the four bullet lines (Check 12)."
-                            .to_string(),
-                    );
-                }
-            }
-            if c_path != b_path {
-                errors.push(format!(
-                    "Section 1 test-target mismatch (Check 12): HTML comment has '{}' but '- **Test-Target**:' bullet has '{}'.",
-                    c_path, b_path
-                ));
-            }
-        }
-        (Some(_), None) => {}
-    }
-
-    (
-        symptom_bullet.unwrap_or_default(),
-        test_target_bullet.unwrap_or_default(),
-    )
-}
-
-/// Validates Section 2 (`## 2. Root Cause Analysis (5 Whys)`) for Step D Check 6 compliance.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A root-cause analysis governance. Verifies that Section 2 contains
-/// all five numbered causal chain items `1.` through `5.` formatted as
-/// `<k>. **Why <question>?** Because <reason>.` without regular expressions.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Every integer $k \in \{1, 2, 3, 4, 5\}$ must match at least one line in Section 2 starting
-///   with `"{k}. **Why "` and containing `"?** Because "` with non-empty question and reason clauses.
-///
-/// ## 3. Preconditions
-/// - `sec2_lines` is the slice of lines between `## 2. Root Cause Analysis (5 Whys)` and `## 3.`.
-///
-/// ## 4. Postconditions
-/// - Pushes a diagnostic into `errors` for any missing or malformed Why item $k \in 1..=5$.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(L_2)$ where $L_2$ is the number of lines in Section 2.
-/// - Space Complexity: $O(1)$ auxiliary state.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Total lexical scan using `strip_prefix` and `split_once`; never panics.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEFECT-DOSSIER-SECTION2-WHYS-VALIDATOR]
-fn validate_section_2_whys(sec2_lines: &[String], errors: &mut Vec<String>) {
-    for num in 1..=5 {
-        let prefix = format!("{}. **Why ", num);
-        let mut matched_valid = false;
-        for raw_line in sec2_lines {
-            let trimmed = raw_line.trim();
-            if let Some(after_why) = trimmed.strip_prefix(&prefix) {
-                if let Some((question, because_clause)) = after_why.split_once("?** Because ") {
-                    let q_clean = question.trim();
-                    let b_clean = because_clause.trim();
-                    if !q_clean.is_empty()
-                        && !is_unfilled_placeholder(q_clean)
-                        && !b_clean.is_empty()
-                        && !is_unfilled_placeholder(b_clean)
-                    {
-                        matched_valid = true;
-                        break;
-                    }
-                }
-            }
-        }
-        if !matched_valid {
-            errors.push(format!(
-                "Section 2 missing or malformed Why item {}: must match '{}. **Why <question>?** Because <reason>.' (Check 6).",
-                num, num
-            ));
-        }
-    }
-}
-
-/// Validates Section 4 (`## 4. UML Diagrams`) for Step D Check 7 and Check 8 compliance.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A architectural modeling rules and `rules/platform-independence.md`.
-/// Enforces that `Critical` and `Important` findings include a fenced ```` ```mermaid ```` block that
-/// passes `deap_core::markdown::check_mermaid_syntax` (plus class-diagram member brace checks),
-/// and that `Suggestion` and `Nitpick` findings include either `N/A -- ` or a valid Mermaid diagram.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - When `severity` is `Some(Critical | Important)`: Section 4 must contain ` ```mermaid ` and
-///   `check_mermaid_syntax` must return zero errors.
-/// - When `severity` is `Some(Suggestion | Nitpick)`: Section 4 must contain `"N/A -- "` or ` ```mermaid `.
-/// - Any `classDiagram` block in Section 4 must not contain `{` or `}` inside class member lines.
-///
-/// ## 3. Preconditions
-/// - `sec4_lines` is the slice of lines in Section 4; `full_content` is the complete dossier string.
-///
-/// ## 4. Postconditions
-/// - Appends all detected Section 4 and Mermaid syntax violations to `errors`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ over dossier byte length $N$.
-/// - Space Complexity: $O(E)$ where $E$ is the number of detected Mermaid diagnostics.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Offline deterministic grammar check; never contacts remote servers or panics.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEFECT-DOSSIER-SECTION4-MERMAID-VALIDATOR]
-fn validate_section_4_uml(
-    sec4_lines: &[String],
-    full_content: &str,
-    severity: Option<DossierSeverity>,
-    errors: &mut Vec<String>,
-) {
-    let has_mermaid_fence = sec4_lines.iter().any(|l| {
-        let t = l.trim();
-        t == "```mermaid" || t.starts_with("```mermaid ")
-    });
-    let has_na_marker = sec4_lines.iter().any(|l| l.contains("N/A -- "));
-
-    match severity {
-        Some(sev) if sev.requires_mermaid() => {
-            if !has_mermaid_fence {
-                errors.push(format!(
-                    "Section 4 missing mandatory ```mermaid diagram block for {} severity finding (Check 7).",
-                    sev.as_str()
-                ));
-            }
-        }
-        Some(sev) if !has_na_marker && !has_mermaid_fence => {
-            errors.push(format!(
-                "Section 4 for {} severity must contain 'N/A -- ' or a valid ```mermaid diagram (Check 8).",
-                sev.as_str()
-            ));
-        }
-        Some(_) | None => {}
-    }
-
-    if has_mermaid_fence || full_content.contains("```mermaid") {
-        let mermaid_errs = check_mermaid_syntax(full_content, "defect_dossier.md");
-        for err in mermaid_errs {
-            errors.push(format!("Mermaid syntax violation (Check 7): {}", err));
-        }
-
-        // Enforce classDiagram curly-brace member rule from SKILL.md Section 1.5
-        let mut in_mermaid = false;
-        let mut is_class_diagram = false;
-        for raw_line in sec4_lines {
-            let trimmed = raw_line.trim();
-            if !in_mermaid {
-                if trimmed == "```mermaid" || trimmed.starts_with("```mermaid ") {
-                    in_mermaid = true;
-                    is_class_diagram = false;
-                }
-            } else if trimmed.starts_with("```") {
-                in_mermaid = false;
-                is_class_diagram = false;
-            } else if !trimmed.is_empty() && !trimmed.starts_with("%%") {
-                if trimmed.eq_ignore_ascii_case("classDiagram")
-                    || trimmed.to_ascii_lowercase().starts_with("classdiagram ")
-                {
-                    is_class_diagram = true;
-                } else if is_class_diagram
-                    && (trimmed.contains('{') || trimmed.contains('}'))
-                    && !trimmed.starts_with("class ")
-                    && trimmed != "{"
-                    && trimmed != "}"
-                {
-                    errors.push(format!(
-                        "Mermaid syntax violation (Check 7): curly braces '{{}}' forbidden in class member line: '{}'.",
-                        trimmed
-                    ));
-                }
-            }
-        }
-    }
-}
-
-/// Validates Section 6 (`## 6. Proposed Correction`), global fence parity, ASCII art prohibition,
-/// and Unicode em dash prohibition (Checks 9 and 10).
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A. Ensures every defect dossier provides a concrete, language-tagged
-/// proposed code correction in Section 6, maintains balanced triple-backtick fences across the entire
-/// document, and contains zero unescaped ASCII art arrows (`->>` or `→`) outside Mermaid blocks
-/// and zero Unicode em dashes (`\u2014`).
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Total count of lines whose trimmed prefix is `"```"` across `full_content` must be even.
-/// - Section 6 must contain at least one opening fence `"```<lang>"` where `<lang>` is non-empty
-///   and not an unfilled `[language]` placeholder.
-/// - Every line outside ` ```mermaid ... ``` ` blocks must contain zero `"->>"` and zero `'\u{2192}'` tokens.
-/// - `full_content` must contain zero `'\u{2014}'` characters.
-///
-/// ## 3. Preconditions
-/// - `sec6_lines` is the slice of lines in Section 6; `full_content` is the complete dossier string.
-///
-/// ## 4. Postconditions
-/// - Appends any detected fence, language tag, ASCII art, or em dash violations to `errors`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ single-pass line scan over `full_content` and `sec6_lines`.
-/// - Space Complexity: $O(1)$ scalar state tracking.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Total non-panicking lexical scan.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEFECT-DOSSIER-FENCES-AND-ASCII-ART-VALIDATOR]
-fn validate_fences_ascii_art_and_em_dash(
-    sec6_lines: &[String],
-    full_content: &str,
-    errors: &mut Vec<String>,
-) {
-    // Check Section 6 language-tagged code fence
-    let mut in_sec6_fence = false;
-    let mut found_tagged_sec6_fence = false;
-    for raw_line in sec6_lines {
-        let trimmed = raw_line.trim();
-        if let Some(after_ticks) = trimmed.strip_prefix("```") {
-            if !in_sec6_fence {
-                in_sec6_fence = true;
-                let lang_tag = after_ticks.trim();
-                if !lang_tag.is_empty() && !is_unfilled_placeholder(lang_tag) {
-                    found_tagged_sec6_fence = true;
-                }
-            } else {
-                in_sec6_fence = false;
-            }
-        }
-    }
-    if !found_tagged_sec6_fence {
-        errors.push(
-            "Section 6 ('## 6. Proposed Correction') must contain a triple-backtick code block with a non-empty language tag (e.g. ```rust)."
-                .to_string(),
-        );
-    }
-
-    // Check balanced code fences, no unescaped ->> or → outside mermaid blocks, and no leading H1 outside fences
-    let mut fence_count = 0usize;
-    let mut in_any_fence = false;
-    let mut in_mermaid_fence = false;
-
-    for (idx, raw_line) in full_content.lines().enumerate() {
-        let line_no = idx.saturating_add(1);
-        let trimmed = raw_line.trim_start();
-        if let Some(after_ticks) = trimmed.strip_prefix("```") {
-            fence_count = fence_count.saturating_add(1);
-            if !in_any_fence {
-                in_any_fence = true;
-                let tag = after_ticks.trim();
-                in_mermaid_fence = tag.eq_ignore_ascii_case("mermaid");
-            } else {
-                in_any_fence = false;
-                in_mermaid_fence = false;
-            }
-            continue;
-        }
-
-        if !in_mermaid_fence && (raw_line.contains("->>") || raw_line.contains('\u{2192}')) {
-            errors.push(format!(
-                "Line {}: forbidden ASCII art arrow ('->>' or '\\u2192') outside ```mermaid block (Check 10).",
-                line_no
-            ));
-        }
-
-        if !in_any_fence && trimmed.starts_with("# ") {
-            errors.push(format!(
-                "Line {}: forbidden leading '# ' H1 header in dossier body; start directly with '## 1. Context and References'.",
-                line_no
-            ));
-        }
-    }
-
-    if !fence_count.is_multiple_of(2) {
-        errors.push(format!(
-            "Unbalanced code blocks (Check 9): found odd number ({}) of ``` fences.",
-            fence_count
-        ));
-    }
-
-    if full_content.contains('\u{2014}') {
-        errors.push(
-            "Dossier contains forbidden Unicode em dash (\\u2014); use ASCII '--' instead."
-                .to_string(),
-        );
-    }
-}
-
-/// Checks whether a crate identifier is one of the six canonical Tier 0 upstream compiler crates.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C poly-repo architecture boundaries.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Returns true iff `crate_name` is in `{"deap-core", "compile-sysml", "ingest-sysml", "verify-baseline", "assemble-conops", "reconcile-backlog"}`.
-///
-/// ## 3. Preconditions
-/// - `crate_name` is a valid string slice.
-///
-/// ## 4. Postconditions
-/// - Returns boolean truth value.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$ constant time string comparisons.
-/// - Space Complexity: $O(1)$ auxiliary storage.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking total function.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-IS-VALID-UPSTREAM-CRATE-NAME]
-fn is_valid_upstream_crate_name(name: &str) -> bool {
-    name == "deap-core"
-        || name == "compile-sysml"
-        || name == "ingest-sysml"
-        || name == "verify-baseline"
-        || name == "assemble-conops"
-        || name == "reconcile-backlog"
-}
-
-/// Checks whether `haystack` contains `prefix` immediately followed by `suffix`.
-/// Realises: [REQ-VERIFY-034]
-fn has_split_token(haystack: &str, prefix: &str, suffix: &str) -> bool {
-    haystack.match_indices(prefix).any(|(idx, _)| {
-        haystack
-            .get(idx.saturating_add(prefix.len())..)
-            .is_some_and(|rest| rest.starts_with(suffix))
-    })
-}
-
-/// Inspects a proposed code line for forbidden regular-expression crate tokens using split-token matching.
-/// Realises: [REQ-CHECK-FORBIDDEN-REGEX-TOKENS]
-fn check_forbidden_regex_tokens(line: &str) -> Option<String> {
-    const FORBIDDEN_REGEX_TOKENS: [(&str, &str); 5] = [
-        ("re", "gex::"),
-        ("Re", "gex::new"),
-        ("Re", "gexSet"),
-        ("use re", "gex"),
-        ("extern crate r", "egex"),
-    ];
-
-    let stripped_diff = line
-        .trim_start()
-        .trim_start_matches(['+', '-'])
-        .trim_start();
-    let collapsed = stripped_diff
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    let normalized = collapsed
-        .replace(" :: ", "::")
-        .replace(" ::", "::")
-        .replace(":: ", "::");
-
-    for candidate in [line, collapsed.as_str(), normalized.as_str()] {
-        for (prefix, suffix) in FORBIDDEN_REGEX_TOKENS {
-            if has_split_token(candidate, prefix, suffix) {
-                return Some(format!("{prefix}{suffix}"));
-            }
-        }
-    }
-    None
-}
-
-/// Validates Section 6 (`## 6. Proposed Correction`) code blocks for Check 34 Zero Regex Invariant compliance.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ISO 26262 ASIL D verification rules. Ensures that no proposed
-/// code corrections in Section 6 introduce forbidden `regex` crate dependencies, eliminating ReDoS
-/// vulnerabilities and non-deterministic backtracking hazards.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Every ` ```rust `, ` ```rs `, ` ```diff `, or ` ```patch ` code fence inside Section 6 must
-///   contain zero occurrences of forbidden regex tokens.
-///
-/// ## 3. Preconditions
-/// - `sec6_lines` is the slice of lines belonging to Section 6.
-///
-/// ## 4. Postconditions
-/// - Appends diagnostic messages to `errors` for each detected forbidden regex token.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(L_6)$ where $L_6$ is the line count in Section 6.
-/// - Space Complexity: $O(1)$ auxiliary memory.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Total non-panicking linear slice scanning.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEFECT-DOSSIER-SECTION6-ZERO-REGEX-GATE]
-fn validate_section_6_zero_regex(sec6_lines: &[String], errors: &mut Vec<String>) {
-    let mut in_checked_fence = false;
-    for raw_line in sec6_lines {
-        let trimmed = raw_line.trim();
-        if let Some(after_ticks) = trimmed.strip_prefix("```") {
-            if !in_checked_fence {
-                let tag = after_ticks.trim();
-                let lower = tag.to_ascii_lowercase();
-                if lower == "rust"
-                    || lower == "rs"
-                    || lower == "diff"
-                    || lower == "patch"
-                    || lower.starts_with("rust ")
-                    || lower.starts_with("rust,")
-                    || lower.starts_with("rs ")
-                    || lower.starts_with("rs,")
-                    || lower.starts_with("diff ")
-                    || lower.starts_with("diff,")
-                    || lower.starts_with("patch ")
-                    || lower.starts_with("patch,")
-                {
-                    in_checked_fence = true;
-                }
-            } else {
-                in_checked_fence = false;
-            }
-            continue;
-        }
-
-        if in_checked_fence {
-            if let Some(token) = check_forbidden_regex_tokens(trimmed) {
-                errors.push(format!(
-                    "Check 34 Zero Regex Invariant violation in Section 6: forbidden regex token '{}' in proposed correction.",
-                    token
-                ));
-            }
-        }
-    }
 }
 
 /// Enforces the upstream domain cleanliness gate on Section 6 lines, rejecting downstream crate paths
 /// when validating in an `UPSTREAM_SPEC_CORE_COMPILER` workspace.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C poly-repo boundary isolation controls. Prevents
-/// downstream domain or application crate paths (such as `crates/cuas-coa-engine/`) from leaking
-/// into upstream compiler defect dossiers.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - When `is_upstream` is `false`, performs a no-op and appends zero errors.
-/// - When `is_upstream` is `true`, every concrete `crates/<crate_name>` reference in `sec6_lines`
-///   must satisfy `is_valid_upstream_crate_name(crate_name)`.
-///
-/// ## 3. Preconditions
-/// - `sec6_lines` is a slice of UTF-8 lines from Section 6 (or another inspected section).
-/// - `is_upstream` indicates whether the target repository/workspace is `UPSTREAM_SPEC_CORE_COMPILER`.
-///
-/// ## 4. Postconditions
-/// - Appends a diagnostic message to `errors` for every non-upstream `crates/<name>` reference when `is_upstream` is `true`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(L_6)$ linear in total byte length of `sec6_lines`.
-/// - Space Complexity: $O(1)$ auxiliary memory beyond error diagnostics.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Total non-panicking lexical scan using `split_once` and `split`.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-DOSSIER-DOMAIN-CLEANLINESS-GATE]
 pub fn domain_cleanliness_gate(sec6_lines: &[String], is_upstream: bool, errors: &mut Vec<String>) {
     if !is_upstream {
         return;
     }
-
     for raw_line in sec6_lines {
         let mut rest = raw_line.as_str();
         while let Some((_, after_prefix)) = rest.split_once("crates/") {
@@ -1212,15 +248,13 @@ pub fn domain_cleanliness_gate(sec6_lines: &[String], is_upstream: bool, errors:
                 .split(['/', ' ', '\t', '`', '"', '\'', ')', ']', '>', ':', ';', ','])
                 .next()
                 .unwrap_or("");
-            let is_crate_ident = crate_name
-                .chars()
-                .next()
-                .map(|c| c.is_ascii_lowercase())
-                .unwrap_or(false)
+            let is_crate_ident = crate_name.chars().next().is_some_and(|c| c.is_ascii_lowercase())
                 && crate_name
                     .chars()
                     .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
-            if is_crate_ident && !is_valid_upstream_crate_name(crate_name) {
+            if is_crate_ident
+                && !crate::defect_dossier_grounding::is_valid_upstream_crate_name(crate_name)
+            {
                 errors.push(format!(
                     "Domain cleanliness gate violation in Section 6: downstream crate path 'crates/{}' is forbidden in UPSTREAM_SPEC_CORE_COMPILER.",
                     crate_name
@@ -1230,97 +264,7 @@ pub fn domain_cleanliness_gate(sec6_lines: &[String], is_upstream: bool, errors:
     }
 }
 
-/// Validates that Section 1 `test-target` is grounded in a concrete file path within one of the 6
-/// upstream compiler crates when in an `UPSTREAM_SPEC_CORE_COMPILER` workspace.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C poly-repo tier boundary controls. Prevents
-/// downstream crate paths (e.g., `crates/cuas-coa-engine/`) or bare directory prefixes without a
-/// file subpath (e.g., `crates/verify-baseline/`) from being cited in upstream specification
-/// compiler defect dossiers.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - When `is_upstream` is `true`: `test_target` must be non-empty and match
-///   `crates/<crate_name>/<non_empty_subpath>` where `crate_name` satisfies `is_valid_upstream_crate_name`.
-///
-/// ## 3. Preconditions
-/// - `test_target` is the normalized path extracted from Section 1.
-/// - `is_upstream` indicates whether the repository or target scope is `UPSTREAM_SPEC_CORE_COMPILER`.
-///
-/// ## 4. Postconditions
-/// - Appends a diagnostic message to `errors` if `is_upstream` is `true` and `test_target` is empty,
-///   lacks a concrete file subpath, or does not belong to one of the 6 upstream compiler crates.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(P)$ where $P$ is `test_target.len()`.
-/// - Space Complexity: $O(1)$ auxiliary allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Total non-panicking string slice prefix matching.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEFECT-DOSSIER-UPSTREAM-TEST-TARGET-GROUNDING]
-fn validate_upstream_test_target_grounding(
-    test_target: &str,
-    is_upstream: bool,
-    errors: &mut Vec<String>,
-) {
-    if !is_upstream {
-        return;
-    }
-
-    let clean = test_target.trim().trim_matches('`').trim();
-    let is_valid = if let Some(after_crates) = clean.strip_prefix("crates/") {
-        if let Some((crate_name, subpath)) = after_crates.split_once('/') {
-            let clean_subpath = subpath.trim().trim_matches('/');
-            is_valid_upstream_crate_name(crate_name) && !clean_subpath.is_empty()
-        } else {
-            false
-        }
-    } else {
-        false
-    };
-
-    if !is_valid {
-        errors.push(format!(
-            "Upstream test-target crate grounding violation: '{}' does not resolve to a file inside one of the 6 upstream compiler crates (crates/{{deap-core, compile-sysml, ingest-sysml, verify-baseline, assemble-conops, reconcile-backlog}}/<file>).",
-            clean
-        ));
-    }
-}
-
-/// Validates Section 6 proposed correction code blocks (Check 34 Zero Regex Invariant and upstream
-/// domain cleanliness) and verifies upstream `test-target` crate grounding.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D verification rules. Unifies
-/// Section 6 zero-regex code inspection, Section 6 upstream domain cleanliness verification, and
-/// Section 1 `test-target` upstream crate grounding into a single deterministic verification gate.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Rejects any ` ```rust `, ` ```rs `, ` ```diff `, or ` ```patch ` block in `sec6_lines` containing
-///   forbidden regex tokens.
-/// - When `is_upstream` is `true`, rejects any downstream `crates/<non_upstream>` reference in `sec6_lines`
-///   via `domain_cleanliness_gate`.
-/// - When `is_upstream` is `true`, requires `test_target` to resolve to a non-empty file path under
-///   one of the 6 canonical upstream compiler crates.
-///
-/// ## 3. Preconditions
-/// - `sec6_lines` contains the lines of Section 6 (`## 6. Proposed Correction`).
-/// - `test_target` is the extracted test target path string.
-/// - `is_upstream` indicates whether the workspace/repository is `UPSTREAM_SPEC_CORE_COMPILER`.
-///
-/// ## 4. Postconditions
-/// - Appends all detected Section 6 zero-regex, domain cleanliness, and test-target grounding errors to `errors`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(L_6 + P)$ linear in Section 6 byte length and `test_target` length.
-/// - Space Complexity: $O(1)$ auxiliary memory beyond appended diagnostics.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking total function.
-///
-/// ## 7. Realization & Traceability
+/// Validates Section 6 proposed correction code blocks and verifies upstream `test-target` crate grounding.
 /// Realises: [REQ-DEFECT-DOSSIER-VALIDATE-SEC6-AND-TARGET-GROUNDING]
 pub fn validate_section_6_code_and_target_grounding(
     sec6_lines: &[String],
@@ -1328,376 +272,36 @@ pub fn validate_section_6_code_and_target_grounding(
     is_upstream: bool,
     errors: &mut Vec<String>,
 ) {
-    validate_section_6_zero_regex(sec6_lines, errors);
+    crate::defect_dossier_grounding::validate_section_6_zero_regex(sec6_lines, errors);
     domain_cleanliness_gate(sec6_lines, is_upstream, errors);
-    validate_upstream_test_target_grounding(test_target, is_upstream, errors);
-}
-
-/// Detects whether the current workspace or provided root directory is an UPSTREAM_SPEC_CORE_COMPILER workspace.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A configuration management controls. Deterministically determines
-/// repository tier classification by checking for the presence of `.pipeline/upstream` directly on disk.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Returns true iff `.pipeline/upstream` is detected at `workspace_root` or any ancestor directory,
-///   or in the current process working directory or any of its ancestor directories.
-///
-/// ## 3. Preconditions
-/// - `workspace_root` is an optional path to search from.
-///
-/// ## 4. Postconditions
-/// - Returns a boolean flag indicating upstream repository status.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(D)$ where $D$ is directory tree depth.
-/// - Space Complexity: $O(1)$ auxiliary state.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking filesystem check.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DETECT-IS-UPSTREAM-COMPILER]
-fn detect_is_upstream_compiler(workspace_root: Option<&Path>) -> bool {
-    if let Some(root) = workspace_root {
-        if is_upstream_compiler(root) {
-            return true;
-        }
-        let mut cur = root;
-        while let Some(parent) = cur.parent() {
-            if is_upstream_compiler(parent) {
-                return true;
-            }
-            cur = parent;
-        }
-    }
-    if is_upstream_compiler(Path::new(".")) {
-        return true;
-    }
-    if let Ok(abs_cur) = std::env::current_dir() {
-        let mut cur = abs_cur.as_path();
-        loop {
-            if is_upstream_compiler(cur) {
-                return true;
-            }
-            match cur.parent() {
-                Some(p) => cur = p,
-                None => break,
-            }
-        }
-    }
-    false
+    crate::defect_dossier_grounding::validate_upstream_test_target_grounding(
+        test_target,
+        is_upstream,
+        errors,
+    );
 }
 
 /// Validates a markdown defect dossier with explicit target repository and workspace root scoping.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D verification tool qualification
-/// standards. Mechanically enforces the complete Adversarial Code Auditor schema,
-/// Mermaid diagram syntax, test-target parity, 5-Whys causal chain, zero-H1/zero-em-dash,
-/// Section 6 zero-regex, and upstream test-target crate grounding invariants in pure Rust with zero regular expressions.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// 1. Rejects empty payloads or leading `# ` H1 headers (first non-empty line must be `## 1. Context and References`).
-/// 2. Enforces exact presence and ascending order of all 7 `DossierSection` headers plus `## Audit Source`.
-/// 3. Enforces valid `SEVERITY:` (`Critical`, `Important`, `Suggestion`, `Nitpick`) and `FILE_LOCATION: <path>:<line>`.
-/// 4. Enforces Section 1 `<!-- test-target: <path> -->` and all 4 bullets (`File`, `Pillar`, `Symptom`, `Test-Target`) with matching test-target paths.
-/// 5. Enforces Section 2 numbered lines `1.` through `5.` matching `<k>. **Why ...?** Because ...`.
-/// 6. Enforces Section 4 Mermaid syntax via `deap_core::markdown::check_mermaid_syntax` (for `Critical`/`Important`) or `N/A -- ` (for `Suggestion`/`Nitpick`).
-/// 7. Enforces Section 6 language-tagged code fence, balanced ``` fences, zero `->>`/`→` outside Mermaid blocks, and zero `\u2014`.
-/// 8. Enforces Check 34 Zero Regex Invariant inside Section 6 ` ```rust ` blocks.
-/// 9. Enforces upstream `test-target` crate grounding in UPSTREAM_SPEC_CORE_COMPILER workspaces.
-///
-/// ## 3. Preconditions
-/// - `content` is a valid UTF-8 string slice representing the candidate defect dossier body.
-/// - `target_repo` is an optional repository slug (e.g. `gintatkinson/DEAP01-spec-core`).
-/// - `workspace_root` is an optional path to search for `.pipeline/upstream`.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok(DefectSchemaValidation)` when zero violations exist across all gates.
-/// - Returns `Err(Vec<String>)` listing every detected violation when one or more gates fail.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ linear in the byte length $N$ of `content`.
-/// - Space Complexity: $O(L + E)$ where $L$ is line count and $E$ is diagnostic error count.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking total function using checked slice indexing (`.get(..)`) exclusively.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-VALIDATE-DEFECT-DOSSIER-SCOPED]
 pub fn validate_defect_dossier_scoped(
     content: &str,
     target_repo: Option<&str>,
     workspace_root: Option<&Path>,
 ) -> Result<DefectSchemaValidation, Vec<String>> {
-    let mut errors = Vec::new();
-    let lines: Vec<String> = content.lines().map(str::to_string).collect();
-
-    let is_upstream = match target_repo {
-        Some(repo) => {
-            let repo_clean = repo.trim().to_ascii_lowercase();
-            repo_clean.contains("deap01-spec-core")
-                || repo_clean == "upstream"
-                || repo_clean == "spec-core"
-        }
-        None => detect_is_upstream_compiler(workspace_root),
-    };
-
-    // 0. First non-empty line must be "## 1. Context and References" (no leading # H1 header)
-    match lines.iter().map(|l| l.trim()).find(|l| !l.is_empty()) {
-        None => {
-            errors.push("Defect dossier body is empty.".to_string());
-            return Err(errors);
-        }
-        Some(first_line) => {
-            if first_line.starts_with("# ") {
-                errors.push(format!(
-                    "Forbidden leading H1 header '{}' on first line: dossier must begin directly with '## 1. Context and References'.",
-                    first_line
-                ));
-            } else if first_line != DossierSection::ContextAndReferences.header() {
-                errors.push(format!(
-                    "First non-empty line must be '{}' (found '{}').",
-                    DossierSection::ContextAndReferences.header(),
-                    first_line
-                ));
-            }
-        }
-    }
-
-    // 1 & 2. Locate exact 7 section headers and "## Audit Source" outside fenced code blocks
-    let mut section_indices: Vec<(DossierSection, usize)> = Vec::new();
-    let mut audit_source_idx: Option<usize> = None;
-    let mut in_fence = false;
-
-    for (idx, raw_line) in lines.iter().enumerate() {
-        let trimmed = raw_line.trim();
-        if trimmed.starts_with("```") {
-            in_fence = !in_fence;
-            continue;
-        }
-        if in_fence {
-            continue;
-        }
-        for &sec in DossierSection::ALL {
-            if trimmed == sec.header() && !section_indices.iter().any(|(s, _)| *s == sec) {
-                section_indices.push((sec, idx));
-            }
-        }
-        if trimmed == "## Audit Source" && audit_source_idx.is_none() {
-            audit_source_idx = Some(idx);
-        }
-    }
-
-    let mut prev_line_idx = 0usize;
-    for &sec in DossierSection::ALL {
-        match section_indices.iter().find(|(s, _)| *s == sec) {
-            Some((_, idx)) => {
-                if *idx < prev_line_idx {
-                    errors.push(format!(
-                        "Section header '{}' is out of order (Check 1).",
-                        sec.header()
-                    ));
-                }
-                prev_line_idx = *idx;
-            }
-            None => {
-                errors.push(format!(
-                    "Missing mandatory exact section header '{}' (Check 1).",
-                    sec.header()
-                ));
-            }
-        }
-    }
-
-    match audit_source_idx {
-        Some(idx) => {
-            if idx < prev_line_idx {
-                errors.push(
-                    "Section header '## Audit Source' must appear after Section 7 (Check 2)."
-                        .to_string(),
-                );
-            }
-        }
-        None => {
-            errors
-                .push("Missing mandatory '## Audit Source' section header (Check 2).".to_string());
-        }
-    }
-
-    // Helper closure to slice lines for a given DossierSection
-    let get_section_slice = |target_sec: DossierSection| -> &[String] {
-        let Some((_, start_idx)) = section_indices.iter().find(|(s, _)| *s == target_sec) else {
-            return &[];
-        };
-        let mut end_idx = lines.len();
-        for &(_, other_idx) in &section_indices {
-            if other_idx > *start_idx && other_idx < end_idx {
-                end_idx = other_idx;
-            }
-        }
-        if let Some(a_idx) = audit_source_idx {
-            if a_idx > *start_idx && a_idx < end_idx {
-                end_idx = a_idx;
-            }
-        }
-        lines
-            .get(start_idx.saturating_add(1)..end_idx)
-            .unwrap_or(&[])
-    };
-
-    // 3. Check SEVERITY line
-    let mut parsed_severity: Option<DossierSeverity> = None;
-    for raw_line in &lines {
-        let trimmed = raw_line.trim();
-        if let Some(rest) = trimmed.strip_prefix("SEVERITY:") {
-            if let Some(sev) = DossierSeverity::parse(rest) {
-                parsed_severity = Some(sev);
-                break;
-            }
-        }
-    }
-    let severity_str = match parsed_severity {
-        Some(sev) => sev.as_str().to_string(),
-        None => {
-            errors.push(
-                "Missing or invalid 'SEVERITY:' line (must be Critical, Important, Suggestion, or Nitpick) (Check 3)."
-                    .to_string(),
-            );
-            String::new()
-        }
-    };
-
-    // 4. Check FILE_LOCATION line (must match FILE_LOCATION: <path>:<line>)
-    let mut file_location_opt: Option<String> = None;
-    for raw_line in &lines {
-        let trimmed = raw_line.trim();
-        if let Some(rest) = trimmed.strip_prefix("FILE_LOCATION:") {
-            let val = rest.trim().trim_matches('`').trim();
-            if !val.is_empty() && !is_unfilled_placeholder(val) {
-                if let Some((path_part, line_part)) = val.rsplit_once(':') {
-                    let has_valid_line = line_part
-                        .chars()
-                        .next()
-                        .map(|c| c.is_ascii_digit())
-                        .unwrap_or(false);
-                    if !path_part.trim().is_empty()
-                        && !is_unfilled_placeholder(path_part)
-                        && has_valid_line
-                    {
-                        file_location_opt = Some(val.to_string());
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    let file_location = match file_location_opt {
-        Some(loc) => loc,
-        None => {
-            errors.push(
-                "Missing or invalid mandatory 'FILE_LOCATION: <path>:<line>' line (Check 4)."
-                    .to_string(),
-            );
-            String::new()
-        }
-    };
-
-    // 5 & 12. Validate Section 1 Context, 4 mandatory bullets, and test-target parity
-    let sec1_slice = get_section_slice(DossierSection::ContextAndReferences);
-    let (symptom, test_target) = validate_section_1_context(sec1_slice, &mut errors);
-
-    // 6. Validate Section 2 5-Whys
-    let sec2_slice = get_section_slice(DossierSection::RootCauseAnalysis);
-    validate_section_2_whys(sec2_slice, &mut errors);
-
-    // 7 & 8. Validate Section 4 UML Diagrams
-    let sec4_slice = get_section_slice(DossierSection::UmlDiagrams);
-    validate_section_4_uml(sec4_slice, content, parsed_severity, &mut errors);
-
-    // 9 & 10. Validate Section 6 code fence tag, balanced fences, no ASCII art UML, and no em dashes
-    let sec6_slice = get_section_slice(DossierSection::ProposedCorrection);
-    validate_fences_ascii_art_and_em_dash(sec6_slice, content, &mut errors);
-
-    // Validate Section 6 zero-regex compliance, domain cleanliness, and upstream test-target crate grounding
-    validate_section_6_code_and_target_grounding(
-        sec6_slice,
-        &test_target,
-        is_upstream,
-        &mut errors,
-    );
-
-    if !errors.is_empty() {
-        Err(errors)
-    } else {
-        let suggested_label = parsed_severity
-            .map(|s| s.github_label().to_string())
-            .unwrap_or_else(|| "enhancement".to_string());
-
-        Ok(DefectSchemaValidation {
-            severity: severity_str,
-            file_location,
-            suggested_label,
-            symptom,
-            test_target,
-        })
-    }
+    crate::defect_dossier_repo::validate_defect_dossier_scoped_impl(
+        content,
+        target_repo,
+        workspace_root,
+    )
 }
 
 /// Validates a markdown defect dossier against all 12 Adversarial Code Auditor Step D checks.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D verification tool qualification
-/// standards. Mechanically enforces the complete Adversarial Code Auditor schema,
-/// Mermaid diagram syntax, test-target parity, 5-Whys causal chain, zero-H1/zero-em-dash,
-/// Section 6 zero-regex, and upstream test-target crate grounding invariants in pure Rust with zero regular expressions.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Evaluates `validate_defect_dossier_scoped(content, None, None)`.
-///
-/// ## 3. Preconditions
-/// - `content` is a valid UTF-8 string slice representing the candidate defect dossier body.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok(DefectSchemaValidation)` when zero violations exist across all gates.
-/// - Returns `Err(Vec<String>)` listing every detected violation when one or more gates fail.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ linear in byte length $N$.
-/// - Space Complexity: $O(L + E)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking total function.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-VALIDATE-DEFECT-DOSSIER-12-CHECKS]
 pub fn validate_defect_dossier(content: &str) -> Result<DefectSchemaValidation, Vec<String>> {
     validate_defect_dossier_scoped(content, None, None)
 }
 
 /// Validates a markdown defect dossier with explicit target repository scoping.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C poly-repo configuration controls.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Invokes `validate_defect_dossier_scoped` with `workspace_root: None`.
-///
-/// ## 3. Preconditions
-/// - `content` is UTF-8 markdown text; `target_repo` is an optional repository slug.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok(DefectSchemaValidation)` or `Err(Vec<String>)`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ linear.
-/// - Space Complexity: $O(L + E)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking total function.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-VALIDATE-DEFECT-DOSSIER-WITH-REPO]
 pub fn validate_defect_dossier_with_repo(
     content: &str,
@@ -1707,759 +311,57 @@ pub fn validate_defect_dossier_with_repo(
 }
 
 /// Parses a `<owner>/<repo>` repository slug from a Git remote URL or explicit slug string.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C configuration management controls. Prevents
-/// cross-repository SSOT contamination (where downstream findings could be misrouted to
-/// `gintatkinson/DEAP01-spec-core`) by deterministically extracting the `<owner>/<repo>` slug
-/// from SSH (`git@github.com:owner/repo.git`, `ssh://git@github.com/owner/repo.git`), HTTPS
-/// (`https://github.com/owner/repo.git`), or direct `<owner>/<repo>` strings without regular expressions.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Strips optional trailing `.git` and `/` delimiters prior to path extraction.
-/// - Accepts only two-segment `<owner>/<repo>` identifiers where both segments are non-empty,
-///   contain zero whitespace, zero `:` characters, and zero additional `/` separators.
-///
-/// ## 3. Preconditions
-/// - `remote_url` is a UTF-8 string slice representing a Git remote URL or `<owner>/<repo>` slug.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok(String)` formatted as `<owner>/<repo>` when `remote_url` is valid.
-/// - Returns `Err(String)` with a diagnostic explanation when `remote_url` is empty or malformed.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(U)$ where $U$ is the byte length of `remote_url`.
-/// - Space Complexity: $O(U)$ for the normalized `<owner>/<repo>` output string.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Total non-panicking parser using `strip_prefix`, `strip_suffix`, and `split_once` exclusively.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-DOSSIER-PARSE-REPO-SLUG]
 pub fn parse_github_repo_slug(remote_url: &str) -> Result<String, String> {
-    let trimmed = remote_url.trim();
-    if trimmed.is_empty() {
-        return Err("Repository remote URL or slug is empty.".to_string());
-    }
-
-    let without_trailing_slash = trimmed.trim_end_matches('/');
-    let without_git_suffix = without_trailing_slash
-        .strip_suffix(".git")
-        .unwrap_or(without_trailing_slash)
-        .trim_end_matches('/');
-
-    let slug_candidate = if let Some(after_scheme) = without_git_suffix
-        .strip_prefix("https://")
-        .or_else(|| without_git_suffix.strip_prefix("http://"))
-        .or_else(|| without_git_suffix.strip_prefix("ssh://"))
-    {
-        match after_scheme.split_once('/') {
-            Some((_host, path)) => path.trim_start_matches('/'),
-            None => {
-                return Err(format!(
-                    "Invalid repository URL '{}': missing '<owner>/<repo>' path after host.",
-                    trimmed
-                ));
-            }
-        }
-    } else if let Some((_user_host, path)) = without_git_suffix.split_once(':') {
-        path.trim_start_matches('/')
-    } else {
-        without_git_suffix
-    };
-
-    let Some((owner, repo)) = slug_candidate.split_once('/') else {
-        return Err(format!(
-            "Invalid repository identifier '{}': expected '<owner>/<repo>' slug.",
-            trimmed
-        ));
-    };
-
-    let owner_clean = owner.trim();
-    let repo_clean = repo.trim().trim_end_matches('/');
-    if owner_clean.is_empty()
-        || repo_clean.is_empty()
-        || repo_clean.contains('/')
-        || owner_clean.contains(':')
-        || repo_clean.contains(':')
-        || owner_clean.chars().any(char::is_whitespace)
-        || repo_clean.chars().any(char::is_whitespace)
-    {
-        return Err(format!(
-            "Invalid repository slug '{}' derived from '{}': expected '<owner>/<repo>'.",
-            slug_candidate, trimmed
-        ));
-    }
-
-    Ok(format!("{}/{}", owner_clean, repo_clean))
+    crate::defect_dossier_repo::parse_github_repo_slug_impl(remote_url)
 }
 
 /// Resolves the target GitHub repository `<owner>/<repo>` slug from an explicit `--repo` argument
 /// or by querying `git remote get-url origin` in the dossier's working directory.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 repository boundary isolation controls. Eliminates
-/// the hardcoded `gintatkinson/DEAP01-spec-core` default on `--repo` so downstream projects
-/// automatically resolve their own `origin` remote and fail closed if `--repo` is omitted and no
-/// valid `origin` remote exists.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - When `explicit_repo` is `Some(r)` with non-empty `r.trim()`, validates `r` via `parse_github_repo_slug`
-///   without invoking `git`.
-/// - When `explicit_repo` is `None` (or blank), executes `git remote get-url origin` in the nearest
-///   existing directory ancestor of `work_dir` and parses stdout via `parse_github_repo_slug`.
-///
-/// ## 3. Preconditions
-/// - `work_dir` is the directory path associated with the defect dossier or current workspace.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok(String)` containing the verified `<owner>/<repo>` slug on success.
-/// - Returns `Err(String)` if `--repo` was omitted and `git remote get-url origin` fails or cannot be parsed.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(U)$ string parsing plus at most one `git remote get-url origin` subprocess call.
-/// - Space Complexity: $O(U)$ for subprocess stdout/stderr buffers.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Missing `git` binary, non-git directories, missing `origin` remotes, or malformed URLs fail closed
-///   with an explicit `Err(String)`.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-DOSSIER-RESOLVE-TARGET-REPO]
 pub fn resolve_target_repo(explicit_repo: Option<&str>, work_dir: &Path) -> Result<String, String> {
-    if let Some(raw) = explicit_repo {
-        let trimmed = raw.trim();
-        if !trimmed.is_empty() {
-            return parse_github_repo_slug(trimmed);
-        }
-    }
-
-    let effective_dir = if work_dir.as_os_str().is_empty() {
-        Path::new(".")
-    } else if work_dir.is_dir() {
-        work_dir
-    } else {
-        work_dir
-            .ancestors()
-            .find(|p| !p.as_os_str().is_empty() && p.is_dir())
-            .unwrap_or_else(|| Path::new("."))
-    };
-
-    let output = Command::new("git")
-        .args(["remote", "get-url", "origin"])
-        .current_dir(effective_dir)
-        .output()
-        .map_err(|e| {
-            format!(
-                "--repo was omitted and failed to execute 'git remote get-url origin' in '{}': {}",
-                effective_dir.display(),
-                e
-            )
-        })?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!(
-            "--repo was omitted and 'git remote get-url origin' could not be resolved in '{}': {}",
-            effective_dir.display(),
-            stderr.trim()
-        ));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    parse_github_repo_slug(stdout.trim()).map_err(|e| {
-        format!(
-            "--repo was omitted and 'git remote get-url origin' returned an unparseable URL '{}': {}",
-            stdout.trim(),
-            e
-        )
-    })
+    crate::defect_dossier_repo::resolve_target_repo_impl(explicit_repo, work_dir)
 }
 
 /// Checks whether a candidate file path points to an ephemeral `/tmp/` location outside `.pipeline/defects/`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A configuration management controls. Prevents agents from filing
-/// GitHub SSOT issues from ephemeral `/tmp/gh_body_*.md` files that bypass local `.pipeline/defects/`
-/// persistence.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Returns `true` if the slash-normalized path starts with `"/tmp/"` or `"/private/tmp/"` and
-///   does not reside within a `"/.pipeline/defects/"` directory hierarchy.
-///
-/// ## 3. Preconditions
-/// - `path` is a valid filesystem `Path` reference.
-///
-/// ## 4. Postconditions
-/// - Returns a deterministic boolean verdict without performing filesystem I/O.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(P)$ where $P$ is the byte length of `path`.
-/// - Space Complexity: $O(P)$ for slash normalization.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Total function; never panics on non-UTF-8 OS strings (via `to_string_lossy`).
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-DOSSIER-NO-TMP-PATH]
 pub fn is_ephemeral_tmp_path(path: &Path) -> bool {
     let normalized = path.to_string_lossy().replace('\\', "/");
     let is_tmp_root = normalized.starts_with("/tmp/") || normalized.starts_with("/private/tmp/");
-    let in_pipeline_defects = normalized.contains("/.pipeline/defects/");
-    is_tmp_root && !in_pipeline_defects
+    is_tmp_root && !normalized.contains("/.pipeline/defects/")
 }
 
 /// Ensures the validated defect dossier is persisted inside `.pipeline/defects/<filename>.md`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A dual-location SSOT archival rules. Guarantees that before any
-/// GitHub issue is created or edited, the validated dossier body exists inside `.pipeline/defects/`
-/// so local repository state and remote GitHub SSOT are backed by the identical `.pipeline/defects/` artifact.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - If `body_file` already resides inside a `.pipeline/defects` directory, returns `body_file` unchanged.
-/// - Otherwise creates `.pipeline/defects/` if absent and writes `content` atomically to
-///   `.pipeline/defects/<filename>`.
-///
-/// ## 3. Preconditions
-/// - `body_file` is the validated source path; `content` is the validated UTF-8 dossier payload.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok(PathBuf)` pointing to the `.pipeline/defects/<filename>` file containing `content`.
-/// - Returns `Err(String)` if directory creation or file writing fails.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ filesystem write proportional to `content.len()`.
-/// - Space Complexity: $O(P)$ for target `PathBuf` construction.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Propagates any OS I/O error fail-closed as `Err(String)`.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-DOSSIER-DUAL-PERSISTENCE]
 pub fn ensure_persisted_in_pipeline_defects(
     body_file: &Path,
     content: &str,
 ) -> Result<PathBuf, String> {
-    let normalized = body_file.to_string_lossy().replace('\\', "/");
-    if normalized.starts_with(".pipeline/defects/") || normalized.contains("/.pipeline/defects/") {
-        return Ok(body_file.to_path_buf());
-    }
-
-    let file_name = body_file
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| "defect_dossier.md".to_string());
-    let defects_dir = PathBuf::from(".pipeline").join("defects");
-    fs::create_dir_all(&defects_dir)
-        .map_err(|e| format!("Failed to create '{}': {}", defects_dir.display(), e))?;
-    let dest_path = defects_dir.join(file_name);
-    crate::write_atomic_file(&dest_path, content).map_err(|e| {
-        format!(
-            "Failed to persist defect dossier to '{}': {}",
-            dest_path.display(),
-            e
-        )
-    })?;
-    Ok(dest_path)
-}
-
-/// Normalizes CRLF (`\r\n`) line endings to LF (`\n`) and strips trailing newline characters for
-/// closed-loop payload comparison.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A cross-platform transport verification rules. Accounts for GitHub's
-/// REST/GraphQL API `\r\n` line-ending normalization while preserving strict byte-for-byte content
-/// identity across all non-trailing characters.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Idempotent projection: `normalize_line_endings(&normalize_line_endings(s)) == normalize_line_endings(s)`.
-/// - Preserves all internal lines, whitespace, code blocks, and punctuation verbatim.
-///
-/// ## 3. Preconditions
-/// - `text` is a valid UTF-8 string slice.
-///
-/// ## 4. Postconditions
-/// - Returns a `String` with `\r\n` replaced by `\n` and trailing `\r`/`\n` characters removed.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ where $N$ is `text.len()`.
-/// - Space Complexity: $O(N)$ for the normalized string buffer.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Total function; never panics.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEFECT-DOSSIER-CRLF-NORMALIZATION]
-fn normalize_line_endings(text: &str) -> String {
-    text.replace("\r\n", "\n")
-        .trim_end_matches(['\r', '\n'])
-        .to_string()
+    crate::defect_dossier_repo::ensure_persisted_in_pipeline_defects_impl(body_file, content)
 }
 
 /// Verifies the JSON output of `gh issue view --json title,body,url` against the local title and body.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 closed-loop tool verification requirements.
-/// Prevents truncated, shell-corrupted, or mismatched issue payloads from being silently accepted
-/// after `gh issue create` or `gh issue edit`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Remote JSON `title` field must equal `expected_title` character-for-character.
-/// - Remote JSON `body` field (after `normalize_line_endings`) must equal `normalize_line_endings(expected_body)`
-///   byte-for-byte.
-///
-/// ## 3. Preconditions
-/// - `gh_json_output` is the raw stdout string emitted by `gh issue view <ID_OR_URL> --repo <REPO> --json title,body,url`.
-/// - `expected_title` and `expected_body` are the local ground-truth strings.
-///
-/// ## 4. Postconditions
-/// - Returns `Ok(String)` containing the verified remote issue URL if both `title` and `body` match.
-/// - Returns `Err(String)` describing the parse error or payload mismatch otherwise.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ where $N$ is the byte length of `gh_json_output`.
-/// - Space Complexity: $O(N)$ for JSON deserialization and CRLF-normalized body comparison.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Fails closed on malformed JSON, missing `title`/`body` keys, or any title/body divergence.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-DOSSIER-CLOSED-LOOP-GATE]
 pub fn verify_closed_loop_payload(
     gh_json_output: &str,
     expected_title: &str,
     expected_body: &str,
 ) -> Result<String, String> {
-    let parsed: serde_json::Value = serde_json::from_str(gh_json_output).map_err(|e| {
-        format!(
-            "Closed-Loop Payload Verification Gate failed to parse 'gh issue view' JSON: {}",
-            e
-        )
-    })?;
-
-    let remote_title = parsed
-        .get("title")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            "Closed-Loop Payload Verification Gate failed: missing 'title' field in 'gh issue view' JSON."
-                .to_string()
-        })?;
-
-    let remote_body = parsed
-        .get("body")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            "Closed-Loop Payload Verification Gate failed: missing 'body' field in 'gh issue view' JSON."
-                .to_string()
-        })?;
-
-    let remote_url = parsed
-        .get("url")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-
-    if remote_title != expected_title {
-        return Err(format!(
-            "Closed-Loop Payload Verification Gate FAILED: remote title '{}' does not match expected title '{}'.",
-            remote_title, expected_title
-        ));
-    }
-
-    let norm_remote = normalize_line_endings(remote_body);
-    let norm_local = normalize_line_endings(expected_body);
-    if norm_remote != norm_local {
-        return Err(format!(
-            "Closed-Loop Payload Verification Gate FAILED: remote issue body ({} bytes) does not match local .pipeline/defects/ file ({} bytes).",
-            norm_remote.len(),
-            norm_local.len()
-        ));
-    }
-
-    Ok(remote_url)
+    crate::defect_dossier_publish::verify_closed_loop_payload(
+        gh_json_output,
+        expected_title,
+        expected_body,
+    )
 }
 
-/// Constructs a `gh` CLI subprocess `Command` configured with `/etc/ssl/cert.pem` TLS certificate
-/// fallback for macOS `sandbox-exec` environments where `Security.framework` IPC is blocked.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 automated SSOT synchronization controls.
-/// Ensures Go `crypto/x509` inside `gh` can verify GitHub TLS certificates without querying the
-/// restricted macOS `com.apple.trustd` Mach daemon.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Always sets the executable program to `"gh"`.
-/// - When `SSL_CERT_FILE` is not set in the parent process environment and `/etc/ssl/cert.pem`
-///   exists as a regular file, injects `SSL_CERT_FILE=/etc/ssl/cert.pem` into the child environment.
-/// - Preserves any caller-provided `SSL_CERT_FILE` override unchanged.
-///
-/// ## 3. Preconditions
-/// - None; safe to invoke in any host or sandboxed environment.
-///
-/// ## 4. Postconditions
-/// - Returns a configured `std::process::Command` ready for argument appending and execution.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$ environment lookup and single filesystem metadata check.
-/// - Space Complexity: $O(1)$.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Infallible builder; if `/etc/ssl/cert.pem` does not exist on a non-Unix host, leaves
-///   `SSL_CERT_FILE` unset so the system default certificate store is used.
-///
-/// ## 7. Realization & Traceability
+/// Constructs a `gh` CLI subprocess `Command` configured with `/etc/ssl/cert.pem` TLS certificate fallback.
 /// Realises: [REQ-DEFECT-DOSSIER-BUILD-GH-COMMAND]
 pub fn build_gh_command() -> Command {
-    let mut cmd = Command::new("gh");
-    if std::env::var_os("SSL_CERT_FILE").is_none() {
-        let cert_bundle = Path::new("/etc/ssl/cert.pem");
-        if cert_bundle.is_file() {
-            cmd.env("SSL_CERT_FILE", cert_bundle);
-        }
-    }
-    cmd
-}
-
-/// Publishes a new GitHub issue or edits an existing GitHub issue from the persisted `.pipeline/defects/`
-/// file and immediately executes the Closed-Loop Payload Verification Gate.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 automated SSOT synchronization controls.
-/// Executes `gh issue edit` (when `issue_id` is `Some`) or `gh issue create` (when `issue_id` is `None`)
-/// via `build_gh_command()` using `--body-file` pointing to `.pipeline/defects/<filename>.md`, then queries
-/// `gh issue view` and verifies byte-for-byte fidelity via `verify_closed_loop_payload`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Never invokes `gh issue comment` for defect bodies; always overwrites or creates the canonical
-///   issue title and body atomically via `--title` and `--body-file`.
-/// - All `gh` subprocesses are constructed via `build_gh_command()` so `SSL_CERT_FILE=/etc/ssl/cert.pem`
-///   is injected automatically when unset on macOS sandboxed hosts.
-/// - Returns `Ok(String)` only if both the write command and the subsequent `gh issue view`
-///   closed-loop check succeed.
-///
-/// ## 3. Preconditions
-/// - `persisted_path` exists inside `.pipeline/defects/` and contains `local_body`.
-/// - `title`, `repo`, and `label` are non-empty validated strings.
-///
-/// ## 4. Postconditions
-/// - Remote GitHub issue is created or updated with `title`, `label`, and `local_body`, and verified
-///   closed-loop against `local_body`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ local payload verification plus two sequential `gh` CLI process invocations.
-/// - Space Complexity: $O(N)$ for subprocess stdout/stderr buffers.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-zero exit codes from `gh issue create`, `gh issue edit`, or `gh issue view`, or any
-///   payload mismatch in `verify_closed_loop_payload`, fail closed with a descriptive `Err(String)`.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEFECT-DOSSIER-GITHUB-SYNC]
-pub fn publish_or_edit_github_issue(
-    repo: &str,
-    title: &str,
-    label: &str,
-    persisted_path: &Path,
-    local_body: &str,
-    issue_id: Option<u64>,
-) -> Result<String, String> {
-    let body_path_str = persisted_path.to_string_lossy().to_string();
-
-    let issue_identifier = if let Some(id) = issue_id {
-        let id_str = id.to_string();
-        let output = build_gh_command()
-            .args([
-                "issue",
-                "edit",
-                &id_str,
-                "--repo",
-                repo,
-                "--title",
-                title,
-                "--body-file",
-                &body_path_str,
-                "--add-label",
-                label,
-            ])
-            .output()
-            .map_err(|e| format!("Failed to execute 'gh issue edit': {}", e))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!(
-                "'gh issue edit {}' failed: {}",
-                id_str,
-                stderr.trim()
-            ));
-        }
-        id_str
-    } else {
-        let output = build_gh_command()
-            .args([
-                "issue",
-                "create",
-                "--repo",
-                repo,
-                "--title",
-                title,
-                "--label",
-                label,
-                "--body-file",
-                &body_path_str,
-            ])
-            .output()
-            .map_err(|e| format!("Failed to execute 'gh issue create': {}", e))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("'gh issue create' failed: {}", stderr.trim()));
-        }
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let created_ref = stdout
-            .lines()
-            .rev()
-            .map(str::trim)
-            .find(|l| !l.is_empty())
-            .ok_or_else(|| "'gh issue create' succeeded but emitted empty stdout.".to_string())?;
-        created_ref.to_string()
-    };
-
-    let view_output = build_gh_command()
-        .args([
-            "issue",
-            "view",
-            &issue_identifier,
-            "--repo",
-            repo,
-            "--json",
-            "title,body,url",
-        ])
-        .output()
-        .map_err(|e| format!("Failed to execute 'gh issue view': {}", e))?;
-
-    if !view_output.status.success() {
-        let stderr = String::from_utf8_lossy(&view_output.stderr);
-        return Err(format!(
-            "'gh issue view {}' failed: {}",
-            issue_identifier,
-            stderr.trim()
-        ));
-    }
-
-    let view_stdout = String::from_utf8_lossy(&view_output.stdout);
-    let verified_url = verify_closed_loop_payload(&view_stdout, title, local_body)?;
-    if verified_url.is_empty() {
-        Ok(issue_identifier)
-    } else {
-        Ok(verified_url)
-    }
+    crate::defect_dossier_publish::build_gh_command()
 }
 
 /// CLI execution handler for `verify-baseline check-defect`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and DO-330 TQL-4 CLI tool qualification standards. Orchestrates
-/// ephemeral `/tmp/` path rejection, 12-check dossier schema and Mermaid validation, Check 11 title
-/// validation or derivation, and (whenever `--dry-run` is not passed) local `.pipeline/defects/`
-/// persistence and GitHub SSOT publishing/editing with closed-loop verification.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Rejects `/tmp/` paths outside `.pipeline/defects/` unconditionally regardless of `--dry-run`, `--publish`, or `--issue`.
-/// - Validates or auto-derives the `[AUDIT] [<file.ext>]: <description>` title against `FILE_LOCATION`.
-/// - Returns `Ok(())` if and only if all enabled validation, persistence, and closed-loop sync steps succeed.
-///
-/// ## 3. Preconditions
-/// - `args` is a populated `DefectDossierArgs` reference.
-///
-/// ## 4. Postconditions
-/// - Emits structured validation and closed-loop verification telemetry to stdout on `Ok(())`,
-///   or diagnostic errors to stderr with `Err(1)` on any violation.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ over dossier file byte length $N$, plus `gh` CLI subprocess round-trips whenever `--dry-run` is not passed.
-/// - Space Complexity: $O(N)$ for file content and validation buffers.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Missing files, unreadable files, `/tmp/` ephemeral paths, schema/Mermaid violations, title
-///   mismatches, and remote GitHub discrepancies all fail closed with `Err(1)`.
-///
-/// ## 7. Realization & Traceability
 /// Realises: [REQ-RUN-CHECK-DEFECT-ENTRYPOINT]
 pub fn run_check_defect(args: &DefectDossierArgs) -> Result<(), i32> {
-    let body_path = args.body_file.as_ref().or(args.target.as_ref());
-
-    let body_file = match body_path {
-        Some(p) => p,
-        None => {
-            eprintln!("Error: --body-file (or positional BODY_FILE) is required and must exist.");
-            return Err(1);
-        }
-    };
-
-    if is_ephemeral_tmp_path(body_file) {
-        eprintln!(
-            "Error: Ephemeral /tmp/ path '{}' is forbidden. Write defect dossiers directly to .pipeline/defects/<name>.md.",
-            body_file.display()
-        );
-        return Err(1);
-    }
-
-    if !body_file.is_file() {
-        eprintln!(
-            "Error: Defect body file does not exist: {}",
-            body_file.display()
-        );
-        return Err(1);
-    }
-
-    let content = match fs::read_to_string(body_file) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("Error reading body file {}: {}", body_file.display(), e);
-            return Err(1);
-        }
-    };
-
-    let work_dir = body_file
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-
-    let target_repo = args
-        .repo
-        .clone()
-        .or_else(|| resolve_target_repo(None, work_dir).ok());
-
-    match validate_defect_dossier_scoped(&content, target_repo.as_deref(), Some(work_dir)) {
-        Ok(validation) => {
-            let resolved_repo = match resolve_target_repo(args.repo.as_deref(), work_dir) {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("Error resolving target repository: {}", e);
-                    return Err(1);
-                }
-            };
-
-            let label = args.label.clone().unwrap_or_else(|| {
-                if args.provider == "gitlab" {
-                    if validation.suggested_label == "bug" {
-                        "type::bug".to_string()
-                    } else {
-                        "type::feature".to_string()
-                    }
-                } else {
-                    validation.suggested_label.clone()
-                }
-            });
-
-            let title = match &args.title {
-                Some(explicit_title) => {
-                    if let Err(title_err) =
-                        validate_defect_title(explicit_title, &validation.file_location)
-                    {
-                        eprintln!(
-                            "Defect dossier validation FAILED for {} (Check 11 title error):",
-                            body_file.display()
-                        );
-                        eprintln!("  - {}", title_err);
-                        return Err(1);
-                    }
-                    explicit_title.trim().to_string()
-                }
-                None => derive_defect_title(&validation.file_location, &validation.symptom),
-            };
-
-            let persisted_path = if !args.dry_run {
-                match ensure_persisted_in_pipeline_defects(body_file, &content) {
-                    Ok(p) => p,
-                    Err(e) => {
-                        eprintln!("Error persisting dossier to .pipeline/defects/: {}", e);
-                        return Err(1);
-                    }
-                }
-            } else {
-                body_file.to_path_buf()
-            };
-
-            println!(
-                "Defect dossier validation PASSED for {}.",
-                persisted_path.display()
-            );
-            println!("[VALIDATION] Target payload:");
-            println!("  Provider: {}", args.provider);
-            println!("  Repo: {}", resolved_repo);
-            println!("  Title: {}", title);
-            println!("  Severity: {}", validation.severity);
-            println!("  File Location: {}", validation.file_location);
-            println!("  Test Target: {}", validation.test_target);
-            println!("  Label: {}", label);
-            println!("  Body file: {}", persisted_path.display());
-
-            if !args.dry_run {
-                match publish_or_edit_github_issue(
-                    &resolved_repo,
-                    &title,
-                    &label,
-                    &persisted_path,
-                    &content,
-                    args.issue,
-                ) {
-                    Ok(url) => {
-                        println!(
-                            "[CLOSED-LOOP VERIFIED] Remote GitHub SSOT issue synchronized and verified byte-for-byte: {}",
-                            url
-                        );
-                    }
-                    Err(err) => {
-                        eprintln!("Error synchronizing defect dossier to GitHub SSOT: {}", err);
-                        return Err(1);
-                    }
-                }
-            }
-
-            Ok(())
-        }
-        Err(errors) => {
-            eprintln!(
-                "Defect dossier validation FAILED for {} with {} violation(s):",
-                body_file.display(),
-                errors.len()
-            );
-            for err in errors {
-                eprintln!("  - {}", err);
-            }
-            Err(1)
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_has_split_token_and_forbidden_regex_scanner() {
-        assert!(has_split_token("alpha_beta_gamma", "alpha_", "beta"));
-        assert!(has_split_token("\u{1F50D}token_tail", "token_", "tail"));
-        assert!(!has_split_token("token_gap_tail", "token_", "tail"));
-
-        let sample_use = format!("+ {} {};", "use", "regex");
-        assert_eq!(
-            check_forbidden_regex_tokens(&sample_use),
-            Some(format!("{}{}", "use re", "gex"))
-        );
-
-        let sample_spaced = format!("let x = {} :: new(\"a\");", "Regex");
-        assert_eq!(
-            check_forbidden_regex_tokens(&sample_spaced),
-            Some(format!("{}{}", "Re", "gex::new"))
-        );
-
-        assert_eq!(
-            check_forbidden_regex_tokens("let ok = text.strip_prefix(\"abc\");"),
-            None
-        );
-    }
+    crate::defect_dossier_publish::execute_check_defect(args)
 }

@@ -1,32 +1,16 @@
 //! Level 1B operational abstraction sanitization and Mermaid formatting routines.
 
-/// Executes deterministic fn `match_token` within `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `match_token` in `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `match_token` (declaration #1) within `ASSEMBLE-CONOPS-SANITIZE`.
-///
-/// ## 3. Preconditions
-/// - `lower: &str` must satisfy domain and type-safety constraints prior to invoking `match_token`.
-/// - `idx: usize` must satisfy domain and type-safety constraints prior to invoking `match_token`.
-/// - `token: &str` must satisfy domain and type-safety constraints prior to invoking `match_token`.
-///
-/// ## 4. Postconditions
-/// - Returns `Option<usize>` from `match_token` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(lower)) bounded over input/member dimension of `match_token`.
-/// - Space Complexity: O(N(lower)) bounded auxiliary memory for `match_token`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `match_token` (`Option<usize>`).
-/// - State: Maintains consistent state invariants across `match_token` without partial mutation on error.
-/// - Action: Executes `match_token` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `match_token` (`ASSEMBLE-CONOPS-SANITIZE`).
-///
-/// ## 7. Realization & Traceability
+mod mermaid_clean;
+mod protocol_clean;
+
+pub use mermaid_clean::wrap_mermaid_label;
+use mermaid_clean::{
+    clean_comma_period, clean_lead_comma_paren, clean_multi_commas, clean_multi_spaces,
+    clean_space_commas, clean_trail_comma_paren, strip_empty_delimited,
+};
+use protocol_clean::{strip_baud_rates, strip_opcodes, strip_use_cases};
+
+/// Matches a token after skipping horizontal ASCII whitespace at `idx`.
 /// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-MATCH-TOKEN] | SysML v2: ActionDef(match_token)
 fn match_token(lower: &str, mut idx: usize, token: &str) -> Option<usize> {
     let bytes = lower.as_bytes();
@@ -41,31 +25,7 @@ fn match_token(lower: &str, mut idx: usize, token: &str) -> Option<usize> {
     }
 }
 
-/// Executes deterministic fn `strip_poly_equation` within `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `strip_poly_equation` in `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `strip_poly_equation` (declaration #2) within `ASSEMBLE-CONOPS-SANITIZE`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `strip_poly_equation`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `strip_poly_equation` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `strip_poly_equation`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `strip_poly_equation`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `strip_poly_equation` (`String`).
-/// - State: Maintains consistent state invariants across `strip_poly_equation` without partial mutation on error.
-/// - Action: Executes `strip_poly_equation` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `strip_poly_equation` (`ASSEMBLE-CONOPS-SANITIZE`).
-///
-/// ## 7. Realization & Traceability
+/// Strips raw CRC-16 generator polynomial equations (`x^16 + x^12 + x^5 + 1`).
 /// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-STRIP-POLY-EQUATION] | SysML v2: ActionDef(strip_poly_equation)
 fn strip_poly_equation(text: &str) -> String {
     let lower = text.to_ascii_lowercase();
@@ -105,31 +65,7 @@ fn strip_poly_equation(text: &str) -> String {
     result
 }
 
-/// Executes deterministic fn `strip_poly_hex` within `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `strip_poly_hex` in `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `strip_poly_hex` (declaration #3) within `ASSEMBLE-CONOPS-SANITIZE`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `strip_poly_hex`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `strip_poly_hex` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `strip_poly_hex`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `strip_poly_hex`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `strip_poly_hex` (`String`).
-/// - State: Maintains consistent state invariants across `strip_poly_hex` without partial mutation on error.
-/// - Action: Executes `strip_poly_hex` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `strip_poly_hex` (`ASSEMBLE-CONOPS-SANITIZE`).
-///
-/// ## 7. Realization & Traceability
+/// Strips hexadecimal polynomial constants (`0x1021` or `_0x1021`).
 /// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-STRIP-POLY-HEX] | SysML v2: ActionDef(strip_poly_hex)
 fn strip_poly_hex(text: &str) -> String {
     let lower = text.to_ascii_lowercase();
@@ -163,31 +99,59 @@ fn strip_poly_hex(text: &str) -> String {
     result
 }
 
-/// Executes deterministic fn `replace_crc16` within `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `replace_crc16` in `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `replace_crc16` (declaration #4) within `ASSEMBLE-CONOPS-SANITIZE`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `replace_crc16`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `replace_crc16` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `replace_crc16`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `replace_crc16`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `replace_crc16` (`String`).
-/// - State: Maintains consistent state invariants across `replace_crc16` without partial mutation on error.
-/// - Action: Executes `replace_crc16` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `replace_crc16` (`ASSEMBLE-CONOPS-SANITIZE`).
-///
-/// ## 7. Realization & Traceability
+/// Matches a `CRC-16` / `CRC16` token and optional `polynomial [equation|formula]` suffix at `start` (`[REQ-ASSEMBLE-CONOPS]`).
+fn match_crc16_span(lower: &str, bytes: &[u8], start: usize) -> Option<usize> {
+    let left_ok =
+        start == 0 || !bytes.get(start - 1).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
+    if !left_ok {
+        return None;
+    }
+    let mut j = start + 3;
+    if bytes.get(j).copied() == Some(b'-') {
+        j += 1;
+    }
+    if !lower[j..].starts_with("16") {
+        return None;
+    }
+    j += 2;
+    if bytes.get(j).copied() == Some(b'-') {
+        let mut k = j + 1;
+        while bytes.get(k).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_') {
+            k += 1;
+        }
+        if k > j + 1 {
+            j = k;
+        }
+    }
+    let mut k = j;
+    while bytes.get(k).is_some_and(|&b| b == b' ' || b == b'\t') {
+        k += 1;
+    }
+    if k > j && lower[k..].starts_with("polynomial") {
+        let poly_end = k + 10;
+        if !bytes.get(poly_end).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_') {
+            j = poly_end;
+            let mut m = j;
+            while bytes.get(m).is_some_and(|&b| b == b' ' || b == b'\t') {
+                m += 1;
+            }
+            if m > j {
+                for kw in ["equation", "formula"] {
+                    if lower[m..].starts_with(kw) {
+                        let end = m + kw.len();
+                        if !bytes.get(end).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_') {
+                            j = end;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    (!bytes.get(j).is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_')).then_some(j)
+}
+
+/// Replaces low-level `CRC-16` polynomial references with `Frame Integrity Check`.
 /// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-REPLACE-CRC16] | SysML v2: ActionDef(replace_crc16)
 fn replace_crc16(text: &str) -> String {
     let lower = text.to_ascii_lowercase();
@@ -197,79 +161,10 @@ fn replace_crc16(text: &str) -> String {
     let mut i = 0;
 
     while i < lower.len() {
-        let mut found = None;
         if let Some(pos) = lower[i..].find("crc") {
             let start = i + pos;
-            let left_ok = start == 0
-                || !bytes
-                    .get(start - 1)
-                    .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
-            if left_ok {
-                let mut j = start + 3;
-                if bytes.get(j).copied() == Some(b'-') {
-                    j += 1;
-                }
-                if lower[j..].starts_with("16") {
-                    j += 2;
-                    if bytes.get(j).copied() == Some(b'-') {
-                        let mut k = j + 1;
-                        while bytes
-                            .get(k)
-                            .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_')
-                        {
-                            k += 1;
-                        }
-                        if k > j + 1 {
-                            j = k;
-                        }
-                    }
-                    let mut k = j;
-                    while bytes.get(k).is_some_and(|&b| b == b' ' || b == b'\t') {
-                        k += 1;
-                    }
-                    if k > j && lower[k..].starts_with("polynomial") {
-                        let poly_end = k + 10;
-                        let right_poly_ok = !bytes
-                            .get(poly_end)
-                            .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
-                        if right_poly_ok {
-                            j = poly_end;
-                            let mut m = j;
-                            while bytes.get(m).is_some_and(|&b| b == b' ' || b == b'\t') {
-                                m += 1;
-                            }
-                            if m > j {
-                                if lower[m..].starts_with("equation") {
-                                    let eq_end = m + 8;
-                                    let right_eq = !bytes
-                                        .get(eq_end)
-                                        .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
-                                    if right_eq {
-                                        j = eq_end;
-                                    }
-                                } else if lower[m..].starts_with("formula") {
-                                    let form_end = m + 7;
-                                    let right_form = !bytes
-                                        .get(form_end)
-                                        .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
-                                    if right_form {
-                                        j = form_end;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    let right_ok = !bytes
-                        .get(j)
-                        .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
-                    if right_ok {
-                        found = Some((start, j));
-                    }
-                }
-            }
-            if let Some((s_start, s_end)) = found {
-                result.push_str(&text[last_idx..s_start]);
+            if let Some(s_end) = match_crc16_span(&lower, bytes, start) {
+                result.push_str(&text[last_idx..start]);
                 result.push_str("Frame Integrity Check");
                 last_idx = s_end;
                 i = s_end;
@@ -284,31 +179,7 @@ fn replace_crc16(text: &str) -> String {
     result
 }
 
-/// Executes deterministic fn `replace_polynomial_equation` within `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `replace_polynomial_equation` in `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `replace_polynomial_equation` (declaration #5) within `ASSEMBLE-CONOPS-SANITIZE`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `replace_polynomial_equation`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `replace_polynomial_equation` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `replace_polynomial_equation`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `replace_polynomial_equation`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `replace_polynomial_equation` (`String`).
-/// - State: Maintains consistent state invariants across `replace_polynomial_equation` without partial mutation on error.
-/// - Action: Executes `replace_polynomial_equation` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `replace_polynomial_equation` (`ASSEMBLE-CONOPS-SANITIZE`).
-///
-/// ## 7. Realization & Traceability
+/// Replaces `polynomial equation` phrases with `integrity validation`.
 /// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-REPLACE-POLYNOMIAL-EQUATION] | SysML v2: ActionDef(replace_polynomial_equation)
 fn replace_polynomial_equation(text: &str) -> String {
     let lower = text.to_ascii_lowercase();
@@ -353,903 +224,23 @@ fn replace_polynomial_equation(text: &str) -> String {
     result
 }
 
-/// Executes deterministic fn `strip_baud_rates` within `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `strip_baud_rates` in `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `strip_baud_rates` (declaration #6) within `ASSEMBLE-CONOPS-SANITIZE`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `strip_baud_rates`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `strip_baud_rates` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `strip_baud_rates`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `strip_baud_rates`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `strip_baud_rates` (`String`).
-/// - State: Maintains consistent state invariants across `strip_baud_rates` without partial mutation on error.
-/// - Action: Executes `strip_baud_rates` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `strip_baud_rates` (`ASSEMBLE-CONOPS-SANITIZE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-STRIP-BAUD-RATES] | SysML v2: ActionDef(strip_baud_rates)
-fn strip_baud_rates(text: &str) -> String {
-    let lower = text.to_ascii_lowercase();
-    let bytes = text.as_bytes();
-    let mut result = String::with_capacity(text.len());
-    let mut last_idx = 0;
-    let mut i = 0;
-
-    let standard_bauds = [
-        "9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600",
-    ];
-
-    while i < lower.len() {
-        if bytes.get(i).copied() == Some(b'_') {
-            let mut matched_baud = false;
-            for baud in &standard_bauds {
-                if lower[i + 1..].starts_with(baud) {
-                    let end = i + 1 + baud.len();
-                    let right_ok = !bytes
-                        .get(end)
-                        .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
-                    if right_ok {
-                        result.push_str(&text[last_idx..i]);
-                        last_idx = end;
-                        i = end;
-                        matched_baud = true;
-                        break;
-                    }
-                }
-            }
-            if matched_baud {
-                continue;
-            }
-        }
-
-        let is_baud = lower[i..].starts_with("baud");
-        let is_bps = lower[i..].starts_with("bps");
-
-        if is_baud || is_bps {
-            let suffix_len = if is_baud { 4 } else { 3 };
-            let end = i + suffix_len;
-            let right_ok = !bytes
-                .get(end)
-                .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
-
-            if right_ok {
-                let mut prev = i;
-                if is_baud
-                    && prev > 0
-                    && bytes
-                        .get(prev - 1)
-                        .is_some_and(|&b| matches!(b, b'k' | b'm' | b'g' | b'K' | b'M' | b'G'))
-                {
-                    prev -= 1;
-                }
-                while prev > 0
-                    && bytes
-                        .get(prev - 1)
-                        .is_some_and(|&b| b == b' ' || b == b'\t')
-                {
-                    prev -= 1;
-                }
-                let num_end = prev;
-                let mut num_start = num_end;
-                let mut has_digits = false;
-                while num_start > 0
-                    && bytes
-                        .get(num_start - 1)
-                        .is_some_and(|&b| b.is_ascii_digit() || b == b'.')
-                {
-                    if bytes.get(num_start - 1).is_some_and(u8::is_ascii_digit) {
-                        has_digits = true;
-                    }
-                    num_start -= 1;
-                }
-
-                if has_digits {
-                    let mut start = num_start;
-                    let mut at_cursor = num_start;
-                    while at_cursor > 0
-                        && bytes
-                            .get(at_cursor - 1)
-                            .is_some_and(|&b| b == b' ' || b == b'\t')
-                    {
-                        at_cursor -= 1;
-                    }
-                    if at_cursor >= 2 && lower[at_cursor - 2..at_cursor] == *"at" {
-                        let left_at_ok = at_cursor == 2
-                            || !bytes
-                                .get(at_cursor - 3)
-                                .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
-                        if left_at_ok {
-                            start = at_cursor - 2;
-                        }
-                    }
-                    let left_ok = start == 0
-                        || !bytes
-                            .get(start - 1)
-                            .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
-                    if left_ok {
-                        result.push_str(&text[last_idx..start]);
-                        last_idx = end;
-                        i = end;
-                        continue;
-                    }
-                }
-            }
-        }
-
-        let Some(ch) = text[i..].chars().next() else {
-            break;
-        };
-        i += ch.len_utf8();
-    }
-    result.push_str(&text[last_idx..]);
-    result
-}
-
-/// Executes deterministic fn `strip_opcodes` within `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `strip_opcodes` in `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `strip_opcodes` (declaration #7) within `ASSEMBLE-CONOPS-SANITIZE`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `strip_opcodes`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `strip_opcodes` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `strip_opcodes`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `strip_opcodes`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `strip_opcodes` (`String`).
-/// - State: Maintains consistent state invariants across `strip_opcodes` without partial mutation on error.
-/// - Action: Executes `strip_opcodes` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `strip_opcodes` (`ASSEMBLE-CONOPS-SANITIZE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-STRIP-OPCODES] | SysML v2: ActionDef(strip_opcodes)
-fn strip_opcodes(text: &str) -> String {
-    let lower = text.to_ascii_lowercase();
-    let bytes = text.as_bytes();
-    let mut result = String::with_capacity(text.len());
-    let mut last_idx = 0;
-    let mut i = 0;
-
-    while i < lower.len() {
-        let is_opcode = lower[i..].starts_with("opcode");
-        if is_opcode {
-            let left_ok = i == 0
-                || !bytes
-                    .get(i - 1)
-                    .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
-            if left_ok {
-                let mut j = i + 6;
-                if bytes.get(j).is_some_and(|&b| b == b's' || b == b'S') {
-                    j += 1;
-                }
-                let mut k = j;
-                while bytes.get(k).is_some_and(|&b| b == b' ' || b == b'\t') {
-                    k += 1;
-                }
-                if k > j && k < bytes.len() {
-                    if lower[k..].starts_with("0x") {
-                        let mut m = k + 2;
-                        while bytes.get(m).is_some_and(u8::is_ascii_hexdigit) {
-                            m += 1;
-                        }
-                        if m > k + 2 {
-                            let right_ok = !bytes
-                                .get(m)
-                                .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
-                            if right_ok {
-                                result.push_str(&text[last_idx..i]);
-                                last_idx = m;
-                                i = m;
-                                continue;
-                            }
-                        }
-                    } else if bytes.get(k).is_some_and(u8::is_ascii_digit) {
-                        let mut m = k;
-                        while bytes.get(m).is_some_and(u8::is_ascii_digit) {
-                            m += 1;
-                        }
-                        let right_ok = !bytes
-                            .get(m)
-                            .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
-                        if right_ok {
-                            result.push_str(&text[last_idx..i]);
-                            last_idx = m;
-                            i = m;
-                            continue;
-                        }
-                    }
-                }
-                let right_word_ok = !bytes
-                    .get(j)
-                    .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
-                if right_word_ok {
-                    result.push_str(&text[last_idx..i]);
-                    last_idx = j;
-                    i = j;
-                    continue;
-                }
-            }
-        }
-
-        let is_hex_lead = (bytes.get(i).copied() == Some(b'_')
-            && i + 2 < bytes.len()
-            && lower[i + 1..].starts_with("0x"))
-            || lower[i..].starts_with("0x");
-        if is_hex_lead {
-            let start = i;
-            let mut j = if bytes.get(i).copied() == Some(b'_') {
-                i + 3
-            } else {
-                i + 2
-            };
-            let mut has_hex = false;
-            while bytes.get(j).is_some_and(u8::is_ascii_hexdigit) {
-                has_hex = true;
-                j += 1;
-            }
-            if has_hex {
-                result.push_str(&text[last_idx..start]);
-                last_idx = j;
-                i = j;
-                continue;
-            }
-        }
-
-        let Some(ch) = text[i..].chars().next() else {
-            break;
-        };
-        i += ch.len_utf8();
-    }
-    result.push_str(&text[last_idx..]);
-    result
-}
-
-/// Executes deterministic fn `strip_use_cases` within `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `strip_use_cases` in `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `strip_use_cases` (declaration #8) within `ASSEMBLE-CONOPS-SANITIZE`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `strip_use_cases`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `strip_use_cases` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `strip_use_cases`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `strip_use_cases`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `strip_use_cases` (`String`).
-/// - State: Maintains consistent state invariants across `strip_use_cases` without partial mutation on error.
-/// - Action: Executes `strip_use_cases` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `strip_use_cases` (`ASSEMBLE-CONOPS-SANITIZE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-STRIP-USE-CASES] | SysML v2: ActionDef(strip_use_cases)
-fn strip_use_cases(text: &str) -> String {
-    let lower = text.to_ascii_lowercase();
-    let bytes = text.as_bytes();
-    let mut result = String::with_capacity(text.len());
-    let mut last_idx = 0;
-    let mut i = 0;
-
-    while i < lower.len() {
-        if bytes.get(i).copied() == Some(b'(') {
-            let start = i;
-            let mut j = i + 1;
-            while bytes.get(j).is_some_and(|&b| b == b' ' || b == b'\t') {
-                j += 1;
-            }
-            let mut valid_uc_parens = false;
-            if lower[j..].starts_with("uc-") {
-                while j < bytes.len() {
-                    while bytes.get(j).is_some_and(|&b| b == b' ' || b == b'\t') {
-                        j += 1;
-                    }
-                    if lower[j..].starts_with("uc-") {
-                        j += 3;
-                        let digit_start = j;
-                        while bytes.get(j).is_some_and(u8::is_ascii_digit) {
-                            j += 1;
-                        }
-                        if j == digit_start {
-                            break;
-                        }
-                        while bytes.get(j).is_some_and(|&b| b == b' ' || b == b'\t') {
-                            j += 1;
-                        }
-                        if bytes.get(j).copied() == Some(b')') {
-                            valid_uc_parens = true;
-                            j += 1;
-                            break;
-                        } else if bytes.get(j).is_some_and(|&b| b == b',' || b == b'&') {
-                            j += 1;
-                            continue;
-                        } else if lower[j..].starts_with("and") {
-                            j += 3;
-                            continue;
-                        } else {
-                            break;
-                        }
-                    } else {
-                        break;
-                    }
-                }
-            }
-            if valid_uc_parens {
-                result.push_str(&text[last_idx..start]);
-                last_idx = j;
-                i = j;
-                continue;
-            }
-        }
-
-        let is_uc = lower[i..].starts_with("uc-");
-        if is_uc {
-            let left_ok = i == 0
-                || !bytes
-                    .get(i - 1)
-                    .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
-            if left_ok {
-                let mut j = i + 3;
-                let digit_start = j;
-                while bytes.get(j).is_some_and(u8::is_ascii_digit) {
-                    j += 1;
-                }
-                if j > digit_start {
-                    let right_ok = !bytes
-                        .get(j)
-                        .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_');
-                    if right_ok {
-                        result.push_str(&text[last_idx..i]);
-                        last_idx = j;
-                        i = j;
-                        continue;
-                    }
-                }
-            }
-        }
-
-        let Some(ch) = text[i..].chars().next() else {
-            break;
-        };
-        i += ch.len_utf8();
-    }
-    result.push_str(&text[last_idx..]);
-    result
-}
-
-/// Executes deterministic fn `strip_empty_delimited` within `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `strip_empty_delimited` in `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `strip_empty_delimited` (declaration #9) within `ASSEMBLE-CONOPS-SANITIZE`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `strip_empty_delimited`.
-/// - `open: char` must satisfy domain and type-safety constraints prior to invoking `strip_empty_delimited`.
-/// - `close: char` must satisfy domain and type-safety constraints prior to invoking `strip_empty_delimited`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `strip_empty_delimited` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `strip_empty_delimited`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `strip_empty_delimited`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `strip_empty_delimited` (`String`).
-/// - State: Maintains consistent state invariants across `strip_empty_delimited` without partial mutation on error.
-/// - Action: Executes `strip_empty_delimited` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `strip_empty_delimited` (`ASSEMBLE-CONOPS-SANITIZE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-STRIP-EMPTY-DELIMITED] | SysML v2: ActionDef(strip_empty_delimited)
-fn strip_empty_delimited(text: &str, open: char, close: char) -> String {
-    let mut result = String::with_capacity(text.len());
-    let mut chars = text.char_indices().peekable();
-    while let Some((i, c)) = chars.next() {
-        if c == open {
-            let j = i + c.len_utf8();
-            let mut all_ws = true;
-            let mut found_close = false;
-            let mut close_end = j;
-            for (idx, ch) in text[j..].char_indices() {
-                if ch == close {
-                    found_close = true;
-                    close_end = j + idx + ch.len_utf8();
-                    break;
-                } else if ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n' {
-                    all_ws = false;
-                    break;
-                }
-            }
-            if found_close && all_ws {
-                while let Some(&(k, _)) = chars.peek() {
-                    if k < close_end {
-                        chars.next();
-                    } else {
-                        break;
-                    }
-                }
-                continue;
-            }
-        }
-        result.push(c);
-    }
-    result
-}
-
-/// Executes deterministic fn `clean_lead_comma_paren` within `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `clean_lead_comma_paren` in `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `clean_lead_comma_paren` (declaration #10) within `ASSEMBLE-CONOPS-SANITIZE`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `clean_lead_comma_paren`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `clean_lead_comma_paren` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `clean_lead_comma_paren`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `clean_lead_comma_paren`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `clean_lead_comma_paren` (`String`).
-/// - State: Maintains consistent state invariants across `clean_lead_comma_paren` without partial mutation on error.
-/// - Action: Executes `clean_lead_comma_paren` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `clean_lead_comma_paren` (`ASSEMBLE-CONOPS-SANITIZE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-CLEAN-LEAD-COMMA-PAREN] | SysML v2: ActionDef(clean_lead_comma_paren)
-fn clean_lead_comma_paren(text: &str) -> String {
-    let mut result = String::with_capacity(text.len());
-    let bytes = text.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes.get(i).copied() == Some(b'(') {
-            result.push('(');
-            let mut j = i + 1;
-            while bytes.get(j).is_some_and(|&b| b == b' ' || b == b'\t') {
-                j += 1;
-            }
-            if bytes.get(j).copied() == Some(b',') {
-                while bytes
-                    .get(j)
-                    .is_some_and(|&b| b == b',' || b == b' ' || b == b'\t')
-                {
-                    j += 1;
-                }
-                i = j;
-                continue;
-            }
-            i += 1;
-            continue;
-        }
-        let Some(ch) = text[i..].chars().next() else {
-            break;
-        };
-        result.push(ch);
-        i += ch.len_utf8();
-    }
-    result
-}
-
-/// Executes deterministic fn `clean_trail_comma_paren` within `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `clean_trail_comma_paren` in `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `clean_trail_comma_paren` (declaration #11) within `ASSEMBLE-CONOPS-SANITIZE`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `clean_trail_comma_paren`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `clean_trail_comma_paren` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `clean_trail_comma_paren`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `clean_trail_comma_paren`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `clean_trail_comma_paren` (`String`).
-/// - State: Maintains consistent state invariants across `clean_trail_comma_paren` without partial mutation on error.
-/// - Action: Executes `clean_trail_comma_paren` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `clean_trail_comma_paren` (`ASSEMBLE-CONOPS-SANITIZE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-CLEAN-TRAIL-COMMA-PAREN] | SysML v2: ActionDef(clean_trail_comma_paren)
-fn clean_trail_comma_paren(text: &str) -> String {
-    let mut result = String::with_capacity(text.len());
-    let bytes = text.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes.get(i).copied() == Some(b',') {
-            let mut j = i;
-            while bytes
-                .get(j)
-                .is_some_and(|&b| b == b',' || b == b' ' || b == b'\t')
-            {
-                j += 1;
-            }
-            if bytes.get(j).copied() == Some(b')') {
-                result.push(')');
-                i = j + 1;
-                continue;
-            }
-        }
-        let Some(ch) = text[i..].chars().next() else {
-            break;
-        };
-        result.push(ch);
-        i += ch.len_utf8();
-    }
-    result
-}
-
-/// Executes deterministic fn `clean_multi_commas` within `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `clean_multi_commas` in `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `clean_multi_commas` (declaration #12) within `ASSEMBLE-CONOPS-SANITIZE`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `clean_multi_commas`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `clean_multi_commas` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `clean_multi_commas`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `clean_multi_commas`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `clean_multi_commas` (`String`).
-/// - State: Maintains consistent state invariants across `clean_multi_commas` without partial mutation on error.
-/// - Action: Executes `clean_multi_commas` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `clean_multi_commas` (`ASSEMBLE-CONOPS-SANITIZE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-CLEAN-MULTI-COMMAS] | SysML v2: ActionDef(clean_multi_commas)
-fn clean_multi_commas(text: &str) -> String {
-    let mut result = String::with_capacity(text.len());
-    let bytes = text.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes.get(i).copied() == Some(b',') {
-            let mut j = i + 1;
-            while bytes.get(j).is_some_and(|&b| b == b' ' || b == b'\t') {
-                j += 1;
-            }
-            if bytes.get(j).copied() == Some(b',') {
-                while bytes
-                    .get(j)
-                    .is_some_and(|&b| b == b',' || b == b' ' || b == b'\t')
-                {
-                    j += 1;
-                }
-                result.push(',');
-                i = j;
-                continue;
-            }
-            result.push(',');
-            i += 1;
-            continue;
-        }
-        let Some(ch) = text[i..].chars().next() else {
-            break;
-        };
-        result.push(ch);
-        i += ch.len_utf8();
-    }
-    result
-}
-
-/// Executes deterministic fn `clean_space_commas` within `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `clean_space_commas` in `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `clean_space_commas` (declaration #13) within `ASSEMBLE-CONOPS-SANITIZE`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `clean_space_commas`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `clean_space_commas` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `clean_space_commas`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `clean_space_commas`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `clean_space_commas` (`String`).
-/// - State: Maintains consistent state invariants across `clean_space_commas` without partial mutation on error.
-/// - Action: Executes `clean_space_commas` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `clean_space_commas` (`ASSEMBLE-CONOPS-SANITIZE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-CLEAN-SPACE-COMMAS] | SysML v2: ActionDef(clean_space_commas)
-fn clean_space_commas(text: &str) -> String {
-    let mut result = String::with_capacity(text.len());
-    let bytes = text.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes.get(i).is_some_and(|&b| b == b' ' || b == b'\t') {
-            let mut j = i;
-            while bytes.get(j).is_some_and(|&b| b == b' ' || b == b'\t') {
-                j += 1;
-            }
-            if bytes.get(j).copied() == Some(b',') {
-                j += 1;
-                while bytes.get(j).is_some_and(|&b| b == b' ' || b == b'\t') {
-                    j += 1;
-                }
-                result.push_str(", ");
-                i = j;
-                continue;
-            }
-        }
-        let Some(ch) = text[i..].chars().next() else {
-            break;
-        };
-        result.push(ch);
-        i += ch.len_utf8();
-    }
-    result
-}
-
-/// Executes deterministic fn `clean_comma_period` within `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `clean_comma_period` in `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `clean_comma_period` (declaration #14) within `ASSEMBLE-CONOPS-SANITIZE`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `clean_comma_period`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `clean_comma_period` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `clean_comma_period`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `clean_comma_period`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `clean_comma_period` (`String`).
-/// - State: Maintains consistent state invariants across `clean_comma_period` without partial mutation on error.
-/// - Action: Executes `clean_comma_period` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `clean_comma_period` (`ASSEMBLE-CONOPS-SANITIZE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-CLEAN-COMMA-PERIOD] | SysML v2: ActionDef(clean_comma_period)
-fn clean_comma_period(text: &str) -> String {
-    let mut result = String::with_capacity(text.len());
-    let bytes = text.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes.get(i).copied() == Some(b',') {
-            let mut j = i + 1;
-            while bytes.get(j).is_some_and(|&b| b == b' ' || b == b'\t') {
-                j += 1;
-            }
-            if bytes.get(j).copied() == Some(b'.') {
-                result.push('.');
-                i = j + 1;
-                continue;
-            }
-        }
-        let Some(ch) = text[i..].chars().next() else {
-            break;
-        };
-        result.push(ch);
-        i += ch.len_utf8();
-    }
-    result
-}
-
-/// Executes deterministic fn `clean_multi_spaces` within `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `clean_multi_spaces` in `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `clean_multi_spaces` (declaration #15) within `ASSEMBLE-CONOPS-SANITIZE`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `clean_multi_spaces`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `clean_multi_spaces` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `clean_multi_spaces`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `clean_multi_spaces`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `clean_multi_spaces` (`String`).
-/// - State: Maintains consistent state invariants across `clean_multi_spaces` without partial mutation on error.
-/// - Action: Executes `clean_multi_spaces` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `clean_multi_spaces` (`ASSEMBLE-CONOPS-SANITIZE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-CLEAN-MULTI-SPACES] | SysML v2: ActionDef(clean_multi_spaces)
-fn clean_multi_spaces(text: &str) -> String {
-    let mut result = String::with_capacity(text.len());
-    let bytes = text.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes.get(i).is_some_and(|&b| b == b' ' || b == b'\t') {
-            result.push(' ');
-            let mut j = i + 1;
-            while bytes.get(j).is_some_and(|&b| b == b' ' || b == b'\t') {
-                j += 1;
-            }
-            i = j;
-            continue;
-        }
-        let Some(ch) = text[i..].chars().next() else {
-            break;
-        };
-        result.push(ch);
-        i += ch.len_utf8();
-    }
-    result
-}
-
-/// Executes deterministic fn `strip_html_tags` within `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `strip_html_tags` in `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `strip_html_tags` (declaration #16) within `ASSEMBLE-CONOPS-SANITIZE`.
-///
-/// ## 3. Preconditions
-/// - `s: &str` must satisfy domain and type-safety constraints prior to invoking `strip_html_tags`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `strip_html_tags` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(s)) bounded over input/member dimension of `strip_html_tags`.
-/// - Space Complexity: O(N(s)) bounded auxiliary memory for `strip_html_tags`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `strip_html_tags` (`String`).
-/// - State: Maintains consistent state invariants across `strip_html_tags` without partial mutation on error.
-/// - Action: Executes `strip_html_tags` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `strip_html_tags` (`ASSEMBLE-CONOPS-SANITIZE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-STRIP-HTML-TAGS] | SysML v2: ActionDef(strip_html_tags)
-fn strip_html_tags(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let bytes = s.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes.get(i).copied() == Some(b'<') {
-            let mut j = i + 1;
-            if bytes.get(j).copied() == Some(b'/') {
-                j += 1;
-            }
-            let tag_name_start = j;
-            while bytes
-                .get(j)
-                .is_some_and(|&b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
-            {
-                j += 1;
-            }
-            if j > tag_name_start {
-                while bytes.get(j).is_some_and(|&b| b == b' ' || b == b'\t') {
-                    j += 1;
-                }
-                if bytes.get(j).copied() == Some(b'/') {
-                    j += 1;
-                }
-                while bytes.get(j).is_some_and(|&b| b == b' ' || b == b'\t') {
-                    j += 1;
-                }
-                if bytes.get(j).copied() == Some(b'>') {
-                    i = j + 1;
-                    continue;
-                }
-            }
-        }
-        let Some(ch) = s[i..].chars().next() else {
-            break;
-        };
-        result.push(ch);
-        i += ch.len_utf8();
-    }
-    result
-}
-
-/// Sanitizes text to enforce Level 1B operational abstraction.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `sanitize_level_1b_operational_text` in `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `sanitize_level_1b_operational_text` (declaration #17) within `ASSEMBLE-CONOPS-SANITIZE`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `sanitize_level_1b_operational_text`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `sanitize_level_1b_operational_text` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `sanitize_level_1b_operational_text`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `sanitize_level_1b_operational_text`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `sanitize_level_1b_operational_text` (`String`).
-/// - State: Maintains consistent state invariants across `sanitize_level_1b_operational_text` without partial mutation on error.
-/// - Action: Executes `sanitize_level_1b_operational_text` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `sanitize_level_1b_operational_text` (`ASSEMBLE-CONOPS-SANITIZE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-SANITIZE-LEVEL-1B-OPERATIONAL-TEXT] | SysML v2: ActionDef(sanitize_level_1b_operational_text)
+/// [DOC-TIER: A] Sanitizes text to enforce Level 1B operational abstraction.
+/// Safety & Traceability: Conforms to DO-178C Level A / DO-330 TQL-4; Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-SANITIZE-LEVEL-1B-OPERATIONAL-TEXT] | SysML v2: ActionDef(sanitize_level_1b_operational_text)
+/// Contract: Removes CRC polynomials, serial baud rates, wire opcodes, and Level 2 `UC-xx` tags from `text: &str` while normalizing punctuation.
+/// Bounds & Faults: O(N) time and space over `text.len()`; preserves `UCL-xx` user class taxonomy tags.
 pub fn sanitize_level_1b_operational_text(text: &str) -> String {
     if text.is_empty() {
         return String::new();
     }
 
     let mut s = text.to_string();
-
-    // 1. Remove polynomial equations
     s = strip_poly_equation(&s);
     s = strip_poly_hex(&s);
     s = replace_crc16(&s);
     s = replace_polynomial_equation(&s);
-
-    // 2. Remove baud rates
     s = strip_baud_rates(&s);
-
-    // 3. Remove serial opcodes
     s = strip_opcodes(&s);
-
-    // 4. Remove Level 2 System Use Cases (e.g. (UC-01 and UC-03), uc-01, UC-01)
     s = strip_use_cases(&s);
-
-    // 5. Clean up punctuation artifacts, empty parens/brackets, duplicate commas, double spaces
     s = strip_empty_delimited(&s, '(', ')');
     s = strip_empty_delimited(&s, '[', ']');
     s = clean_lead_comma_paren(&s);
@@ -1260,167 +251,6 @@ pub fn sanitize_level_1b_operational_text(text: &str) -> String {
     s = clean_multi_spaces(&s);
 
     s.trim().to_string()
-}
-
-/// Wraps text into segments <= max_width characters using `<br/>`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `wrap_mermaid_label` in `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `wrap_mermaid_label` (declaration #18) within `ASSEMBLE-CONOPS-SANITIZE`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `wrap_mermaid_label`.
-/// - `max_width: usize` must satisfy domain and type-safety constraints prior to invoking `wrap_mermaid_label`.
-///
-/// ## 4. Postconditions
-/// - Returns `String` from `wrap_mermaid_label` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `wrap_mermaid_label`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `wrap_mermaid_label`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `wrap_mermaid_label` (`String`).
-/// - State: Maintains consistent state invariants across `wrap_mermaid_label` without partial mutation on error.
-/// - Action: Executes `wrap_mermaid_label` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `wrap_mermaid_label` (`ASSEMBLE-CONOPS-SANITIZE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-WRAP-MERMAID-LABEL] | SysML v2: ActionDef(wrap_mermaid_label)
-pub fn wrap_mermaid_label(text: &str, max_width: usize) -> String {
-    if text.is_empty() {
-        return String::new();
-    }
-
-    let mut out_parts = Vec::new();
-    let mut last_idx = 0;
-    let bytes = text.as_bytes();
-    let lower = text.to_ascii_lowercase();
-    let mut i = 0;
-
-    while i < bytes.len() {
-        let mut split_len = None;
-        if bytes.get(i).copied() == Some(b'\r') && bytes.get(i + 1).copied() == Some(b'\n') {
-            split_len = Some(2);
-        } else if bytes.get(i).copied() == Some(b'\n') {
-            split_len = Some(1);
-        } else if bytes.get(i).copied() == Some(b'<') && lower[i..].starts_with("<br") {
-            let mut j = i + 3;
-            while bytes.get(j).is_some_and(|&b| b == b' ' || b == b'\t') {
-                j += 1;
-            }
-            if bytes.get(j).copied() == Some(b'/') {
-                j += 1;
-            }
-            while bytes.get(j).is_some_and(|&b| b == b' ' || b == b'\t') {
-                j += 1;
-            }
-            if bytes.get(j).copied() == Some(b'>') {
-                split_len = Some(j + 1 - i);
-            }
-        }
-
-        if let Some(len) = split_len {
-            if i > last_idx {
-                let seg = &text[last_idx..i];
-                process_segment(seg, max_width, &mut out_parts);
-            }
-            out_parts.push(text[i..i + len].to_string());
-            last_idx = i + len;
-            i = last_idx;
-            continue;
-        }
-
-        let Some(ch) = text[i..].chars().next() else {
-            break;
-        };
-        i += ch.len_utf8();
-    }
-
-    if last_idx < text.len() {
-        let seg = &text[last_idx..];
-        process_segment(seg, max_width, &mut out_parts);
-    }
-
-    out_parts.join("")
-}
-
-/// Executes deterministic fn `process_segment` within `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `process_segment` in `crates/assemble-conops/src/sanitize.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `process_segment` (declaration #19) within `ASSEMBLE-CONOPS-SANITIZE`.
-///
-/// ## 3. Preconditions
-/// - `seg: &str` must satisfy domain and type-safety constraints prior to invoking `process_segment`.
-/// - `max_width: usize` must satisfy domain and type-safety constraints prior to invoking `process_segment`.
-/// - `out_parts: &mut Vec<String>` must satisfy domain and type-safety constraints prior to invoking `process_segment`.
-///
-/// ## 4. Postconditions
-/// - Returns `()` from `process_segment` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(seg)) bounded over input/member dimension of `process_segment`.
-/// - Space Complexity: O(N(seg)) bounded auxiliary memory for `process_segment`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `process_segment` (`()`).
-/// - State: Maintains consistent state invariants across `process_segment` without partial mutation on error.
-/// - Action: Executes `process_segment` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `process_segment` (`ASSEMBLE-CONOPS-SANITIZE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-PROCESS-SEGMENT] | SysML v2: ActionDef(process_segment)
-fn process_segment(seg: &str, max_width: usize, out_parts: &mut Vec<String>) {
-    let clean_seg = strip_html_tags(seg).trim().to_string();
-    if clean_seg.len() <= max_width {
-        out_parts.push(seg.to_string());
-    } else {
-        let words: Vec<&str> = seg.split_whitespace().collect();
-        let mut lines = Vec::new();
-        let mut curr: Vec<&str> = Vec::new();
-        let mut curr_len = 0;
-
-        for w in words {
-            let w_clean = strip_html_tags(w);
-            let w_len = w_clean.len();
-
-            if w_len > max_width {
-                if !curr.is_empty() {
-                    lines.push(curr.join(" "));
-                    curr.clear();
-                    curr_len = 0;
-                }
-                let mut c_idx = 0;
-                while c_idx < w.len() {
-                    let mut end_idx = (c_idx + max_width).min(w.len());
-                    while end_idx < w.len() && !w.is_char_boundary(end_idx) {
-                        end_idx += 1;
-                    }
-                    lines.push(w[c_idx..end_idx].to_string());
-                    c_idx = end_idx;
-                }
-            } else if !curr.is_empty() && curr_len + 1 + w_len > max_width {
-                lines.push(curr.join(" "));
-                curr = vec![w];
-                curr_len = w_len;
-            } else {
-                if !curr.is_empty() {
-                    curr_len += 1;
-                }
-                curr.push(w);
-                curr_len += w_len;
-            }
-        }
-        if !curr.is_empty() {
-            lines.push(curr.join(" "));
-        }
-        out_parts.push(lines.join("<br/>"));
-    }
 }
 
 #[cfg(test)]
@@ -1456,19 +286,15 @@ mod tests {
 
     #[test]
     fn test_issue_291_user_class_taxonomy_preserved_and_collision_eliminated() {
-        // Legacy UC-xx was stripped as Level 2 System Use Case:
         let legacy_conops =
             "Maintenance Technician (UC-04) performing pre-sortie inspection under UC-01.";
         let sanitized_legacy = sanitize_level_1b_operational_text(legacy_conops);
-        // Stripped UC-04 and UC-01 because of collision with Level 2 use cases!
         assert!(!sanitized_legacy.contains("UC-04"));
         assert!(!sanitized_legacy.contains("UC-01"));
 
-        // With ISO 29148 UCL-xx taxonomy disambiguation:
         let compliant_conops =
             "Maintenance Technician (UCL-04) performing pre-sortie inspection under UCL-01.";
         let sanitized_compliant = sanitize_level_1b_operational_text(compliant_conops);
-        // UCL-04 and UCL-01 are preserved intact!
         assert!(sanitized_compliant.contains("UCL-04"));
         assert!(sanitized_compliant.contains("UCL-01"));
     }

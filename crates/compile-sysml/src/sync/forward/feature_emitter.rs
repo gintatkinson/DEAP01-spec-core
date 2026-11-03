@@ -1,13 +1,40 @@
-//! Feature specification (`docs/features/FEAT-*.md`) synthesis from indexed SysML v2 `PartDef` nodes.
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
+//! # Feature Specification Markdown Synthesis
 //!
-//! Safety & Traceability: Realises: [REQ-SYNC-FORWARD-FEATURE-EMITTER]
-//! Contract: Projects each indexed `PartContext` into a canonical Feature Markdown specification containing a Mermaid `classDiagram`, JSON Schema test data shape, validation constraints, 3-layer Definition of Done sections, and constraint-derived BDD acceptance criteria.
-//! Bounds & Faults: Uses deterministic `BTreeSet` deduplication, saturating index arithmetic (`saturating_add`), and non-panicking tracker issue ID resolution.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Realises: [REQ-0604], [REQ-SYNC-FORWARD-FEATURE-EMITTER]
+//! Projects each indexed `PartContext` into a canonical `docs/features/FEAT-*.md` specification
+//! containing a Mermaid `classDiagram`, JSON Schema test data shape, validation constraints,
+//! 3-layer Definition of Done sections, and constraint-derived BDD acceptance criteria.
+//!
+//! ## 2. Preconditions, Postconditions & Mathematical Invariants
+//! - **Preconditions**: `index.part_contexts` contains indexed `PartDef` contexts.
+//! - **Postconditions**: Populates `generated_files` with `features/FEAT-XX-*.md` entries.
+//! - **Invariants**: Feature numbering uses saturating arithmetic (`saturating_add(1)`).
+//!
+//! ## 3. Failure Modes, Degraded Operation & Recovery
+//! - Classifiers without operations or actions emit a deterministic lifecycle summary line.
+//!
+//! ## 4. Concurrency, Memory & Resource Bounds
+//! - Single-threaded `O(F * R)` iteration over indexed parts and requirements.
+//!
+//! ## 5. Dependencies & Integration Contracts
+//! - Consumes `feature_diagrams`, `feature_schema`, `feature_layers`, and `feature_renderer`.
+//!
+//! ## 6. Verification & Acceptance Criteria
+//! - Verified by Feature emission tests in `sync/forward/tests*.rs`.
+//!
+//! ## 7. Realization & Traceability
+//! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-FEATURE-EMITTER]
 
 use super::*;
 
 /// Collects deduplicated `RequirementDef` nodes explicitly satisfied by `part_name` or unscoped within `pkg_name`.
-/// Realises: [REQ-SYNC-FORWARD-FEATURE-EMITTER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-FEATURE-EMITTER]
 fn collect_feature_matching_requirements<'a>(
     part_name: &str,
     pkg_name: &str,
@@ -40,7 +67,7 @@ fn collect_feature_matching_requirements<'a>(
 }
 
 /// Renders `### 4. Interactive Flow & States` operation and parameterized action bullets for `part`.
-/// Realises: [REQ-SYNC-FORWARD-FEATURE-EMITTER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-FEATURE-EMITTER]
 fn render_feature_interactive_flow(part: &PartDef) -> String {
     let mut emitted_part_ops = BTreeSet::new();
     let mut op_action_bullets = Vec::new();
@@ -70,7 +97,7 @@ fn render_feature_interactive_flow(part: &PartDef) -> String {
 }
 
 /// Resolves `(spec_source, source_refs)` Markdown links for a Feature based on modular vs single-file schema presence.
-/// Realises: [REQ-SYNC-FORWARD-FEATURE-EMITTER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-FEATURE-EMITTER]
 fn resolve_feature_sources(has_modular_schema: bool, subsys_dir: &str) -> (String, String) {
     let source_refs = if !has_modular_schema {
         r#"- System Architecture Model: `schema/model.sysml`
@@ -107,8 +134,78 @@ fn resolve_feature_sources(has_modular_schema: bool, subsys_dir: &str) -> (Strin
     (spec_source, source_refs)
 }
 
+/// Renders a single `FEAT-XX-*.md` specification document and returns `(rel_path, content)`.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-FEATURE-EMITTER]
+fn render_single_feature_spec(
+    root_pkg_name: &str,
+    f_num: usize,
+    ctx: &PartContext<'_>,
+    index: &ForwardSyncIndex<'_>,
+) -> (String, String) {
+    let part_name = &ctx.part.name;
+    let rel_path = format!("features/FEAT-{:02}-{}.md", f_num, part_name);
+    let _feat_date = resolve_date(&index.target_out_dir, &rel_path, index.today_iso);
+    let feat_issue_id =
+        format_issue_id_cell(resolve_existing_issue_id(&index.target_out_dir, &rel_path));
+    let title = format!(
+        "Feature {:02}: [{}] {}",
+        f_num, ctx.subsys_display, part_name
+    );
+
+    let class_diagram_block = generate_class_diagram(ctx.part);
+    let json_schema = generate_json_schema(ctx.part);
+    let matching_reqs = collect_feature_matching_requirements(part_name, &ctx.pkg_name, index);
+
+    let bdd_criteria = generate_feature_bdd(ctx.part, &matching_reqs);
+    let validation_section = render_feature_validation_and_constraints(ctx.part, &matching_reqs);
+    let arrangement_section = render_feature_logical_arrangement(ctx.part);
+    let layer1_section = render_feature_layer1_state_model(ctx.part);
+    let layer2_section = render_feature_layer2_logic_management(ctx.part, &matching_reqs);
+    let layer3_section = render_feature_layer3_interface_binding(ctx.part);
+    let interactive_flow_section = render_feature_interactive_flow(ctx.part);
+    let (spec_source, source_refs) =
+        resolve_feature_sources(index.has_modular_schema, &ctx.subsys_dir);
+
+    let parent_epic_link = if ctx.pkg_name == root_pkg_name {
+        format!("[EPIC-01-{root_pkg_name}](../epics/EPIC-01-{root_pkg_name}.md)")
+    } else {
+        resolve_parent_epic_link(&index.ordered_packages, &ctx.pkg_name)
+    };
+    let interface_type = "Physical / Structural / Internal Bus";
+    let schema_container = format!("{}::{}", ctx.pkg_name, part_name);
+
+    let content = format!(
+        "| Attribute | Specification Detail |\n\
+| :--- | :--- |\n\
+| **Issue ID** | {feat_issue_id} |\n\
+| **Title** | {title} |\n\
+| **Type** | feature |\n\
+| **Parent Epic** | {parent_epic_link} |\n\
+| **Interface Type** | {interface_type} |\n\
+| **Schema Containers** | `{schema_container}` |\n\
+| **Generation Mode** | subagent |\n\
+| **Specification Source** | {spec_source} |\n\n\
+# {title}\n\n\
+## UML Class Diagram\n\n```mermaid\n{class_diagram_block}\n```\n\n\
+## Interface Requirements\n\
+### 1. Test Data Shape\n```json\n{json_schema}\n```\n\n\
+### 2. Validation & Constraints\n{validation_section}\n\n\
+### 3. Visual Layout & Arrangement\n{arrangement_section}\n\n\
+### 4. Interactive Flow & States\n{interactive_flow_section}\n\n\
+### Layer 1: Domain State & Signal Model\n{layer1_section}\n\n\
+### Layer 2: Logic & Safety State Management\n{layer2_section}\n\n\
+### Layer 3: Presentation & Actuator Interface Binding\n{layer3_section}\n\n\
+## Acceptance Criteria (BDD)\n{bdd_criteria}\n\n\
+## Source References\n\
+Formal component specifications and normative systems engineering requirements:\n\
+{source_refs}\n\n\
+Component behavior and interface definitions derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 15288.\n"
+    );
+    (rel_path, content)
+}
+
 /// Synthesizes all `features/FEAT-XX-*.md` specifications from `index.part_contexts` into `generated_files`.
-/// Realises: [REQ-SYNC-FORWARD-FEATURE-EMITTER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-FEATURE-EMITTER]
 pub(crate) fn emit_feature_specs(
     pkg: &PackageDef,
     index: &ForwardSyncIndex<'_>,
@@ -116,97 +213,7 @@ pub(crate) fn emit_feature_specs(
 ) {
     for (idx, ctx) in index.part_contexts.iter().enumerate() {
         let f_num = idx.saturating_add(1);
-        let part_name = &ctx.part.name;
-        let rel_path = format!("features/FEAT-{:02}-{}.md", f_num, part_name);
-        let _feat_date = resolve_date(&index.target_out_dir, &rel_path, index.today_iso);
-        let feat_issue_id =
-            format_issue_id_cell(resolve_existing_issue_id(&index.target_out_dir, &rel_path));
-        let title = format!(
-            "Feature {:02}: [{}] {}",
-            f_num, ctx.subsys_display, part_name
-        );
-
-        let class_diagram_block = generate_class_diagram(ctx.part);
-        let json_schema = generate_json_schema(ctx.part);
-        let matching_reqs = collect_feature_matching_requirements(part_name, &ctx.pkg_name, index);
-
-        let bdd_criteria = generate_feature_bdd(ctx.part, &matching_reqs);
-        let validation_section =
-            render_feature_validation_and_constraints(ctx.part, &matching_reqs);
-        let arrangement_section = render_feature_logical_arrangement(ctx.part);
-        let layer1_section = render_feature_layer1_state_model(ctx.part);
-        let layer2_section = render_feature_layer2_logic_management(ctx.part, &matching_reqs);
-        let layer3_section = render_feature_layer3_interface_binding(ctx.part);
-        let interactive_flow_section = render_feature_interactive_flow(ctx.part);
-        let (spec_source, source_refs) =
-            resolve_feature_sources(index.has_modular_schema, &ctx.subsys_dir);
-
-        let parent_epic_link = if ctx.pkg_name == pkg.name {
-            format!(
-                "[EPIC-01-{p_name}](../epics/EPIC-01-{p_name}.md)",
-                p_name = pkg.name
-            )
-        } else {
-            resolve_parent_epic_link(&index.ordered_packages, &ctx.pkg_name)
-        };
-        let interface_type = "Physical / Structural / Internal Bus";
-        let schema_container = format!("{}::{}", ctx.pkg_name, part_name);
-
-        let content = format!(
-            r#"| Attribute | Specification Detail |
-| :--- | :--- |
-| **Issue ID** | {feat_issue_id} |
-| **Title** | {title} |
-| **Type** | feature |
-| **Parent Epic** | {parent_epic_link} |
-| **Interface Type** | {interface_type} |
-| **Schema Containers** | `{schema_container}` |
-| **Generation Mode** | subagent |
-| **Specification Source** | {spec_source} |
-
-# {title}
-
-## UML Class Diagram
-
-```mermaid
-{class_diagram_block}
-```
-
-## Interface Requirements
-### 1. Test Data Shape
-```json
-{json_schema}
-```
-
-### 2. Validation & Constraints
-{validation_section}
-
-### 3. Visual Layout & Arrangement
-{arrangement_section}
-
-### 4. Interactive Flow & States
-{interactive_flow_section}
-
-### Layer 1: Domain State & Signal Model
-{layer1_section}
-
-### Layer 2: Logic & Safety State Management
-{layer2_section}
-
-### Layer 3: Presentation & Actuator Interface Binding
-{layer3_section}
-
-## Acceptance Criteria (BDD)
-{bdd_criteria}
-
-## Source References
-Formal component specifications and normative systems engineering requirements:
-{source_refs}
-
-Component behavior and interface definitions derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 15288.
-"#
-        );
-
+        let (rel_path, content) = render_single_feature_spec(&pkg.name, f_num, ctx, index);
         generated_files.insert(rel_path, content);
     }
 }

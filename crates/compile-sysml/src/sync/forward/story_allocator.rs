@@ -1,13 +1,66 @@
-//! Package behavioral action and interaction deduplication, lifeline endpoint binding, and User Story title disambiguation.
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
+//! # User Story Allocation, Lifeline Binding, and Epic Linkage Helpers
 //!
-//! Safety & Traceability: Realises: [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
-//! Contract: Collects deduplicated package `ActionDef`, `PartDef::actions`, and standalone `InteractionDef` items across ordered packages, binds caller/target lifelines to declared `PartDef` features, and disambiguates duplicate humanized User Story titles.
-//! Bounds & Faults: Uses `BTreeSet`/`BTreeMap` deterministic collections, checked slice accessors (`.first`, `.get`, `.split_once`), and saturating index arithmetic (`saturating_add`) with zero panics.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Realises: [REQ-0604], [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
+//! Collects deduplicated package `ActionDef`, `PartDef::actions`, and standalone `InteractionDef`
+//! items across ordered packages, binds caller/target lifelines to declared `PartDef` features,
+//! disambiguates duplicate humanized User Story titles, and resolves parent Epic links.
+//!
+//! ## 2. Preconditions, Postconditions & Mathematical Invariants
+//! - **Preconditions**: Input `PackageDef` and `PartContext` slices are valid.
+//! - **Postconditions**: Produces 1:1 paired `(StoryMeta, StoryAstContext)` allocations.
+//! - **Invariants**: `BTreeSet` deduplication and saturating index arithmetic prevent duplicate stories or overflow.
+//!
+//! ## 3. Failure Modes, Degraded Operation & Recovery
+//! - Unresolved caller/target lifelines fall back to the first/second `PartDef` or default package engine.
+//!
+//! ## 4. Concurrency, Memory & Resource Bounds
+//! - Pure single-threaded `O(P * B)` traversal over package behaviors.
+//!
+//! ## 5. Dependencies & Integration Contracts
+//! - Consumed by `model_indexer`, `epic_renderer`, `feature_emitter`, `story_emitter`, and `use_case_emitter`.
+//!
+//! ## 6. Verification & Acceptance Criteria
+//! - Verified by User Story allocation and Epic count tests in `sync/forward/tests*.rs`.
+//!
+//! ## 7. Realization & Traceability
+//! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
 
 use super::*;
 
+/// Discriminates the originating SysML v2 behavioral AST node backing a projected User Story.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-BEHAVIOR-SOURCE]
+pub(crate) enum BehaviorSource<'a> {
+    PackageAction(&'a ActionDef),
+    PartAction {
+        part_name: &'a str,
+        action: &'a ActionDef,
+    },
+    StandaloneInteraction(&'a InteractionDef),
+}
+
+/// Deduplicated behavioral item pairing a stripped action/interaction identifier with its `BehaviorSource`.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-PKG-BEHAVIOR-ITEM]
+pub(crate) struct PkgBehaviorItem<'a> {
+    pub(crate) clean_name: String,
+    pub(crate) source: BehaviorSource<'a>,
+}
+
+/// Borrowed package, `ActionDef`, and `InteractionDef` AST handles paired 1:1 with `StoryMeta`.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-STORY-AST-CTX]
+pub(crate) struct StoryAstContext<'a> {
+    pub(crate) pkg: &'a PackageDef,
+    pub(crate) act_opt: Option<&'a ActionDef>,
+    pub(crate) inter_opt: Option<&'a InteractionDef>,
+}
+
 /// Scoped package context shared across behavioral items while allocating `StoryMeta` entries.
-/// Realises: [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
 struct PackageStoryScanCtx<'a, 'b> {
     root_pkg_name: &'b str,
     pkg: &'a PackageDef,
@@ -17,7 +70,7 @@ struct PackageStoryScanCtx<'a, 'b> {
 }
 
 /// Resolved lifeline endpoints, initiator actor, and reply message extracted for a single User Story behavioral item.
-/// Realises: [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
 struct StoryLifelineBinding {
     initiator_actor: Option<String>,
     caller_engine: String,
@@ -27,7 +80,7 @@ struct StoryLifelineBinding {
 }
 
 /// Collects deduplicated `PkgBehaviorItem` entries from package-level `action_defs`, `part.actions`, and remaining standalone `interaction_defs`.
-/// Realises: [REQ-SYNC-FORWARD-PKG-BEHAVIOR-ITEM]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-PKG-BEHAVIOR-ITEM]
 fn collect_pkg_behavior_items<'a>(p: &'a PackageDef) -> Vec<PkgBehaviorItem<'a>> {
     let mut pkg_behavior_items: Vec<PkgBehaviorItem<'a>> = Vec::new();
     let mut seen_behavior_names: BTreeSet<String> = BTreeSet::new();
@@ -68,8 +121,47 @@ fn collect_pkg_behavior_items<'a>(p: &'a PackageDef) -> Vec<PkgBehaviorItem<'a>>
     pkg_behavior_items
 }
 
+/// Applies explicit `InteractionDef` lifelines and reply message overrides to `binding`.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
+fn apply_interaction_lifeline_overrides(
+    p: &PackageDef,
+    inter: &InteractionDef,
+    binding: &mut StoryLifelineBinding,
+) -> bool {
+    let mut has_inter_reply = false;
+    binding.interaction_name.clone_from(&inter.name);
+    if let Some(l0) = inter.lifelines.first() {
+        let raw_init = if let Some((_, type_name)) = l0.split_once(':') {
+            type_name.trim()
+        } else {
+            l0.trim()
+        };
+        let clean_init = raw_init
+            .trim_matches(|c: char| matches!(c, '`' | '"' | '\'' | '[' | ']'))
+            .trim();
+        if !clean_init.is_empty() && !p.part_defs.iter().any(|pt| pt.name == clean_init) {
+            binding.initiator_actor = Some(clean_init.to_string());
+        }
+    }
+    if let [l0, l1, ..] = inter.lifelines.as_slice() {
+        if let Some((_, type_name)) = l0.split_once(':') {
+            binding.caller_engine = type_name.trim().to_string();
+        }
+        if let Some((_, type_name)) = l1.split_once(':') {
+            binding.target_engine = type_name.trim().to_string();
+        }
+    }
+    if let Some(m1) = inter.messages.get(1) {
+        if let Some(first_word) = m1.split_whitespace().next() {
+            binding.reply_msg = sanitize_id(first_word);
+            has_inter_reply = true;
+        }
+    }
+    has_inter_reply
+}
+
 /// Extracts initiator actor, caller/target engines, and reply message from an optional `InteractionDef` and `ActionDef`.
-/// Realises: [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
 fn extract_story_lifelines(
     ctx: &PackageStoryScanCtx<'_, '_>,
     action_name: &str,
@@ -78,43 +170,16 @@ fn extract_story_lifelines(
     inter_opt: Option<&InteractionDef>,
 ) -> StoryLifelineBinding {
     let p = ctx.pkg;
-    let mut initiator_actor: Option<String> = None;
-    let mut caller_engine = sanitize_id(ctx.root_pkg_name);
-    let mut target_engine = default_engine_name.to_string();
-    let mut reply_msg = "OperationComplete".to_string();
-    let mut has_inter_reply = false;
-    let mut interaction_name = action_name.to_string();
-
-    if let Some(inter) = inter_opt {
-        interaction_name = inter.name.clone();
-        if let Some(l0) = inter.lifelines.first() {
-            let raw_init = if let Some((_, type_name)) = l0.split_once(':') {
-                type_name.trim()
-            } else {
-                l0.trim()
-            };
-            let clean_init = raw_init
-                .trim_matches(|c: char| matches!(c, '`' | '"' | '\'' | '[' | ']'))
-                .trim();
-            if !clean_init.is_empty() && !p.part_defs.iter().any(|pt| pt.name == clean_init) {
-                initiator_actor = Some(clean_init.to_string());
-            }
-        }
-        if let [l0, l1, ..] = inter.lifelines.as_slice() {
-            if let Some((_, type_name)) = l0.split_once(':') {
-                caller_engine = type_name.trim().to_string();
-            }
-            if let Some((_, type_name)) = l1.split_once(':') {
-                target_engine = type_name.trim().to_string();
-            }
-        }
-        if let Some(m1) = inter.messages.get(1) {
-            if let Some(first_word) = m1.split_whitespace().next() {
-                reply_msg = sanitize_id(first_word);
-                has_inter_reply = true;
-            }
-        }
-    }
+    let mut binding = StoryLifelineBinding {
+        initiator_actor: None,
+        caller_engine: sanitize_id(ctx.root_pkg_name),
+        target_engine: default_engine_name.to_string(),
+        reply_msg: "OperationComplete".to_string(),
+        interaction_name: action_name.to_string(),
+    };
+    let has_inter_reply = inter_opt
+        .map(|inter| apply_interaction_lifeline_overrides(p, inter, &mut binding))
+        .unwrap_or(false);
 
     if !has_inter_reply {
         if let Some(out_p) = act_opt.and_then(|a| a.out_params.first()) {
@@ -124,46 +189,40 @@ fn extract_story_lifelines(
                 out_p.name.trim()
             };
             if !candidate.is_empty() {
-                reply_msg = sanitize_id(candidate);
+                binding.reply_msg = sanitize_id(candidate);
             }
         }
     }
 
-    if !p.part_defs.iter().any(|pt| pt.name == caller_engine) {
-        caller_engine = p
+    if !p.part_defs.iter().any(|pt| pt.name == binding.caller_engine) {
+        binding.caller_engine = p
             .part_defs
             .first()
             .map(|pt| pt.name.clone())
             .unwrap_or_else(|| default_engine_name.to_string());
     }
-    if !p.part_defs.iter().any(|pt| pt.name == target_engine) {
-        target_engine = p
+    if !p.part_defs.iter().any(|pt| pt.name == binding.target_engine) {
+        binding.target_engine = p
             .part_defs
             .get(1)
             .or_else(|| p.part_defs.first())
             .map(|pt| pt.name.clone())
             .unwrap_or_else(|| default_engine_name.to_string());
     }
-    if caller_engine == target_engine && p.part_defs.len() >= 2 {
-        target_engine = p
+    if binding.caller_engine == binding.target_engine && p.part_defs.len() >= 2 {
+        binding.target_engine = p
             .part_defs
             .iter()
-            .find(|pt| pt.name != caller_engine)
+            .find(|pt| pt.name != binding.caller_engine)
             .map(|pt| pt.name.clone())
-            .unwrap_or(target_engine);
+            .unwrap_or(binding.target_engine);
     }
 
-    StoryLifelineBinding {
-        initiator_actor,
-        caller_engine,
-        target_engine,
-        reply_msg,
-        interaction_name,
-    }
+    binding
 }
 
 /// Builds a paired `(StoryMeta, StoryAstContext)` allocation for a single `PkgBehaviorItem`.
-/// Realises: [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
 fn allocate_single_story<'a>(
     ctx: &PackageStoryScanCtx<'a, '_>,
     a_idx: usize,
@@ -231,7 +290,7 @@ fn allocate_single_story<'a>(
 }
 
 /// Allocates 1-based `StoryMeta` and `StoryAstContext` tables across all `part_packages`.
-/// Realises: [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
 pub(crate) fn collect_story_allocations<'a>(
     root_pkg_name: &str,
     part_packages: &[&'a PackageDef],
@@ -262,7 +321,7 @@ pub(crate) fn collect_story_allocations<'a>(
 }
 
 /// Disambiguates humanized User Story display titles by prefixing `[CallerEngine]` whenever multiple stories share a humanized action title.
-/// Realises: [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-STORY-ALLOCATOR]
 pub(crate) fn build_story_display_titles(story_metas: &[StoryMeta]) -> BTreeMap<usize, String> {
     let mut action_title_counts: BTreeMap<String, usize> = BTreeMap::new();
     for s in story_metas {
@@ -285,3 +344,7 @@ pub(crate) fn build_story_display_titles(story_metas: &[StoryMeta]) -> BTreeMap<
     }
     story_display_titles
 }
+
+pub use super::escaping_and_dates::{
+    collect_package_story_numbers, count_total_epics_inclusive, resolve_parent_epic_link,
+};

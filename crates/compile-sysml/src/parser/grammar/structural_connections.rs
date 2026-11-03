@@ -41,49 +41,11 @@ impl<'a> SysmlParser<'a> {
         let mut explicit_target_part: Option<Option<String>> = None;
 
         if self.check(&TokenKind::OpenBrace) {
-            self.advance();
-            while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
-                self.skip_trivia();
-                while let Some(inner_doc) = self.take_inner_doc_comment() {
-                    if conn.doc.is_none() {
-                        conn.doc = Some(inner_doc);
-                    }
-                    self.skip_trivia();
-                }
-                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
-                    break;
-                }
-                if self.check(&TokenKind::Connect)
-                    || (self.check(&TokenKind::Flow) && self.peek_next_is_from())
-                {
-                    self.advance();
-                    if self.check(&TokenKind::From) {
-                        self.advance();
-                    }
-                    conn.source_port = self.expect_ident_or_dotted()?;
-                    self.expect(&TokenKind::To)?;
-                    conn.target_port = self.expect_ident_or_dotted()?;
-                    self.expect_semi()?;
-                } else if self.check(&TokenKind::Attribute) {
-                    let attr = self.parse_attribute_decl(None)?;
-                    Self::apply_connection_attribute(
-                        &mut conn,
-                        &mut explicit_source_part,
-                        &mut explicit_target_part,
-                        attr,
-                    );
-                } else {
-                    let tok = self.peek();
-                    return Err(ParseError {
-                        message: format!(
-                            "Unexpected token '{:?}' in connection declaration body",
-                            tok.kind
-                        ),
-                        span: tok.span,
-                    });
-                }
-            }
-            self.expect(&TokenKind::CloseBrace)?;
+            self.parse_connection_body(
+                &mut conn,
+                &mut explicit_source_part,
+                &mut explicit_target_part,
+            )?;
         } else {
             self.expect_semi()?;
         }
@@ -100,6 +62,60 @@ impl<'a> SysmlParser<'a> {
         });
 
         Ok(conn)
+    }
+
+    /// Parses the braced body of a `connection` or `flow` declaration into `conn`.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-CONNECTION-DECL]
+    fn parse_connection_body(
+        &mut self,
+        conn: &mut ConnectionDef,
+        explicit_source_part: &mut Option<Option<String>>,
+        explicit_target_part: &mut Option<Option<String>>,
+    ) -> Result<(), ParseError> {
+        self.expect(&TokenKind::OpenBrace)?;
+        while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
+            self.skip_trivia();
+            while let Some(inner_doc) = self.take_inner_doc_comment() {
+                if conn.doc.is_none() {
+                    conn.doc = Some(inner_doc);
+                }
+                self.skip_trivia();
+            }
+            if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                break;
+            }
+            if self.check(&TokenKind::Connect)
+                || (self.check(&TokenKind::Flow) && self.peek_next_is_from())
+            {
+                self.advance();
+                if self.check(&TokenKind::From) {
+                    self.advance();
+                }
+                conn.source_port = self.expect_ident_or_dotted()?;
+                self.expect(&TokenKind::To)?;
+                conn.target_port = self.expect_ident_or_dotted()?;
+                self.expect_semi()?;
+            } else if self.check(&TokenKind::Attribute) {
+                let attr = self.parse_attribute_decl(None)?;
+                Self::apply_connection_attribute(
+                    conn,
+                    explicit_source_part,
+                    explicit_target_part,
+                    attr,
+                );
+            } else {
+                let tok = self.peek();
+                return Err(ParseError {
+                    message: format!(
+                        "Unexpected token '{:?}' in connection declaration body",
+                        tok.kind
+                    ),
+                    span: tok.span,
+                });
+            }
+        }
+        self.expect(&TokenKind::CloseBrace)?;
+        Ok(())
     }
 
     /// Applies a parsed `AttributeDef` inside a `connection` or `flow` body (`protocol`, `latency_ms`, `severity`, `item_flow_ref`, `source_part`, `target_part`) to `conn`.
@@ -212,5 +228,89 @@ impl<'a> SysmlParser<'a> {
         self.tokens
             .get(self.pos.saturating_add(1))
             .is_some_and(|t| t.kind == TokenKind::From)
+    }
+
+    /// Parses an `attribute` or `attribute def` declaration with optional type expression and default value into an `AttributeDef`.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-ATTRIBUTE-DECL]
+    pub(crate) fn parse_attribute_decl(
+        &mut self,
+        doc: Option<String>,
+    ) -> Result<AttributeDef, ParseError> {
+        self.expect(&TokenKind::Attribute)?;
+        if self.check(&TokenKind::Def) {
+            self.advance();
+        }
+        let name = self.expect_ident()?;
+        let mut type_name = "String".to_string();
+        let mut default_value = None;
+        if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
+            self.advance();
+            type_name = self.parse_type_expr()?;
+        }
+        if self.check(&TokenKind::Eq) || self.check(&TokenKind::ColonEq) {
+            self.advance();
+            default_value = Some(self.read_until_semi());
+        } else {
+            self.expect_semi()?;
+        }
+        Ok(AttributeDef {
+            name,
+            type_name,
+            default_value,
+            doc,
+        })
+    }
+
+    /// Parses an `item` or `item def` payload declaration and its inner `attribute` members into an `ItemDef`.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-ITEM-DECL]
+    pub(crate) fn parse_item_decl(&mut self, doc: Option<String>) -> Result<ItemDef, ParseError> {
+        self.expect(&TokenKind::Item)?;
+        if self.check(&TokenKind::Def) {
+            self.advance();
+        }
+        let name = self.expect_ident()?;
+        let mut item_doc = doc;
+        let mut attributes = Vec::new();
+        if self.check(&TokenKind::OpenBrace) {
+            self.advance();
+            while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
+                self.skip_trivia();
+                let mut a_doc = self.take_inner_doc_comment();
+                self.skip_trivia();
+                while let Some(next_doc) = self.take_inner_doc_comment() {
+                    if item_doc.is_none() {
+                        item_doc = a_doc;
+                    }
+                    a_doc = Some(next_doc);
+                    self.skip_trivia();
+                }
+                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                    if item_doc.is_none() {
+                        item_doc = a_doc;
+                    }
+                    break;
+                }
+                if self.check(&TokenKind::Attribute) {
+                    attributes.push(self.parse_attribute_decl(a_doc)?);
+                } else {
+                    let tok = self.peek();
+                    return Err(ParseError {
+                        message: format!(
+                            "Unexpected token '{:?}' in item declaration body",
+                            tok.kind
+                        ),
+                        span: tok.span,
+                    });
+                }
+            }
+            self.expect(&TokenKind::CloseBrace)?;
+        } else {
+            self.expect_semi()?;
+        }
+        Ok(ItemDef {
+            name,
+            doc: item_doc,
+            attributes,
+        })
     }
 }

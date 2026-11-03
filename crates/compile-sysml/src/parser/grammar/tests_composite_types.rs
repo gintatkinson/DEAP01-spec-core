@@ -11,58 +11,19 @@ mod composite_and_container_tests {
     #[test]
     fn test_issue_460_comments_surrounding_by_clause() -> Result<(), Box<dyn std::error::Error>> {
         let test_cases = [
-            (
-                "satisfy requirement REQ-01 /* comment before by */ by NavCtrl;",
-                "REQ-01",
-            ),
-            (
-                "satisfy requirement REQ-02 // line before by\n by NavCtrl;",
-                "REQ-02",
-            ),
-            (
-                "satisfy requirement REQ-03 /* multi\nline */ by NavCtrl;",
-                "REQ-03",
-            ),
-            (
-                "satisfy requirement REQ-04 by /* comment between by and part */ NavCtrl;",
-                "REQ-04",
-            ),
-            (
-                "satisfy requirement REQ-05 by // line between by and part\n NavCtrl;",
-                "REQ-05",
-            ),
-            (
-                "satisfy requirement REQ-06 by /* multi\nline */ NavCtrl;",
-                "REQ-06",
-            ),
-            (
-                "satisfy requirement REQ-07 by NavCtrl /* comment after part before semi */;",
-                "REQ-07",
-            ),
-            (
-                "satisfy requirement REQ-08 by NavCtrl // line after part before semi\n ;",
-                "REQ-08",
-            ),
-            (
-                "satisfy requirement REQ-09 by NavCtrl /* multi\nline */;",
-                "REQ-09",
-            ),
-            (
-                "satisfy requirement REQ-10 /* c1 */ by /* c2 */ NavCtrl /* c3 */;",
-                "REQ-10",
-            ),
-            (
-                "satisfy requirement REQ-11 // l1\n by // l2\n NavCtrl // l3\n ;",
-                "REQ-11",
-            ),
-            (
-                "satisfy requirement REQ-12 /* by */ by /* satisfy */ NavCtrl /* ; */;",
-                "REQ-12",
-            ),
-            (
-                "satisfy requirement \"REQ-UI-01\" /* c1 */ by /* c2 */ NavCtrl /* c3 */;",
-                "REQ-UI-01",
-            ),
+            ("satisfy requirement REQ-01 /* comment before by */ by NavCtrl;", "REQ-01"),
+            ("satisfy requirement REQ-02 // line before by\n by NavCtrl;", "REQ-02"),
+            ("satisfy requirement REQ-03 /* multi\nline */ by NavCtrl;", "REQ-03"),
+            ("satisfy requirement REQ-04 by /* comment between by and part */ NavCtrl;", "REQ-04"),
+            ("satisfy requirement REQ-05 by // line between by and part\n NavCtrl;", "REQ-05"),
+            ("satisfy requirement REQ-06 by /* multi\nline */ NavCtrl;", "REQ-06"),
+            ("satisfy requirement REQ-07 by NavCtrl /* comment after part before semi */;", "REQ-07"),
+            ("satisfy requirement REQ-08 by NavCtrl // line after part before semi\n ;", "REQ-08"),
+            ("satisfy requirement REQ-09 by NavCtrl /* multi\nline */;", "REQ-09"),
+            ("satisfy requirement REQ-10 /* c1 */ by /* c2 */ NavCtrl /* c3 */;", "REQ-10"),
+            ("satisfy requirement REQ-11 // l1\n by // l2\n NavCtrl // l3\n ;", "REQ-11"),
+            ("satisfy requirement REQ-12 /* by */ by /* satisfy */ NavCtrl /* ; */;", "REQ-12"),
+            ("satisfy requirement \"REQ-UI-01\" /* c1 */ by /* c2 */ NavCtrl /* c3 */;", "REQ-UI-01"),
         ];
 
         for (stmt, expected_id) in test_cases {
@@ -85,55 +46,37 @@ mod composite_and_container_tests {
 
         let source = r#"
 package AdversarialCommentsPackage {
-    // Package-level satisfy statement with inline block comment
     satisfy /* pkg comment 1 */ requirement REQ-PKG-01 /* pkg comment 2 */;
-
-    // Package-level satisfy statement with 'by' clause and comments
     satisfy requirement REQ-PKG-02 /* before by */ by CorePlatform /* after by */;
 
     part def CockpitSubsystem {
-        // Position 1: between satisfy and requirement
         satisfy /* block comment */ requirement REQ-UI-01;
         satisfy // line comment
             requirement REQ-UI-02;
         satisfy /* multi
             line
             comment */ requirement REQ-UI-03;
-
-        // Position 2: between requirement and ID
         satisfy requirement /* block comment */ REQ-UI-04;
         satisfy /* without req keyword */ REQ-UI-05;
-
-        // Position 3: between ID tokens and hyphens
         satisfy requirement REQ /* c1 */ - /* c2 */ UI /* c3 */ - /* c4 */ 06;
         satisfy requirement Core /* c1 */ :: /* c2 */ UI /* c3 */ :: /* c4 */ REQ-UI-07;
-
-        // Position 4: before terminating semicolon
         satisfy requirement REQ-UI-08 /* comment before semi */;
-
-        // Position 5: before and after 'by <Part>'
         satisfy requirement REQ-UI-09 /* c1 */ by /* c2 */ TouchDisplay /* c3 */;
-
-        // Deduplication: statement with comments matches clean statement
         satisfy requirement REQ-UI-01;
         satisfy /* dupe comment */ requirement REQ-UI-01;
     }
 }
 "#;
         let pkg = SysmlParser::parse_source(source, "AdversarialCommentsPackage")?;
-
         assert_eq!(
             pkg.satisfied_requirements,
             vec!["REQ-PKG-01".to_string(), "REQ-PKG-02".to_string()],
-            "package-level satisfy requirements must be extracted cleanly without comment artifacts"
         );
-
         let cockpit = pkg
             .part_defs
             .iter()
             .find(|p| p.name == "CockpitSubsystem")
             .ok_or("missing CockpitSubsystem")?;
-
         let expected_part_reqs = vec![
             "REQ-UI-01".to_string(),
             "REQ-UI-02".to_string(),
@@ -145,10 +88,7 @@ package AdversarialCommentsPackage {
             "REQ-UI-08".to_string(),
             "REQ-UI-09".to_string(),
         ];
-        assert_eq!(
-            cockpit.satisfied_requirements, expected_part_reqs,
-            "cockpit satisfied_requirements must match expected list with deduplication"
-        );
+        assert_eq!(cockpit.satisfied_requirements, expected_part_reqs);
 
         let serialized = pkg.to_sysml(0);
         assert!(serialized.contains("satisfy requirement REQ-PKG-01;"));
@@ -164,19 +104,11 @@ package AdversarialCommentsPackage {
             .iter()
             .find(|p| p.name == "CockpitSubsystem")
             .ok_or("missing reparsed CockpitSubsystem")?;
-        assert_eq!(
-            reparsed_cockpit.satisfied_requirements,
-            cockpit.satisfied_requirements
-        );
-
+        assert_eq!(reparsed_cockpit.satisfied_requirements, cockpit.satisfied_requirements);
         Ok(())
     }
 
-    /// Verifies that `SysmlParser` deterministically parses generic, pointer, reference, slice, array, tuple, `dyn`, path-qualified, and optional `?` type expressions across declarations.
-    #[test]
-    fn test_defect_05_parse_composite_and_generic_types_across_declarations(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let source = r#"
+    const COMPOSITE_TYPES_FIXTURE: &str = r#"
 package CompositeTypesPkg {
     attribute items : Vec<T>;
     attribute raw_slice_ptr : *const [T; 10];
@@ -217,71 +149,26 @@ package CompositeTypesPkg {
     }
 }
 "#;
-        let pkg = SysmlParser::parse_source(source, "CompositeTypesPkg")?;
+
+    /// Verifies that `SysmlParser` deterministically parses generic, pointer, reference, slice, array, tuple, `dyn`, path-qualified, and optional `?` type expressions across declarations.
+    #[test]
+    fn test_defect_05_parse_composite_and_generic_types_across_declarations(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let pkg = SysmlParser::parse_source(COMPOSITE_TYPES_FIXTURE, "CompositeTypesPkg")?;
         assert_eq!(pkg.name, "CompositeTypesPkg");
-        assert_eq!(pkg.attribute_defs.len(), 10);
-        assert_eq!(
-            pkg.attribute_defs
-                .first()
-                .ok_or("missing attr 0")?
-                .type_name,
-            "Vec<T>"
-        );
-        assert_eq!(
-            pkg.attribute_defs.get(1).ok_or("missing attr 1")?.type_name,
-            "*const [T; 10]"
-        );
-        assert_eq!(
-            pkg.attribute_defs.get(2).ok_or("missing attr 2")?.type_name,
-            "&[u8]"
-        );
-        assert_eq!(
-            pkg.attribute_defs.get(3).ok_or("missing attr 3")?.type_name,
-            "Result<T, E>"
-        );
-        assert_eq!(
-            pkg.attribute_defs.get(4).ok_or("missing attr 4")?.type_name,
-            "Option<String>"
-        );
-        assert_eq!(
-            pkg.attribute_defs.get(5).ok_or("missing attr 5")?.type_name,
-            "*mut Core::Buffer<u8>"
-        );
-        assert_eq!(
-            pkg.attribute_defs.get(6).ok_or("missing attr 6")?.type_name,
-            "(u32, Option<String>)"
-        );
-        assert_eq!(
-            pkg.attribute_defs.get(7).ok_or("missing attr 7")?.type_name,
-            "()"
-        );
-        assert_eq!(
-            pkg.attribute_defs.get(8).ok_or("missing attr 8")?.type_name,
-            "&dyn Handler"
-        );
-        assert_eq!(
-            pkg.attribute_defs.get(9).ok_or("missing attr 9")?.type_name,
-            "String?"
-        );
+        let expected_attrs = [
+            "Vec<T>", "*const [T; 10]", "&[u8]", "Result<T, E>", "Option<String>",
+            "*mut Core::Buffer<u8>", "(u32, Option<String>)", "()", "&dyn Handler", "String?",
+        ];
+        assert_eq!(pkg.attribute_defs.len(), expected_attrs.len());
+        for (i, ty) in expected_attrs.into_iter().enumerate() {
+            assert_eq!(pkg.attribute_defs.get(i).ok_or("missing attr")?.type_name, ty);
+        }
 
         let node = pkg.part_defs.first().ok_or("missing SubsystemNode")?;
         assert_eq!(node.parts.len(), 2);
-        assert_eq!(
-            node.parts
-                .first()
-                .ok_or("missing child_vec")?
-                .type_name
-                .as_deref(),
-            Some("Vec<ChildPart>")
-        );
-        assert_eq!(
-            node.parts
-                .get(1)
-                .ok_or("missing ptr_array")?
-                .type_name
-                .as_deref(),
-            Some("*const [SensorNode; 10]")
-        );
+        assert_eq!(node.parts.first().ok_or("missing p0")?.type_name.as_deref(), Some("Vec<ChildPart>"));
+        assert_eq!(node.parts.get(1).ok_or("missing p1")?.type_name.as_deref(), Some("*const [SensorNode; 10]"));
 
         assert_eq!(node.ports.len(), 2);
         let frame_in = node.ports.first().ok_or("missing frame_in")?;
@@ -289,82 +176,22 @@ package CompositeTypesPkg {
         assert_eq!(frame_in.type_name, "Channel<Result<T, E>>");
         let data_port = node.ports.get(1).ok_or("missing DataPort")?;
         assert_eq!(data_port.item_flows.len(), 4);
-        assert_eq!(
-            data_port
-                .item_flows
-                .first()
-                .ok_or("missing flow 0")?
-                .item_type,
-            "&[u8]"
-        );
-        assert_eq!(
-            data_port
-                .item_flows
-                .get(1)
-                .ok_or("missing flow 1")?
-                .item_type,
-            "Result<T, E>"
-        );
-        assert_eq!(
-            data_port
-                .item_flows
-                .get(2)
-                .ok_or("missing flow 2")?
-                .direction,
-            "inout"
-        );
-        assert_eq!(
-            data_port
-                .item_flows
-                .get(2)
-                .ok_or("missing flow 2")?
-                .item_type,
-            "(u32, Option<String>)"
-        );
-        assert_eq!(
-            data_port
-                .item_flows
-                .get(3)
-                .ok_or("missing flow 3")?
-                .direction,
-            "inout"
-        );
-        assert_eq!(
-            data_port
-                .item_flows
-                .get(3)
-                .ok_or("missing flow 3")?
-                .item_type,
-            "*mut [u8; 4]"
-        );
+        assert_eq!(data_port.item_flows.first().ok_or("f0")?.item_type, "&[u8]");
+        assert_eq!(data_port.item_flows.get(1).ok_or("f1")?.item_type, "Result<T, E>");
+        assert_eq!(data_port.item_flows.get(2).ok_or("f2")?.direction, "inout");
+        assert_eq!(data_port.item_flows.get(2).ok_or("f2")?.item_type, "(u32, Option<String>)");
+        assert_eq!(data_port.item_flows.get(3).ok_or("f3")?.direction, "inout");
+        assert_eq!(data_port.item_flows.get(3).ok_or("f3")?.item_type, "*mut [u8; 4]");
 
         let act = node.actions.first().ok_or("missing ProcessBuffer")?;
         assert_eq!(act.in_params.len(), 2);
-        assert_eq!(
-            act.in_params.first().ok_or("missing in 0")?.type_name,
-            "&[u8]"
-        );
-        assert_eq!(
-            act.in_params.get(1).ok_or("missing in 1")?.type_name,
-            "*const [T; 10]"
-        );
+        assert_eq!(act.in_params.first().ok_or("in0")?.type_name, "&[u8]");
+        assert_eq!(act.in_params.get(1).ok_or("in1")?.type_name, "*const [T; 10]");
         assert_eq!(act.out_params.len(), 4);
-        assert_eq!(
-            act.out_params.first().ok_or("missing out 0")?.type_name,
-            "Result<Vec<u8>, E>"
-        );
-        assert_eq!(
-            act.out_params.get(1).ok_or("missing out 1")?.type_name,
-            "(u32, &'a mut [u8])"
-        );
-        assert_eq!(
-            act.out_params.get(2).ok_or("missing out 2")?.type_name,
-            "Option<String>"
-        );
-        assert_eq!(
-            act.out_params.get(3).ok_or("missing out 3")?.type_name,
-            "&mut Context<T>"
-        );
+        assert_eq!(act.out_params.first().ok_or("out0")?.type_name, "Result<Vec<u8>, E>");
+        assert_eq!(act.out_params.get(1).ok_or("out1")?.type_name, "(u32, &'a mut [u8])");
+        assert_eq!(act.out_params.get(2).ok_or("out2")?.type_name, "Option<String>");
+        assert_eq!(act.out_params.get(3).ok_or("out3")?.type_name, "&mut Context<T>");
 
         let con = node.constraints.first().ok_or("missing CheckEnvelope")?;
         assert_eq!(
@@ -377,56 +204,19 @@ package CompositeTypesPkg {
         );
 
         let calc = node.calcs.first().ok_or("missing ComputeTrajectory")?;
-        assert_eq!(
-            calc.return_type.as_deref(),
-            Some("Result<(f64, [f64; 3]), ErrorCode>")
-        );
+        assert_eq!(calc.return_type.as_deref(), Some("Result<(f64, [f64; 3]), ErrorCode>"));
         assert_eq!(calc.in_params.len(), 6);
-        assert_eq!(
-            calc.in_params
-                .get(1)
-                .ok_or("missing calc param 1")?
-                .type_name,
-            "[f64; 16]"
-        );
-        assert_eq!(
-            calc.in_params
-                .get(2)
-                .ok_or("missing calc param 2")?
-                .type_name,
-            "(f64, f64)"
-        );
-        assert_eq!(
-            calc.in_params
-                .get(4)
-                .ok_or("missing calc param 4")?
-                .type_name,
-            "Result<f64, E>"
-        );
-        assert_eq!(
-            calc.in_params
-                .get(5)
-                .ok_or("missing calc param 5")?
-                .type_name,
-            "&[u8; 64]"
-        );
-        assert_eq!(
-            calc.expression.as_deref(),
-            Some("integrate ( vec_in , tol )")
-        );
+        assert_eq!(calc.in_params.get(1).ok_or("cp1")?.type_name, "[f64; 16]");
+        assert_eq!(calc.in_params.get(2).ok_or("cp2")?.type_name, "(f64, f64)");
+        assert_eq!(calc.in_params.get(4).ok_or("cp4")?.type_name, "Result<f64, E>");
+        assert_eq!(calc.in_params.get(5).ok_or("cp5")?.type_name, "&[u8; 64]");
+        assert_eq!(calc.expression.as_deref(), Some("integrate ( vec_in , tol )"));
 
         let op = node.operations.first().ok_or("missing ExecuteOp")?;
         assert_eq!(op.return_type.as_deref(), Some("Option<String>"));
         assert_eq!(op.parameters.len(), 2);
-        assert_eq!(
-            op.parameters.first().ok_or("missing op param 0")?.type_name,
-            "&[u8]"
-        );
-        assert_eq!(
-            op.parameters.get(1).ok_or("missing op param 1")?.type_name,
-            "Result<T, E>"
-        );
-
+        assert_eq!(op.parameters.first().ok_or("op0")?.type_name, "&[u8]");
+        assert_eq!(op.parameters.get(1).ok_or("op1")?.type_name, "Result<T, E>");
         Ok(())
     }
 
@@ -437,48 +227,29 @@ package CompositeTypesPkg {
         let err1 = SysmlParser::parse_source(unknown_pkg_stmt, "BadPkg")
             .err()
             .ok_or("unknown package-level keyword 'atribute' must return Err(ParseError)")?;
-        assert_eq!(
-            err1.span.line, 2,
-            "expected error on line 2, got {:?}",
-            err1
-        );
-        assert!(
-            err1.span.col > 0,
-            "expected positive column span, got {:?}",
-            err1
-        );
+        assert_eq!(err1.span.line, 2, "expected error on line 2, got {:?}", err1);
+        assert!(err1.span.col > 0, "expected positive column span, got {:?}", err1);
 
-        let unknown_pkg_block = "package BadPkg {\n    enum def UnhandledEnum {\n        attribute a : Integer;\n    }\n}\n";
+        let unknown_pkg_block =
+            "package BadPkg {\n    enum def UnhandledEnum {\n        attribute a : Integer;\n    }\n}\n";
         let err2 = SysmlParser::parse_source(unknown_pkg_block, "BadPkg")
             .err()
             .ok_or("unknown braced block in package scope must return Err(ParseError)")?;
-        assert_eq!(
-            err2.span.line, 2,
-            "expected error on line 2, got {:?}",
-            err2
-        );
+        assert_eq!(err2.span.line, 2, "expected error on line 2, got {:?}", err2);
 
         let unknown_part_stmt =
             "package BadPartPkg {\n    part def Node {\n        requirment typo_req;\n    }\n}\n";
         let err3 = SysmlParser::parse_source(unknown_part_stmt, "BadPartPkg")
             .err()
             .ok_or("unknown part-level keyword 'requirment' must return Err(ParseError)")?;
-        assert_eq!(
-            err3.span.line, 3,
-            "expected error on line 3, got {:?}",
-            err3
-        );
+        assert_eq!(err3.span.line, 3, "expected error on line 3, got {:?}", err3);
 
         let unknown_inner_stmt =
             "package BadInnerPkg {\n    port def P {\n        atribute bad : Integer;\n    }\n}\n";
         let err4 = SysmlParser::parse_source(unknown_inner_stmt, "BadInnerPkg")
             .err()
             .ok_or("unknown inner statement in port def must return Err(ParseError)")?;
-        assert_eq!(
-            err4.span.line, 3,
-            "expected error on line 3, got {:?}",
-            err4
-        );
+        assert_eq!(err4.span.line, 3, "expected error on line 3, got {:?}", err4);
         Ok(())
     }
 }

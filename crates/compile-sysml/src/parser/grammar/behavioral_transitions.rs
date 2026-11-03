@@ -10,22 +10,15 @@ impl<'a> SysmlParser<'a> {
     /// Returns `true` when `tok` is a SysML v2 transition clause keyword (`first`, `from`, `then`, `to`, `accept`, `if`, `do`).
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-IS-TRANSITION-CLAUSE-KEYWORD]
     fn is_transition_clause_keyword(tok: &str) -> bool {
-        matches!(
-            tok,
-            "first" | "from" | "then" | "to" | "accept" | "if" | "do"
-        )
+        matches!(tok, "first" | "from" | "then" | "to" | "accept" | "if" | "do")
     }
 
     /// Returns `true` when `tok` is an unquoted lexer token representing a SysML v2 transition clause keyword.
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-IS-TRANSITION-KEYWORD-TOKEN]
     fn is_transition_keyword_token(tok: &Token) -> bool {
         match &tok.kind {
-            TokenKind::StringLit(_)
-            | TokenKind::IntLit(_)
-            | TokenKind::RealLit(_)
-            | TokenKind::BoolLit(_)
-            | TokenKind::LineComment(_)
-            | TokenKind::DocComment(_)
+            TokenKind::StringLit(_) | TokenKind::IntLit(_) | TokenKind::RealLit(_)
+            | TokenKind::BoolLit(_) | TokenKind::LineComment(_) | TokenKind::DocComment(_)
             | TokenKind::Eof => false,
             TokenKind::Ident(s) => Self::is_transition_clause_keyword(s.as_str()),
             other => Self::is_transition_clause_keyword(other.as_str()),
@@ -39,13 +32,8 @@ impl<'a> SysmlParser<'a> {
             TokenKind::Ident(s) => s.clone(),
             TokenKind::StringLit(s) => format!("\"{}\"", s),
             TokenKind::IntLit(n) => n.to_string(),
-            TokenKind::RealLit(f) => {
-                if f.fract() == 0.0 {
-                    format!("{:.1}", f)
-                } else {
-                    f.to_string()
-                }
-            }
+            TokenKind::RealLit(f) if f.fract() == 0.0 => format!("{:.1}", f),
+            TokenKind::RealLit(f) => f.to_string(),
             TokenKind::BoolLit(b) => b.to_string(),
             TokenKind::Eof | TokenKind::LineComment(_) | TokenKind::DocComment(_) => String::new(),
             _ => tok.kind.as_str().to_string(),
@@ -181,14 +169,9 @@ impl<'a> SysmlParser<'a> {
             && slice.get(1).is_some_and(|t| {
                 !matches!(
                     t.kind,
-                    TokenKind::OpenParen
-                        | TokenKind::CloseParen
-                        | TokenKind::OpenBracket
-                        | TokenKind::CloseBracket
-                        | TokenKind::Dot
-                        | TokenKind::DoubleColon
-                        | TokenKind::Comma
-                        | TokenKind::Semi
+                    TokenKind::OpenParen | TokenKind::CloseParen | TokenKind::OpenBracket
+                        | TokenKind::CloseBracket | TokenKind::Dot | TokenKind::DoubleColon
+                        | TokenKind::Comma | TokenKind::Semi
                 )
             }) {
             slice.get(1..).unwrap_or_default()
@@ -196,36 +179,40 @@ impl<'a> SysmlParser<'a> {
             slice
         };
         let formatted = Self::format_transition_expr(expr_slice);
-        if formatted.is_empty() {
-            None
-        } else {
-            Some(formatted)
-        }
+        (!formatted.is_empty()).then_some(formatted)
     }
 
-    /// Infers `source`, `target`, and optional `trigger` from shorthand `<src>_to_<tgt>[_on_<trig>]` transition identifiers when explicit endpoints are absent.
+    /// Infers `source`, `target`, and optional `trigger` from shorthand `<src>_to_<tgt>[_on_<trig>]` transition identifiers or expression fallback when explicit endpoints are absent.
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-TRANSITION-TOKENS]
-    fn infer_shorthand_transition_endpoints(
-        raw_name: &str,
-        source: &mut Option<String>,
-        target: &mut Option<String>,
-        trigger: &mut Option<String>,
-    ) {
-        if let Some((before_to, after_to_raw)) = raw_name.split_once("_to_") {
-            let src_part = before_to.trim();
-            let after_to = after_to_raw.trim();
-            let (tgt_part, trig_part) =
-                if let Some((tgt_raw, trig_raw)) = after_to.split_once("_on_") {
-                    (tgt_raw.trim(), trig_raw.trim())
-                } else {
-                    (after_to, "")
-                };
-            if !src_part.is_empty() && !tgt_part.is_empty() {
-                *source = Some(src_part.to_string());
-                *target = Some(tgt_part.to_string());
-                if trigger.is_none() && !trig_part.is_empty() {
-                    *trigger = Some(trig_part.to_string());
+    fn finalize_transition_def(tr: &mut TransitionDef, tokens: &[Token]) {
+        if tr.source.is_none() && tr.target.is_none() {
+            if let Some((before_to, after_to)) =
+                tr.name.as_deref().and_then(|n| n.split_once("_to_"))
+            {
+                let (src_part, after_to) = (before_to.trim(), after_to.trim());
+                let (tgt_part, trig_part) = after_to
+                    .split_once("_on_")
+                    .map_or((after_to, ""), |(t, g)| (t.trim(), g.trim()));
+                if !src_part.is_empty() && !tgt_part.is_empty() {
+                    tr.source = Some(src_part.to_string());
+                    tr.target = Some(tgt_part.to_string());
+                    if tr.trigger.is_none() && !trig_part.is_empty() {
+                        tr.trigger = Some(trig_part.to_string());
+                    }
                 }
+            }
+        }
+        if tr.name.is_none()
+            && tr.source.is_none()
+            && tr.target.is_none()
+            && tr.trigger.is_none()
+            && tr.guard.is_none()
+            && tr.effect.is_none()
+            && !tokens.is_empty()
+        {
+            let fallback = Self::format_transition_expr(tokens);
+            if !fallback.is_empty() {
+                tr.name = Some(fallback);
             }
         }
     }
@@ -238,104 +225,51 @@ impl<'a> SysmlParser<'a> {
             .filter(|t| {
                 !matches!(
                     t.kind,
-                    TokenKind::Eof
-                        | TokenKind::Semi
-                        | TokenKind::LineComment(_)
-                        | TokenKind::DocComment(_)
+                    TokenKind::Eof | TokenKind::Semi | TokenKind::LineComment(_) | TokenKind::DocComment(_)
                 )
             })
             .cloned()
             .collect();
-
-        let mut name = None;
-        let mut source = None;
-        let mut target = None;
-        let mut trigger = None;
-        let mut guard = None;
-        let mut effect = None;
-
-        let mut idx = 0usize;
-        if let Some(first_tok) = tokens.first() {
-            if !Self::is_transition_keyword_token(first_tok) {
-                if let Some(ep_or_name) = Self::parse_transition_endpoint(&tokens, &mut idx) {
-                    name = Some(ep_or_name);
-                }
-            }
+        let (mut tr, mut idx) = (TransitionDef::default(), 0usize);
+        if tokens.first().is_some_and(|t| !Self::is_transition_keyword_token(t)) {
+            tr.name = Self::parse_transition_endpoint(&tokens, &mut idx);
         }
-
         while let Some(tok) = tokens.get(idx) {
-            let kw = if Self::is_transition_keyword_token(tok) {
-                Self::token_lexeme(tok)
-            } else {
+            if !Self::is_transition_keyword_token(tok) {
                 idx = idx.saturating_add(1);
                 continue;
-            };
-
+            }
+            let kw = Self::token_lexeme(tok);
             match kw.as_str() {
                 "first" | "from" => {
                     idx = idx.saturating_add(1);
                     if let Some(ep) = Self::parse_transition_endpoint(&tokens, &mut idx) {
-                        source = Some(ep);
+                        tr.source = Some(ep);
                     }
                 }
                 "then" | "to" => {
                     idx = idx.saturating_add(1);
                     if let Some(ep) = Self::parse_transition_endpoint(&tokens, &mut idx) {
-                        target = Some(ep);
+                        tr.target = Some(ep);
                     }
                 }
-                "accept" | "if" | "do" => {
-                    if let Some(formatted) =
-                        Self::parse_transition_clause_expr(&tokens, &mut idx, kw.as_str())
-                    {
-                        match kw.as_str() {
-                            "accept" => trigger = Some(formatted),
-                            "if" => guard = Some(formatted),
-                            "do" => effect = Some(formatted),
-                            _ => {}
-                        }
-                    }
+                "accept" => {
+                    tr.trigger = Self::parse_transition_clause_expr(&tokens, &mut idx, "accept")
+                        .or(tr.trigger);
                 }
-                _ => {
-                    idx = idx.saturating_add(1);
+                "if" => {
+                    tr.guard =
+                        Self::parse_transition_clause_expr(&tokens, &mut idx, "if").or(tr.guard);
                 }
+                "do" => {
+                    tr.effect =
+                        Self::parse_transition_clause_expr(&tokens, &mut idx, "do").or(tr.effect);
+                }
+                _ => idx = idx.saturating_add(1),
             }
         }
-
-        if source.is_none() && target.is_none() {
-            if let Some(raw_name) = name.as_deref() {
-                Self::infer_shorthand_transition_endpoints(
-                    raw_name,
-                    &mut source,
-                    &mut target,
-                    &mut trigger,
-                );
-            }
-        }
-
-        if name.is_none()
-            && source.is_none()
-            && target.is_none()
-            && trigger.is_none()
-            && guard.is_none()
-            && effect.is_none()
-            && !tokens.is_empty()
-        {
-            let fallback = Self::format_transition_expr(&tokens);
-            if !fallback.is_empty() {
-                name = Some(fallback);
-            }
-        }
-
-        TransitionDef {
-            name,
-            source,
-            target,
-            trigger,
-            guard,
-            effect,
-            doc: None,
-        }
+        Self::finalize_transition_def(&mut tr, &tokens);
+        tr
     }
 
     /// Decomposes a raw SysML v2 transition statement body into a structured `TransitionDef`.

@@ -1,90 +1,61 @@
-//! User Story metadata model, constitutional User Story statement projection, and 3-layer Given-When-Then BDD Acceptance Criteria synthesis.
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
+//! # User Story 3-Layer Given-When-Then BDD Acceptance Criteria Synthesis
 //!
-//! Safety & Traceability: Realises: [REQ-SYNC-FORWARD-GENERATE-US-BDD]
-//! Contract: Defines `StoryMeta` for package-scoped behavioral traceability, synthesizes constitutional `As a ..., I want to ..., so that ...` User Story statements, and projects `4..=10` AST-grounded 3-layer positive and negative BDD Acceptance Criteria (`AC-US-XX-01..N`).
-//! Bounds & Faults: Uses `BTreeSet` invariant deduplication, provenance-safe constraint and requirement formatting, and `saturating_add` criterion indexing with zero regular expressions, direct indexing, or runtime panics.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-US-BDD]
+//! Projects `4..=10` AST-grounded 3-layer positive and negative BDD Acceptance Criteria
+//! (`AC-US-XX-01..N`) from `ActionDef` parameters, `PartDef` attributes and ports, `StateDef`
+//! transition guards, and `ConstraintDef`/`RequirementDef` invariants.
+//!
+//! ## 2. Preconditions, Postconditions & Mathematical Invariants
+//! - **Preconditions**: Input `UserStoryProjectionCtx` references valid AST slices.
+//! - **Postconditions**: Emits `4..=10` BDD Acceptance Criteria including a negative boundary criterion.
+//! - **Invariants**: `BTreeSet` deduplication and saturating index arithmetic guarantee unique AC indices.
+//!
+//! ## 3. Failure Modes, Degraded Operation & Recovery
+//! - Stories without explicit guards or constraints emit a deterministic state-conservation Layer 2 criterion.
+//!
+//! ## 4. Concurrency, Memory & Resource Bounds
+//! - Pure single-threaded `O(N log N)` deduplication and formatting.
+//!
+//! ## 5. Dependencies & Integration Contracts
+//! - Consumed by `story_emitter`; re-exports `StoryMeta` and `generate_user_story_statement` from `story_resolver`.
+//!
+//! ## 6. Verification & Acceptance Criteria
+//! - Verified by User Story BDD tests in `sync/forward/tests*.rs`.
+//!
+//! ## 7. Realization & Traceability
+//! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-US-BDD]
 
+pub use super::story_resolver::StoryMeta;
+pub(crate) use super::story_resolver::generate_user_story_statement;
 use super::*;
 
-/// Behavioral traceability metadata connecting a projected User Story (`US-XX-*.md`) to its owning `PartDef` Feature, caller lifeline, and `PackageDef` namespace.
-///
-/// Safety & Traceability: Realises: [REQ-SYNC-FORWARD-STORYMETA]
-/// Contract: Preserves canonical action, target engine, caller engine, optional external lifeline `initiator_actor`, reply message, interaction name, subsystem display/directory identifiers, 1-based Feature numbers, and 1-based `s_num` allocation index across Epic, Feature, User Story, and Use Case synthesis passes.
-/// Bounds & Faults: Owns bounded heap strings and scalar indices (`usize`) with deterministic `Default`/`Clone`/`Eq` value semantics and zero fallible operations.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct StoryMeta {
-    pub action_name: String,
-    pub engine_name: String,
-    pub caller_engine: String,
-    pub initiator_actor: Option<String>,
-    pub reply_msg: String,
-    pub interaction_name: String,
-    pub subsys_display: String,
-    pub pkg_name: String,
-    pub subsys_dir: String,
-    pub engine_feat_num: usize,
-    pub caller_feat_num: Option<usize>,
-    pub s_num: usize,
-}
-
-/// Synthesizes the constitutional `As a ..., I want to ..., so that ...` User Story statement from AST nodes.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-US-STATEMENT]
-pub(crate) fn generate_user_story_statement(ctx: &UserStoryProjectionCtx<'_>) -> String {
-    let engine_name = ctx.engine_name;
-    let action_name = ctx.action_name;
-    let story_actor = ctx.story_actor;
-    let call_sig = ctx.call_sig;
-
-    let first_req_label = ctx
-        .reqs
+/// Formats a slice of `AttributeDef` members into `` `name: Type` `` or `` `name` `` tokens.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-US-BDD]
+fn collect_member_type_signatures(attrs: &[AttributeDef]) -> Vec<String> {
+    attrs
         .iter()
-        .map(|r| format_requirement_label(r))
-        .find(|lbl| !lbl.is_empty());
-    let first_constraint_label = ctx
-        .constraints
-        .iter()
-        .map(|c| format_constraint_label(c))
-        .find(|lbl| !lbl.is_empty());
-
-    let outcome_clause = if let Some(ref outcome) = ctx.parsed_doc.outcome {
-        outcome.trim().trim_end_matches('.').to_string()
-    } else if let Some(req_label) = first_req_label {
-        if let Some(c_label) = first_constraint_label {
-            format!(
-                "`{engine_name}` satisfies formal requirement `{req_label}` while enforcing `{c_label}`"
-            )
-        } else {
-            format!("`{engine_name}` satisfies formal requirement `{req_label}`")
-        }
-    } else if let Some(c_label) = first_constraint_label {
-        format!("`{engine_name}` enforces declared invariant `{c_label}`")
-    } else if let Some(out_p) = ctx.act_opt.and_then(|a| a.out_params.first()) {
-        let p_name = out_p.name.trim();
-        let p_type = out_p.type_name.trim();
-        if p_type.is_empty() {
-            format!("`{engine_name}` produces verified output `{p_name}`")
-        } else {
-            format!("`{engine_name}` produces verified output `{p_name}: {p_type}`")
-        }
-    } else if let Some(tgt) = ctx
-        .matched_transition
-        .map(|m| m.target.as_str())
-        .filter(|t| *t != "[*]")
-    {
-        format!("`{engine_name}` transitions deterministically to declared state `{tgt}`")
-    } else {
-        format!(
-            "`{engine_name}` completes `{action_name}` deterministically while preserving declared subsystem state invariants"
-        )
-    };
-
-    format!(
-        "As a `{story_actor}`, I want to invoke `{call_sig}` on `{engine_name}`, so that {outcome_clause}."
-    )
+        .filter_map(|p| {
+            let n = p.name.trim();
+            let t = p.type_name.trim();
+            if n.is_empty() {
+                None
+            } else if t.is_empty() {
+                Some(format!("`{n}`"))
+            } else {
+                Some(format!("`{n}: {t}`"))
+            }
+        })
+        .collect()
 }
 
 /// Renders `AC-US-XX-01` (Layer 1 nominal data-model & precondition binding) and returns it alongside formatted `in_params` signatures.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-US-BDD]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-US-BDD]
 fn render_story_bdd_layer1_criterion(
     ctx: &UserStoryProjectionCtx<'_>,
     clean_src: Option<&str>,
@@ -104,44 +75,13 @@ fn render_story_bdd_layer1_criterion(
         (None, None) => format!("`{engine_name}` is initialized in nominal operational state"),
     };
 
-    let in_param_sigs: Vec<String> = ctx
+    let in_param_sigs = ctx
         .act_opt
-        .map(|a| {
-            a.in_params
-                .iter()
-                .filter_map(|p| {
-                    let n = p.name.trim();
-                    let t = p.type_name.trim();
-                    if n.is_empty() {
-                        None
-                    } else if t.is_empty() {
-                        Some(format!("`{n}`"))
-                    } else {
-                        Some(format!("`{n}: {t}`"))
-                    }
-                })
-                .collect()
-        })
+        .map(|a| collect_member_type_signatures(&a.in_params))
         .unwrap_or_default();
-
-    let part_attr_sigs: Vec<String> = ctx
+    let part_attr_sigs = ctx
         .target_part
-        .map(|pt| {
-            pt.attributes
-                .iter()
-                .filter_map(|attr| {
-                    let n = attr.name.trim();
-                    let t = attr.type_name.trim();
-                    if n.is_empty() {
-                        None
-                    } else if t.is_empty() {
-                        Some(format!("`{n}`"))
-                    } else {
-                        Some(format!("`{n}: {t}`"))
-                    }
-                })
-                .collect()
-        })
+        .map(|pt| collect_member_type_signatures(&pt.attributes))
         .unwrap_or_default();
 
     let in_data_clause = if !in_param_sigs.is_empty() {
@@ -178,8 +118,30 @@ fn render_story_bdd_layer1_criterion(
     (ac_line, in_param_sigs)
 }
 
+/// Formats the Layer 2 transition-guard BDD criterion body when a guard expression is present.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-US-BDD]
+fn format_story_guard_bdd_body(
+    engine_name: &str,
+    action_name: &str,
+    guard: &str,
+    clean_src: Option<&str>,
+    clean_tgt: Option<&str>,
+) -> String {
+    match (clean_src, clean_tgt) {
+        (Some(src), Some(tgt)) => format!(
+            "Given `{engine_name}` evaluates transition guard `[{guard}]` in state `{src}`, When guard condition `[{guard}]` holds true for `{action_name}`, Then `{engine_name}` authorizes state transition `{src} -> {tgt}` without invariant violation."
+        ),
+        (_, Some(tgt)) => format!(
+            "Given `{engine_name}` evaluates transition guard `[{guard}]` prior to `{action_name}`, When guard condition `[{guard}]` holds true, Then `{engine_name}` authorizes transition to `{tgt}` without invariant violation."
+        ),
+        _ => format!(
+            "Given `{engine_name}` evaluates transition guard `[{guard}]` prior to `{action_name}`, When guard condition `[{guard}]` holds true, Then `{engine_name}` authorizes state transition execution without invariant violation."
+        ),
+    }
+}
+
 /// Collects `1..=5` deduplicated Layer 2 transition-guard, `ConstraintDef`, and `RequirementDef` BDD criterion bodies plus all deduplicated constraint labels.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-US-BDD]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-US-BDD]
 fn collect_story_bdd_layer2_bodies(
     ctx: &UserStoryProjectionCtx<'_>,
     clean_src: Option<&str>,
@@ -191,23 +153,23 @@ fn collect_story_bdd_layer2_bodies(
 
     let mut layer2_bodies: Vec<String> = Vec::new();
     if let Some(guard) = clean_guard {
-        let guard_body = match (clean_src, clean_tgt) {
-            (Some(src), Some(tgt)) => format!(
-                "Given `{engine_name}` evaluates transition guard `[{guard}]` in state `{src}`, When guard condition `[{guard}]` holds true for `{action_name}`, Then `{engine_name}` authorizes state transition `{src} -> {tgt}` without invariant violation."
-            ),
-            (_, Some(tgt)) => format!(
-                "Given `{engine_name}` evaluates transition guard `[{guard}]` prior to `{action_name}`, When guard condition `[{guard}]` holds true, Then `{engine_name}` authorizes transition to `{tgt}` without invariant violation."
-            ),
-            _ => format!(
-                "Given `{engine_name}` evaluates transition guard `[{guard}]` prior to `{action_name}`, When guard condition `[{guard}]` holds true, Then `{engine_name}` authorizes state transition execution without invariant violation."
-            ),
-        };
-        layer2_bodies.push(guard_body);
+        layer2_bodies.push(format_story_guard_bdd_body(
+            engine_name,
+            action_name,
+            guard,
+            clean_src,
+            clean_tgt,
+        ));
     }
 
     let mut seen_invariants: BTreeSet<String> = BTreeSet::new();
     let mut constraint_labels: Vec<String> = Vec::new();
-    for c in ctx.constraints {
+    for c in ctx
+        .constraints
+        .iter()
+        .copied()
+        .chain(ctx.reqs.iter().flat_map(|r| r.constraints.iter()))
+    {
         let label = format_constraint_label(c);
         if !label.is_empty() && seen_invariants.insert(label.clone()) {
             constraint_labels.push(label.clone());
@@ -220,17 +182,6 @@ fn collect_story_bdd_layer2_bodies(
     }
 
     for req in ctx.reqs {
-        for c in &req.constraints {
-            let label = format_constraint_label(c);
-            if !label.is_empty() && seen_invariants.insert(label.clone()) {
-                constraint_labels.push(label.clone());
-                if layer2_bodies.len() < 5 {
-                    layer2_bodies.push(format!(
-                        "Given `{engine_name}` active state management during `{action_name}`, When `{engine_name}` evaluates formal constraint `{label}`, Then `{engine_name}` verifies constraint satisfaction before committing state updates."
-                    ));
-                }
-            }
-        }
         let req_label = format_requirement_label(req);
         if !req_label.is_empty()
             && seen_invariants.insert(req_label.clone())
@@ -258,7 +209,7 @@ fn collect_story_bdd_layer2_bodies(
 }
 
 /// Partitions `target_part` ports into formatted ingress (`in`/`inout`) and egress (`out`/`inout`) lists.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-US-BDD]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-US-BDD]
 fn partition_story_bdd_ports(target_part: Option<&PartDef>) -> (Vec<String>, Vec<String>) {
     let mut in_ports: Vec<String> = Vec::new();
     let mut out_ports: Vec<String> = Vec::new();
@@ -289,7 +240,7 @@ fn partition_story_bdd_ports(target_part: Option<&PartDef>) -> (Vec<String>, Vec
 }
 
 /// Renders the Layer 3 interface delivery BDD criterion at index `l3_idx`.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-US-BDD]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-US-BDD]
 fn render_story_bdd_layer3_criterion(
     ctx: &UserStoryProjectionCtx<'_>,
     l3_idx: usize,
@@ -303,24 +254,9 @@ fn render_story_bdd_layer3_criterion(
     let interaction_name = ctx.interaction_name;
     let reply_msg = ctx.reply_msg;
 
-    let out_param_sigs: Vec<String> = ctx
+    let out_param_sigs = ctx
         .act_opt
-        .map(|a| {
-            a.out_params
-                .iter()
-                .filter_map(|p| {
-                    let n = p.name.trim();
-                    let t = p.type_name.trim();
-                    if n.is_empty() {
-                        None
-                    } else if t.is_empty() {
-                        Some(format!("`{n}`"))
-                    } else {
-                        Some(format!("`{n}: {t}`"))
-                    }
-                })
-                .collect()
-        })
+        .map(|a| collect_member_type_signatures(&a.out_params))
         .unwrap_or_default();
 
     let given_interface = if !in_ports.is_empty() {
@@ -358,7 +294,7 @@ fn render_story_bdd_layer3_criterion(
 }
 
 /// Synthesizes `4..=10` AST-grounded 3-layer Given-When-Then BDD acceptance criteria (`AC-US-XX-01..N`) including a mandatory negative boundary / fault-containment criterion.
-/// Realises: [REQ-SYNC-FORWARD-GENERATE-US-BDD]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-US-BDD]
 pub(crate) fn generate_user_story_bdd(ctx: &UserStoryProjectionCtx<'_>) -> String {
     let s_num = ctx.s_num;
     let story_actor = ctx.story_actor;

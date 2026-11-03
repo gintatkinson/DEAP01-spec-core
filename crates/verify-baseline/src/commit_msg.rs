@@ -1,81 +1,23 @@
 //! Native commit message linter and Commit Message Non-Closure Invariant gate.
-//!
-//! Enforces .pipeline/constitution.md:266:
-//! Strictly zero regex. Deterministic pure-Rust lexical scanner.
+//! Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-SCAN-COMMIT-MESSAGE]
 
+pub use crate::commit_msg_scanner::scan_commit_message;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Executes deterministic struct `CommitMsgArgs` within `crates/verify-baseline/src/commit_msg.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `CommitMsgArgs` in `crates/verify-baseline/src/commit_msg.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `CommitMsgArgs` across member set `[msg_file: Option<PathBuf>, range: Option<String>, head: bool, check_text: Option<String>, target: Option<String>]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `CommitMsgArgs` members (`msg_file: Option<PathBuf>, range: Option<String>, head: bool, check_text: Option<String>, target: Option<String>`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `CommitMsgArgs` representation for struct `CommitMsgArgs`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(5)) bounded over input/member dimension of `CommitMsgArgs`.
-/// - Space Complexity: O(M(5)) bounded auxiliary memory for `CommitMsgArgs`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `CommitMsgArgs` (`CommitMsgArgs`).
-/// - State: Maintains consistent state invariants across `CommitMsgArgs` without partial mutation on error.
-/// - Action: Executes `CommitMsgArgs` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `CommitMsgArgs` (`VERIFY-BASELINE-COMMIT-MSG`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-COMMITMSGARGS] | SysML v2: PartDef(CommitMsgArgs)
+/// CLI arguments for `verify-baseline check-commit-msg`.
+/// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-COMMITMSGARGS]
 #[derive(Debug, Clone)]
 pub struct CommitMsgArgs {
-    /// Path to file containing commit message
     pub msg_file: Option<PathBuf>,
-
-    /// Git revision range to inspect (e.g. origin/main..HEAD)
     pub range: Option<String>,
-
-    /// Check the latest HEAD commit
     pub head: bool,
-
-    /// Check raw text directly
     pub check_text: Option<String>,
-
-    /// Positional file or text to check
     pub target: Option<String>,
 }
 
-/// Executes deterministic struct `CommitViolation` within `crates/verify-baseline/src/commit_msg.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `CommitViolation` in `crates/verify-baseline/src/commit_msg.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `CommitViolation` across member set `[verb: String, issue_id: String, offending_snippet: String, line_number: usize]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `CommitViolation` members (`verb: String, issue_id: String, offending_snippet: String, line_number: usize`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `CommitViolation` representation for struct `CommitViolation`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(4)) bounded over input/member dimension of `CommitViolation`.
-/// - Space Complexity: O(M(4)) bounded auxiliary memory for `CommitViolation`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `CommitViolation` (`CommitViolation`).
-/// - State: Maintains consistent state invariants across `CommitViolation` without partial mutation on error.
-/// - Action: Executes `CommitViolation` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `CommitViolation` (`VERIFY-BASELINE-COMMIT-MSG`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-COMMITVIOLATION] | SysML v2: PartDef(CommitViolation)
+/// Detected commit-message non-closure violation record.
+/// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-COMMITVIOLATION]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommitViolation {
     pub verb: String,
@@ -84,428 +26,19 @@ pub struct CommitViolation {
     pub line_number: usize,
 }
 
-const FORBIDDEN_VERBS: &[&str] = &[
-    "resolving",
-    "resolves",
-    "resolved",
-    "resolve",
-    "closing",
-    "closes",
-    "closed",
-    "close",
-    "fixing",
-    "fixes",
-    "fixed",
-    "fix",
-];
+/// Unit error returned when commit-message policy validation fails.
+/// - **Safety & Traceability**: Enforces Commit Message Non-Closure Invariant. Realises: [REQ-COMMIT-MSG-ERROR]
+/// - **Contract**: Pre: none. Post: signals policy violation. Invariant: zero-sized unit error.
+/// - **Bounds & Faults**: O(1) time, O(1) space; infallible value type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CommitMsgError;
 
-/// Helper to parse an issue reference starting at `chars[pos..]`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `parse_issue_reference` in `crates/verify-baseline/src/commit_msg.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `parse_issue_reference` (declaration #3) within `VERIFY-BASELINE-COMMIT-MSG`.
-///
-/// ## 3. Preconditions
-/// - `chars: &[char]` must satisfy domain and type-safety constraints prior to invoking `parse_issue_reference`.
-/// - `pos: usize` must satisfy domain and type-safety constraints prior to invoking `parse_issue_reference`.
-///
-/// ## 4. Postconditions
-/// - Returns `Option<(String, usize)>` from `parse_issue_reference` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(chars)) bounded over input/member dimension of `parse_issue_reference`.
-/// - Space Complexity: O(N(chars)) bounded auxiliary memory for `parse_issue_reference`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `parse_issue_reference` (`Option<(String, usize)>`).
-/// - State: Maintains consistent state invariants across `parse_issue_reference` without partial mutation on error.
-/// - Action: Executes `parse_issue_reference` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `parse_issue_reference` (`VERIFY-BASELINE-COMMIT-MSG`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-PARSE-ISSUE-REFERENCE] | SysML v2: ActionDef(parse_issue_reference)
-fn parse_issue_reference(chars: &[char], mut pos: usize) -> Option<(String, usize)> {
-    let len = chars.len();
-    while pos < len && chars.get(pos).is_some_and(|c| c.is_whitespace()) {
-        pos += 1;
-    }
-    if pos >= len {
-        return None;
-    }
-
-    // Check for optional "issue" or "issues" keyword
-    let is_issue_keyword = |p: usize| -> Option<usize> {
-        let remaining = len.saturating_sub(p);
-        if remaining >= 6 {
-            let s: String = chars
-                .get(p..p + 6)
-                .map(|sl| sl.iter().map(|c| c.to_ascii_lowercase()).collect())
-                .unwrap_or_default();
-            if s == "issues"
-                && (p + 6 == len
-                    || chars
-                        .get(p + 6)
-                        .is_some_and(|c| !c.is_alphanumeric() && *c != '_'))
-            {
-                return Some(p + 6);
-            }
-        }
-        if remaining >= 5 {
-            let s: String = chars
-                .get(p..p + 5)
-                .map(|sl| sl.iter().map(|c| c.to_ascii_lowercase()).collect())
-                .unwrap_or_default();
-            if s == "issue"
-                && (p + 5 == len
-                    || chars
-                        .get(p + 5)
-                        .is_some_and(|c| !c.is_alphanumeric() && *c != '_'))
-            {
-                return Some(p + 5);
-            }
-        }
-        None
-    };
-
-    if let Some(after_issue) = is_issue_keyword(pos) {
-        pos = after_issue;
-        if pos < len && chars.get(pos) == Some(&':') {
-            pos += 1;
-        }
-        while pos < len && chars.get(pos).is_some_and(|c| c.is_whitespace()) {
-            pos += 1;
-        }
-        if pos >= len {
-            return None;
-        }
-    }
-
-    let mut open_delim = None;
-    if chars.get(pos).is_some_and(|&c| c == '(' || c == '[') {
-        open_delim = chars.get(pos).copied();
-        pos += 1;
-        while pos < len && chars.get(pos).is_some_and(|c| c.is_whitespace()) {
-            pos += 1;
-        }
-    }
-    if pos >= len {
-        return None;
-    }
-
-    // Second check for "issue" / "issues" inside delimiter, e.g. "(issue #123)"
-    if let Some(after_issue) = is_issue_keyword(pos) {
-        pos = after_issue;
-        if pos < len && chars.get(pos) == Some(&':') {
-            pos += 1;
-        }
-        while pos < len && chars.get(pos).is_some_and(|c| c.is_whitespace()) {
-            pos += 1;
-        }
-        if pos >= len {
-            return None;
-        }
-    }
-
-    let mut issue_id = None;
-    let mut next_pos = pos;
-
-    if chars.get(pos) == Some(&'#') {
-        pos += 1;
-        while pos < len && chars.get(pos).is_some_and(|c| c.is_whitespace()) {
-            pos += 1;
-        }
-        let digit_start = pos;
-        while pos < len && chars.get(pos).is_some_and(|c| c.is_ascii_digit()) {
-            pos += 1;
-        }
-        if pos > digit_start {
-            issue_id = chars
-                .get(digit_start..pos)
-                .map(|sl| sl.iter().collect::<String>());
-            next_pos = pos;
-        }
-    } else if pos + 3 <= len
-        && chars.get(pos).is_some_and(|c| c.eq_ignore_ascii_case(&'g'))
-        && chars
-            .get(pos + 1)
-            .is_some_and(|c| c.eq_ignore_ascii_case(&'h'))
-        && chars.get(pos + 2) == Some(&'-')
-    {
-        pos += 3;
-        while pos < len && chars.get(pos).is_some_and(|c| c.is_whitespace()) {
-            pos += 1;
-        }
-        let digit_start = pos;
-        while pos < len && chars.get(pos).is_some_and(|c| c.is_ascii_digit()) {
-            pos += 1;
-        }
-        if pos > digit_start {
-            issue_id = chars
-                .get(digit_start..pos)
-                .map(|sl| sl.iter().collect::<String>());
-            next_pos = pos;
-        }
-    } else {
-        // Check for cross-repo syntax: e.g. "gintatkinson/DEAP01-spec-core#123" or "repo#123"
-        let repo_start = pos;
-        while pos < len
-            && chars.get(pos).is_some_and(|&c| {
-                c.is_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '/'
-            })
-        {
-            pos += 1;
-        }
-        if pos > repo_start && pos < len && chars.get(pos) == Some(&'#') {
-            pos += 1;
-            while pos < len && chars.get(pos).is_some_and(|c| c.is_whitespace()) {
-                pos += 1;
-            }
-            let digit_start = pos;
-            while pos < len && chars.get(pos).is_some_and(|c| c.is_ascii_digit()) {
-                pos += 1;
-            }
-            if pos > digit_start {
-                issue_id = chars
-                    .get(digit_start..pos)
-                    .map(|sl| sl.iter().collect::<String>());
-                next_pos = pos;
-            }
-        }
-    }
-
-    if let Some(id) = issue_id {
-        let mut final_pos = next_pos;
-        while final_pos < len && chars.get(final_pos).is_some_and(|c| c.is_whitespace()) {
-            final_pos += 1;
-        }
-        if let Some(open) = open_delim {
-            let expected_close = if open == '(' { ')' } else { ']' };
-            if final_pos < len && chars.get(final_pos) == Some(&expected_close) {
-                final_pos += 1;
-            }
-        }
-        Some((id, final_pos))
-    } else {
-        None
-    }
-}
-
-/// Deterministic lexical token scanner in pure Rust (ZERO regex).
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `scan_commit_message` in `crates/verify-baseline/src/commit_msg.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `scan_commit_message` (declaration #4) within `VERIFY-BASELINE-COMMIT-MSG`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `scan_commit_message`.
-///
-/// ## 4. Postconditions
-/// - Returns `Vec<CommitViolation>` from `scan_commit_message` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `scan_commit_message`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `scan_commit_message`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `scan_commit_message` (`Vec<CommitViolation>`).
-/// - State: Maintains consistent state invariants across `scan_commit_message` without partial mutation on error.
-/// - Action: Executes `scan_commit_message` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `scan_commit_message` (`VERIFY-BASELINE-COMMIT-MSG`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-SCAN-COMMIT-MESSAGE] | SysML v2: ActionDef(scan_commit_message)
-pub fn scan_commit_message(text: &str) -> Vec<CommitViolation> {
-    let mut violations = Vec::new();
-    let chars: Vec<char> = text.chars().collect();
-    let len = chars.len();
-
-    let mut i = 0;
-    while i < len {
-        // Word boundary check: previous character must not be alphanumeric or '_'
-        if i > 0
-            && chars
-                .get(i - 1)
-                .is_some_and(|&prev| prev.is_alphanumeric() || prev == '_')
-        {
-            i += 1;
-            continue;
-        }
-
-        // Check if any forbidden verb matches starting at index i
-        let mut matched_verb = None;
-        for &verb in FORBIDDEN_VERBS {
-            let v_chars: Vec<char> = verb.chars().collect();
-            let v_len = v_chars.len();
-            if i + v_len <= len {
-                let matches = chars.get(i..i + v_len).is_some_and(|sl| {
-                    sl.iter()
-                        .zip(v_chars.iter())
-                        .all(|(c1, c2)| c1.to_ascii_lowercase() == *c2)
-                });
-                if matches {
-                    // Check word boundary after verb: next character must not be alphanumeric or '_'
-                    if i + v_len < len
-                        && chars
-                            .get(i + v_len)
-                            .is_some_and(|&next| next.is_alphanumeric() || next == '_')
-                    {
-                        continue;
-                    }
-                    matched_verb = Some((verb, v_len));
-                    break;
-                }
-            }
-        }
-
-        if let Some((verb, v_len)) = matched_verb {
-            let mut j = i + v_len;
-            let mut has_colon = false;
-            if j < len && chars.get(j) == Some(&':') {
-                has_colon = true;
-                j += 1;
-            }
-
-            let mut whitespace_count = 0;
-            while j < len && chars.get(j).is_some_and(|c| c.is_whitespace()) {
-                whitespace_count += 1;
-                j += 1;
-            }
-
-            // Either a colon was present, whitespace was present, or an opening delimiter is following
-            let has_delimiter = j < len && chars.get(j).is_some_and(|&c| c == '(' || c == '[');
-            if has_colon || whitespace_count > 0 || has_delimiter {
-                if let Some((issue_id, next_pos)) = parse_issue_reference(&chars, j) {
-                    let snippet: String = chars
-                        .get(i..next_pos)
-                        .map(|sl| sl.iter().collect())
-                        .unwrap_or_default();
-                    let line_number = chars
-                        .get(..i)
-                        .map(|sl| sl.iter().filter(|&&c| c == '\n').count())
-                        .unwrap_or(0)
-                        + 1;
-
-                    violations.push(CommitViolation {
-                        verb: verb.to_string(),
-                        issue_id,
-                        offending_snippet: snippet,
-                        line_number,
-                    });
-
-                    // Check for chained issue references (e.g. ", #297", " and #299", ", and #302")
-                    let mut chain_pos = next_pos;
-                    while chain_pos < len {
-                        let mut p = chain_pos;
-                        while p < len && chars.get(p).is_some_and(|c| c.is_whitespace()) {
-                            p += 1;
-                        }
-                        if p >= len {
-                            break;
-                        }
-
-                        let mut has_separator = false;
-                        if chars.get(p) == Some(&',') {
-                            has_separator = true;
-                            p += 1;
-                            while p < len && chars.get(p).is_some_and(|c| c.is_whitespace()) {
-                                p += 1;
-                            }
-                        }
-
-                        // Check for optional "and"
-                        if p + 3 <= len
-                            && chars.get(p).is_some_and(|c| c.eq_ignore_ascii_case(&'a'))
-                            && chars
-                                .get(p + 1)
-                                .is_some_and(|c| c.eq_ignore_ascii_case(&'n'))
-                            && chars
-                                .get(p + 2)
-                                .is_some_and(|c| c.eq_ignore_ascii_case(&'d'))
-                            && (p + 3 == len
-                                || chars
-                                    .get(p + 3)
-                                    .is_some_and(|c| !c.is_alphanumeric() && *c != '_'))
-                        {
-                            has_separator = true;
-                            p += 3;
-                            while p < len && chars.get(p).is_some_and(|c| c.is_whitespace()) {
-                                p += 1;
-                            }
-                        }
-
-                        if has_separator {
-                            if let Some((chain_id, after_chain)) = parse_issue_reference(&chars, p)
-                            {
-                                let chain_snippet: String = chars
-                                    .get(chain_pos..after_chain)
-                                    .map(|sl| sl.iter().collect())
-                                    .unwrap_or_default();
-                                let chain_line = chars
-                                    .get(..chain_pos)
-                                    .map(|sl| sl.iter().filter(|&&c| c == '\n').count())
-                                    .unwrap_or(0)
-                                    + 1;
-                                violations.push(CommitViolation {
-                                    verb: verb.to_string(),
-                                    issue_id: chain_id,
-                                    offending_snippet: chain_snippet,
-                                    line_number: chain_line,
-                                });
-                                chain_pos = after_chain;
-                                continue;
-                            }
-                        }
-                        break;
-                    }
-
-                    i = chain_pos;
-                    continue;
-                }
-            }
-        }
-
-        i += 1;
-    }
-
-    violations
-}
-
-/// Executes deterministic fn `format_violation_error` within `crates/verify-baseline/src/commit_msg.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `format_violation_error` in `crates/verify-baseline/src/commit_msg.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `format_violation_error` (declaration #5) within `VERIFY-BASELINE-COMMIT-MSG`.
-///
-/// ## 3. Preconditions
-/// - `context: &str` must satisfy domain and type-safety constraints prior to invoking `format_violation_error`.
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `format_violation_error`.
-/// - `violations: &[CommitViolation]` must satisfy domain and type-safety constraints prior to invoking `format_violation_error`.
-///
-/// ## 4. Postconditions
-/// - Returns `()` from `format_violation_error` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(context)) bounded over input/member dimension of `format_violation_error`.
-/// - Space Complexity: O(N(context)) bounded auxiliary memory for `format_violation_error`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `format_violation_error` (`()`).
-/// - State: Maintains consistent state invariants across `format_violation_error` without partial mutation on error.
-/// - Action: Executes `format_violation_error` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `format_violation_error` (`VERIFY-BASELINE-COMMIT-MSG`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-FORMAT-VIOLATION-ERROR] | SysML v2: ActionDef(format_violation_error)
+/// Prints a formatted diagnostic error message for commit message non-closure violations.
+/// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-FORMAT-VIOLATION-ERROR]
 pub fn format_violation_error(context: &str, text: &str, violations: &[CommitViolation]) {
     eprintln!("ERROR: Commit message violates the Commit Message Non-Closure Invariant (.pipeline/constitution.md:266).");
     if !context.is_empty() {
-        eprintln!("Context: {}", context);
+        eprintln!("Context: {context}");
     }
     eprintln!("Forbidden auto-closing trigger detected.");
     for v in violations {
@@ -525,187 +58,79 @@ pub fn format_violation_error(context: &str, text: &str, violations: &[CommitVio
     eprintln!();
     eprintln!("Offending message:");
     for line in text.lines() {
-        eprintln!("  > {}", line);
+        eprintln!("  > {line}");
     }
 }
 
-/// Executes deterministic fn `check_text` within `crates/verify-baseline/src/commit_msg.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `check_text` in `crates/verify-baseline/src/commit_msg.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `check_text` (declaration #6) within `VERIFY-BASELINE-COMMIT-MSG`.
-///
-/// ## 3. Preconditions
-/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `check_text`.
-/// - `context: &str` must satisfy domain and type-safety constraints prior to invoking `check_text`.
-///
-/// ## 4. Postconditions
-/// - Returns `Result<(), ()>` from `check_text` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(text)) bounded over input/member dimension of `check_text`.
-/// - Space Complexity: O(N(text)) bounded auxiliary memory for `check_text`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `check_text` (`Result<(), ()>`).
-/// - State: Maintains consistent state invariants across `check_text` without partial mutation on error.
-/// - Action: Executes `check_text` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `check_text` (`VERIFY-BASELINE-COMMIT-MSG`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-CHECK-TEXT] | SysML v2: ActionDef(check_text)
-#[allow(clippy::result_unit_err)]
-pub fn check_text(text: &str, context: &str) -> Result<(), ()> {
+/// Checks raw commit message text for forbidden auto-closing keywords.
+/// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-CHECK-TEXT]
+pub fn check_text(text: &str, context: &str) -> Result<(), CommitMsgError> {
     let violations = scan_commit_message(text);
     if !violations.is_empty() {
         format_violation_error(context, text, &violations);
-        Err(())
+        Err(CommitMsgError)
     } else {
         Ok(())
     }
 }
 
-/// Executes deterministic fn `check_file` within `crates/verify-baseline/src/commit_msg.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `check_file` in `crates/verify-baseline/src/commit_msg.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `check_file` (declaration #7) within `VERIFY-BASELINE-COMMIT-MSG`.
-///
-/// ## 3. Preconditions
-/// - `path: &Path` must satisfy domain and type-safety constraints prior to invoking `check_file`.
-///
-/// ## 4. Postconditions
-/// - Returns `Result<(), ()>` from `check_file` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(path)) bounded over input/member dimension of `check_file`.
-/// - Space Complexity: O(N(path)) bounded auxiliary memory for `check_file`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `check_file` (`Result<(), ()>`).
-/// - State: Maintains consistent state invariants across `check_file` without partial mutation on error.
-/// - Action: Executes `check_file` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `check_file` (`VERIFY-BASELINE-COMMIT-MSG`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-CHECK-FILE] | SysML v2: ActionDef(check_file)
-#[allow(clippy::result_unit_err)]
-pub fn check_file(path: &Path) -> Result<(), ()> {
+/// Reads and checks a commit message file on disk.
+/// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-CHECK-FILE]
+pub fn check_file(path: &Path) -> Result<(), CommitMsgError> {
     if !path.is_file() {
         eprintln!(
             "Error: Commit message file does not exist: {}",
             path.display()
         );
-        return Err(());
+        return Err(CommitMsgError);
     }
     let content = match std::fs::read_to_string(path) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!(
-                "Error reading commit message file {}: {}",
-                path.display(),
-                e
-            );
-            return Err(());
+            eprintln!("Error reading commit message file {}: {e}", path.display());
+            return Err(CommitMsgError);
         }
     };
     check_text(&content, &format!("file {}", path.display()))
 }
 
-/// Executes deterministic fn `check_head` within `crates/verify-baseline/src/commit_msg.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `check_head` in `crates/verify-baseline/src/commit_msg.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `check_head` (declaration #8) within `VERIFY-BASELINE-COMMIT-MSG`.
-///
-/// ## 3. Preconditions
-/// - Invoked within a valid execution context for `check_head` in `VERIFY-BASELINE-COMMIT-MSG`.
-///
-/// ## 4. Postconditions
-/// - Returns `Result<(), ()>` from `check_head` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(K(check_head)) bounded over input/member dimension of `check_head`.
-/// - Space Complexity: O(K(check_head)) bounded auxiliary memory for `check_head`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `check_head` (`Result<(), ()>`).
-/// - State: Maintains consistent state invariants across `check_head` without partial mutation on error.
-/// - Action: Executes `check_head` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `check_head` (`VERIFY-BASELINE-COMMIT-MSG`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-CHECK-HEAD] | SysML v2: ActionDef(check_head)
-#[allow(clippy::result_unit_err)]
-pub fn check_head() -> Result<(), ()> {
-    let output = match Command::new("git")
-        .args(["log", "-1", "--pretty=%B"])
-        .output()
-    {
+/// Checks the latest `HEAD` commit message via `git log -1 --pretty=%B`.
+/// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-CHECK-HEAD]
+pub fn check_head() -> Result<(), CommitMsgError> {
+    let output = match Command::new("git").args(["log", "-1", "--pretty=%B"]).output() {
         Ok(out) => out,
         Err(e) => {
-            eprintln!("Error executing git log: {}", e);
-            return Err(());
+            eprintln!("Error executing git log: {e}");
+            return Err(CommitMsgError);
         }
     };
 
     if !output.status.success() {
         eprintln!("git log -1 command failed");
-        return Err(());
+        return Err(CommitMsgError);
     }
 
     let msg = String::from_utf8_lossy(&output.stdout);
     check_text(&msg, "HEAD commit")
 }
 
-/// Executes deterministic fn `check_range` within `crates/verify-baseline/src/commit_msg.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `check_range` in `crates/verify-baseline/src/commit_msg.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `check_range` (declaration #9) within `VERIFY-BASELINE-COMMIT-MSG`.
-///
-/// ## 3. Preconditions
-/// - `rev_range: &str` must satisfy domain and type-safety constraints prior to invoking `check_range`.
-///
-/// ## 4. Postconditions
-/// - Returns `Result<(), ()>` from `check_range` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(rev_range)) bounded over input/member dimension of `check_range`.
-/// - Space Complexity: O(N(rev_range)) bounded auxiliary memory for `check_range`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `check_range` (`Result<(), ()>`).
-/// - State: Maintains consistent state invariants across `check_range` without partial mutation on error.
-/// - Action: Executes `check_range` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `check_range` (`VERIFY-BASELINE-COMMIT-MSG`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-CHECK-RANGE] | SysML v2: ActionDef(check_range)
-#[allow(clippy::result_unit_err)]
-pub fn check_range(rev_range: &str) -> Result<(), ()> {
+/// Checks all commit messages in a revision range via `git log`.
+/// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-CHECK-RANGE]
+pub fn check_range(rev_range: &str) -> Result<(), CommitMsgError> {
     let output = match Command::new("git")
         .args(["log", "--format=---COMMIT_SEPARATOR---%n%H%n%B", rev_range])
         .output()
     {
         Ok(out) => out,
         Err(e) => {
-            eprintln!("Error executing git log for range {}: {}", rev_range, e);
-            return Err(());
+            eprintln!("Error executing git log for range {rev_range}: {e}");
+            return Err(CommitMsgError);
         }
     };
 
     if !output.status.success() {
-        eprintln!("git log failed for revision range: {}", rev_range);
-        return Err(());
+        eprintln!("git log failed for revision range: {rev_range}");
+        return Err(CommitMsgError);
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -716,56 +141,28 @@ pub fn check_range(rev_range: &str) -> Result<(), ()> {
         if trimmed.is_empty() {
             continue;
         }
-
         let mut lines = trimmed.lines();
         let commit_hash = lines.next().unwrap_or("").trim();
         let commit_msg: String = lines.collect::<Vec<_>>().join("\n");
-
         if commit_msg.trim().is_empty() {
             continue;
         }
-
-        let context = format!("commit {} in range {}", commit_hash, rev_range);
+        let context = format!("commit {commit_hash} in range {rev_range}");
         if check_text(&commit_msg, &context).is_err() {
             violations_count += 1;
         }
     }
 
     if violations_count > 0 {
-        Err(())
+        Err(CommitMsgError)
     } else {
         Ok(())
     }
 }
 
-/// Executes deterministic fn `run_check_commit_msg` within `crates/verify-baseline/src/commit_msg.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `run_check_commit_msg` in `crates/verify-baseline/src/commit_msg.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `run_check_commit_msg` (declaration #10) within `VERIFY-BASELINE-COMMIT-MSG`.
-///
-/// ## 3. Preconditions
-/// - `args: &CommitMsgArgs` must satisfy domain and type-safety constraints prior to invoking `run_check_commit_msg`.
-///
-/// ## 4. Postconditions
-/// - Returns `Result<(), ()>` from `run_check_commit_msg` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(args)) bounded over input/member dimension of `run_check_commit_msg`.
-/// - Space Complexity: O(N(args)) bounded auxiliary memory for `run_check_commit_msg`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `run_check_commit_msg` (`Result<(), ()>`).
-/// - State: Maintains consistent state invariants across `run_check_commit_msg` without partial mutation on error.
-/// - Action: Executes `run_check_commit_msg` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `run_check_commit_msg` (`VERIFY-BASELINE-COMMIT-MSG`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-RUN-CHECK-COMMIT-MSG] | SysML v2: ActionDef(run_check_commit_msg)
-#[allow(clippy::result_unit_err)]
-pub fn run_check_commit_msg(args: &CommitMsgArgs) -> Result<(), ()> {
+/// Dispatches `verify-baseline check-commit-msg` arguments to the appropriate check entrypoint.
+/// Realises: [REQ-VERIFY-BASELINE-COMMIT-MSG-RUN-CHECK-COMMIT-MSG]
+pub fn run_check_commit_msg(args: &CommitMsgArgs) -> Result<(), CommitMsgError> {
     if let Some(ref path) = args.msg_file {
         check_file(path)
     } else if let Some(ref range) = args.range {
@@ -783,261 +180,10 @@ pub fn run_check_commit_msg(args: &CommitMsgArgs) -> Result<(), ()> {
         }
     } else {
         eprintln!("Usage: verify-baseline check-commit-msg [--msg-file <file> | --range <rev-range> | --head | --check-text <text>]");
-        Err(())
+        Err(CommitMsgError)
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::Write;
-
-    #[test]
-    fn test_valid_neutral_commit_messages() {
-        let valid_messages = [
-            "feat(core): update model (refs #123)",
-            "fix(parser): syntax (#456)",
-            "docs: update handoff (#12)",
-            "feat(compiler): multi-mode FMECA extraction (#50, #51)",
-            "chore: routine housekeeping without issue reference",
-            "fix: correct edge condition in statechart parser",
-            "refactor: clean up signal matrix refs #99",
-            "feat(gui): implement telemetry panel (ref #10)",
-            "fix(validator): resolve tokenizer blind spot (refs #287)",
-            "prefix #50",
-            "unfixed #50",
-            "disclose #50",
-            "fixedly #50",
-            "resolves-issue #50",
-        ];
-
-        for msg in &valid_messages {
-            let violations = scan_commit_message(msg);
-            assert!(
-                violations.is_empty(),
-                "False positive violation on valid message '{}': {:?}",
-                msg,
-                violations
-            );
-        }
-    }
-
-    #[test]
-    fn test_forbidden_auto_closing_commit_messages() {
-        let forbidden_cases = [
-            ("fixes #123", "fixes", "123"),
-            ("closes #45", "closes", "45"),
-            ("resolved #789", "resolved", "789"),
-            ("Fix #1", "fix", "1"),
-            (
-                "feat(conops): operational authority (fixes #313)",
-                "fixes",
-                "313",
-            ),
-            ("docs: update handoff (resolved #12)", "resolved", "12"),
-            ("feat: add feature closes #99", "closes", "99"),
-            ("fix: #100", "fix", "100"),
-            ("fixes: #101", "fixes", "101"),
-            ("closes: #102", "closes", "102"),
-            ("resolves: #103", "resolves", "103"),
-            ("fixing #104", "fixing", "104"),
-            ("closing #105", "closing", "105"),
-            ("resolving #106", "resolving", "106"),
-        ];
-
-        for (text, expected_verb, expected_id) in &forbidden_cases {
-            let violations = scan_commit_message(text);
-            assert!(
-                !violations.is_empty(),
-                "Failed to detect forbidden auto-closing trigger in '{}'",
-                text
-            );
-            assert_eq!(
-                violations
-                    .first()
-                    .map(|v| v.verb.to_ascii_lowercase())
-                    .as_deref(),
-                Some(*expected_verb),
-                "Verb mismatch on '{}'",
-                text
-            );
-            assert_eq!(
-                violations.first().map(|v| v.issue_id.as_str()),
-                Some(*expected_id),
-                "Issue ID mismatch on '{}'",
-                text
-            );
-        }
-    }
-
-    #[test]
-    fn test_delimiters_and_parentheses_bypass() {
-        let cases = [
-            ("feat: something fixes (#123)", "fixes", "123"),
-            ("feat: something closes [#123]", "closes", "123"),
-            ("feat: something fix(#123)", "fix", "123"),
-            ("feat: something (fixes #123)", "fixes", "123"),
-            ("feat: something [closes #123]", "closes", "123"),
-        ];
-
-        for (text, expected_verb, expected_id) in &cases {
-            let violations = scan_commit_message(text);
-            assert!(
-                !violations.is_empty(),
-                "Failed to detect delimited trigger in '{}'",
-                text
-            );
-            assert_eq!(
-                violations
-                    .first()
-                    .map(|v| v.verb.to_ascii_lowercase())
-                    .as_deref(),
-                Some(*expected_verb)
-            );
-            assert_eq!(
-                violations.first().map(|v| v.issue_id.as_str()),
-                Some(*expected_id)
-            );
-        }
-    }
-
-    #[test]
-    fn test_whitespace_after_hash() {
-        let text = "feat: something closes # 123";
-        let violations = scan_commit_message(text);
-        assert!(!violations.is_empty());
-        assert_eq!(
-            violations
-                .first()
-                .map(|v| v.verb.to_ascii_lowercase())
-                .as_deref(),
-            Some("closes")
-        );
-        assert_eq!(violations.first().map(|v| v.issue_id.as_str()), Some("123"));
-    }
-
-    #[test]
-    fn test_github_shorthand_and_cross_repo() {
-        let cases = [
-            ("feat: something fixes gh-123", "fixes", "123"),
-            ("feat: something closes GH-456", "closes", "456"),
-            (
-                "feat: something closes gintatkinson/DEAP01-spec-core#789",
-                "closes",
-                "789",
-            ),
-            (
-                "feat: something resolves org.name/my-repo#999",
-                "resolves",
-                "999",
-            ),
-        ];
-
-        for (text, expected_verb, expected_id) in &cases {
-            let violations = scan_commit_message(text);
-            assert!(
-                !violations.is_empty(),
-                "Failed to detect shorthand/cross-repo in '{}'",
-                text
-            );
-            assert_eq!(
-                violations
-                    .first()
-                    .map(|v| v.verb.to_ascii_lowercase())
-                    .as_deref(),
-                Some(*expected_verb)
-            );
-            assert_eq!(
-                violations.first().map(|v| v.issue_id.as_str()),
-                Some(*expected_id)
-            );
-        }
-    }
-
-    #[test]
-    fn test_issue_keyword_token() {
-        let cases = [
-            ("feat: something fixes issue #123", "fixes", "123"),
-            ("feat: something resolves issues #456", "resolves", "456"),
-            ("feat: something closes (issue #789)", "closes", "789"),
-            ("feat: something fixes issue: #999", "fixes", "999"),
-        ];
-
-        for (text, expected_verb, expected_id) in &cases {
-            let violations = scan_commit_message(text);
-            assert!(
-                !violations.is_empty(),
-                "Failed to detect issue-keyword in '{}'",
-                text
-            );
-            assert_eq!(
-                violations
-                    .first()
-                    .map(|v| v.verb.to_ascii_lowercase())
-                    .as_deref(),
-                Some(*expected_verb)
-            );
-            assert_eq!(
-                violations.first().map(|v| v.issue_id.as_str()),
-                Some(*expected_id)
-            );
-        }
-    }
-
-    #[test]
-    fn test_chained_issue_references() {
-        let msg = "fix(conops): remediate compiler engine (fixes #296, #297, #299, #302)";
-        let violations = scan_commit_message(msg);
-        assert_eq!(violations.len(), 4, "Expected 4 violations in: {}", msg);
-        assert_eq!(violations.first().map(|v| v.issue_id.as_str()), Some("296"));
-        assert_eq!(violations.get(1).map(|v| v.issue_id.as_str()), Some("297"));
-        assert_eq!(violations.get(2).map(|v| v.issue_id.as_str()), Some("299"));
-        assert_eq!(violations.get(3).map(|v| v.issue_id.as_str()), Some("302"));
-
-        let msg_and = "feat: resolves #10 and #11";
-        let v_and = scan_commit_message(msg_and);
-        assert_eq!(v_and.len(), 2, "Expected 2 violations in: {}", msg_and);
-        assert_eq!(v_and.first().map(|v| v.issue_id.as_str()), Some("10"));
-        assert_eq!(v_and.get(1).map(|v| v.issue_id.as_str()), Some("11"));
-
-        let msg_oxford = "feat: closes #1, #2, and #3";
-        let v_oxford = scan_commit_message(msg_oxford);
-        assert_eq!(
-            v_oxford.len(),
-            3,
-            "Expected 3 violations in: {}",
-            msg_oxford
-        );
-        assert_eq!(v_oxford.first().map(|v| v.issue_id.as_str()), Some("1"));
-        assert_eq!(v_oxford.get(1).map(|v| v.issue_id.as_str()), Some("2"));
-        assert_eq!(v_oxford.get(2).map(|v| v.issue_id.as_str()), Some("3"));
-    }
-
-    #[test]
-    fn test_check_text_and_check_file() -> Result<(), Box<dyn std::error::Error>> {
-        assert!(check_text("feat(core): update pipeline (refs #10)", "test").is_ok());
-        assert!(check_text("feat(core): update pipeline (fixes #10)", "test").is_err());
-
-        let temp_dir = std::env::temp_dir();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
-        let pid = std::process::id();
-        let valid_path = temp_dir.join(format!("test_commit_valid_{}_{}.txt", pid, now));
-        let invalid_path = temp_dir.join(format!("test_commit_invalid_{}_{}.txt", pid, now));
-
-        let mut f1 = std::fs::File::create(&valid_path)?;
-        writeln!(f1, "feat(core): valid neutral citation (refs #42)")?;
-
-        let mut f2 = std::fs::File::create(&invalid_path)?;
-        writeln!(f2, "fix(core): forbidden auto-closing keyword (fixes #42)")?;
-
-        assert!(check_file(&valid_path).is_ok());
-        assert!(check_file(&invalid_path).is_err());
-
-        let _ = std::fs::remove_file(valid_path);
-        let _ = std::fs::remove_file(invalid_path);
-        Ok(())
-    }
-}
+#[path = "commit_msg_tests.rs"]
+mod tests;

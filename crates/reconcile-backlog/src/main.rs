@@ -40,32 +40,8 @@ use reconcile_backlog::{run_reconciliation, ReconcileOptions};
 use std::path::PathBuf;
 use std::process;
 
-/// Executes deterministic struct `Cli` within `crates/reconcile-backlog/src/main.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `Cli` in `crates/reconcile-backlog/src/main.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `Cli` across member set `[command: Option<Subcommands>, workspace: String, offline: bool, provider: String, dry_run: bool]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `Cli` members (`command: Option<Subcommands>, workspace: String, offline: bool, provider: String, dry_run: bool`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `Cli` representation for struct `Cli`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(5)) bounded over input/member dimension of `Cli`.
-/// - Space Complexity: O(M(5)) bounded auxiliary memory for `Cli`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `Cli` (`Cli`).
-/// - State: Maintains consistent state invariants across `Cli` without partial mutation on error.
-/// - Action: Executes `Cli` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `Cli` (`RECONCILE-BACKLOG-MAIN`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-RECONCILE-BACKLOG-MAIN-CLI] | SysML v2: PartDef(Cli)
+/// Command-line configuration for `reconcile-backlog`.
+/// Realises: [REQ-RECONCILE-BACKLOG-MAIN-CLI]
 #[derive(Debug)]
 struct Cli {
     command: Option<Subcommands>,
@@ -92,32 +68,8 @@ struct Cli {
     default_branch: Option<String>,
 }
 
-/// Executes deterministic enum `Subcommands` within `crates/reconcile-backlog/src/main.rs`.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for enum `Subcommands` in `crates/reconcile-backlog/src/main.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for enum `Subcommands` across member set `[CreateIssue]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `Subcommands` members (`CreateIssue`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `Subcommands` representation for enum `Subcommands`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(1)) bounded over input/member dimension of `Subcommands`.
-/// - Space Complexity: O(M(1)) bounded auxiliary memory for `Subcommands`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `Subcommands` (`Subcommands`).
-/// - State: Maintains consistent state invariants across `Subcommands` without partial mutation on error.
-/// - Action: Executes `Subcommands` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `Subcommands` (`RECONCILE-BACKLOG-MAIN`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-RECONCILE-BACKLOG-MAIN-SUBCOMMANDS] | SysML v2: PartDef(Subcommands)
+/// Subcommands supported by `reconcile-backlog`.
+/// Realises: [REQ-RECONCILE-BACKLOG-MAIN-SUBCOMMANDS]
 #[derive(Debug)]
 enum Subcommands {
     /// Create or reopen an issue idempotently with precondition checks
@@ -125,96 +77,31 @@ enum Subcommands {
 }
 
 impl Cli {
-    /// Parses process command-line arguments into a validated `Cli` configuration using explicit `clap::Command` builders.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `Cli::parse` in `crates/reconcile-backlog/src/main.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Constructs the CLI grammar without `clap_derive` macro lint-override emissions (`E0453`).
-    ///
-    /// ## 3. Preconditions
-    /// - Process environment supplies valid OS argument tokens via `std::env::args_os`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns a populated `Cli` instance with deterministic `command` and top-level reconciliation flags.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(A)$ where $A$ is the number of CLI argument tokens.
-    /// - Space Complexity: $O(A)$ for parsed `ArgMatches` and owned `Cli` fields.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Invalid flags are intercepted by `clap::Command::get_matches`, emitting usage diagnostics and exiting non-zero.
-    ///
-    /// ## 7. Realization & Traceability
+    /// Parses process command-line arguments into a validated `Cli` configuration.
     /// Realises: [REQ-RECONCILE-BACKLOG-MAIN-CLI]
     fn parse() -> Self {
+        let create_cmd = Command::new("create-issue")
+            .visible_alias("create_issue")
+            .about("Create or reopen an issue idempotently with precondition checks")
+            .arg(Arg::new("body_file").long("body-file").action(ArgAction::Set))
+            .arg(Arg::new("label").long("label").action(ArgAction::Set))
+            .arg(Arg::new("title").long("title").action(ArgAction::Set))
+            .arg(Arg::new("repo").long("repo").action(ArgAction::Set))
+            .arg(Arg::new("reopen_with_analysis").long("reopen-with-analysis").action(ArgAction::Set))
+            .arg(Arg::new("provider").long("provider").default_value("github").action(ArgAction::Set))
+            .arg(Arg::new("positional").value_name("ARGS").num_args(0..).action(ArgAction::Append));
+
         let mut matches = Command::new("reconcile-backlog")
             .about("Pure Rust Backlog Reconciler for DEAP MBSE Framework")
             .subcommand_precedence_over_arg(true)
-            .arg(
-                Arg::new("workspace")
-                    .long("workspace")
-                    .default_value(".")
-                    .action(ArgAction::Set),
-            )
-            .arg(
-                Arg::new("offline")
-                    .long("offline")
-                    .action(ArgAction::SetTrue),
-            )
-            .arg(
-                Arg::new("provider")
-                    .long("provider")
-                    .default_value("github")
-                    .action(ArgAction::Set),
-            )
-            .arg(
-                Arg::new("dry_run")
-                    .long("dry-run")
-                    .action(ArgAction::SetTrue),
-            )
-            .arg(
-                Arg::new("sync_bodies")
-                    .long("sync-bodies")
-                    .action(ArgAction::SetTrue),
-            )
+            .arg(Arg::new("workspace").long("workspace").default_value(".").action(ArgAction::Set))
+            .arg(Arg::new("offline").long("offline").action(ArgAction::SetTrue))
+            .arg(Arg::new("provider").long("provider").default_value("github").action(ArgAction::Set))
+            .arg(Arg::new("dry_run").long("dry-run").action(ArgAction::SetTrue))
+            .arg(Arg::new("sync_bodies").long("sync-bodies").action(ArgAction::SetTrue))
             .arg(Arg::new("repo").long("repo").action(ArgAction::Set))
-            .arg(
-                Arg::new("default_branch")
-                    .long("default-branch")
-                    .action(ArgAction::Set),
-            )
-            .subcommand(
-                Command::new("create-issue")
-                    .visible_alias("create_issue")
-                    .about("Create or reopen an issue idempotently with precondition checks")
-                    .arg(
-                        Arg::new("body_file")
-                            .long("body-file")
-                            .action(ArgAction::Set),
-                    )
-                    .arg(Arg::new("label").long("label").action(ArgAction::Set))
-                    .arg(Arg::new("title").long("title").action(ArgAction::Set))
-                    .arg(Arg::new("repo").long("repo").action(ArgAction::Set))
-                    .arg(
-                        Arg::new("reopen_with_analysis")
-                            .long("reopen-with-analysis")
-                            .action(ArgAction::Set),
-                    )
-                    .arg(
-                        Arg::new("provider")
-                            .long("provider")
-                            .default_value("github")
-                            .action(ArgAction::Set),
-                    )
-                    .arg(
-                        Arg::new("positional")
-                            .value_name("ARGS")
-                            .num_args(0..)
-                            .action(ArgAction::Append),
-                    ),
-            )
+            .arg(Arg::new("default_branch").long("default-branch").action(ArgAction::Set))
+            .subcommand(create_cmd)
             .get_matches();
 
         let command = match matches.remove_subcommand() {
@@ -225,13 +112,8 @@ impl Cli {
                     title: sub_m.remove_one::<String>("title"),
                     repo: sub_m.remove_one::<String>("repo"),
                     reopen_with_analysis: sub_m.remove_one::<String>("reopen_with_analysis"),
-                    provider: sub_m
-                        .remove_one::<String>("provider")
-                        .unwrap_or_else(|| "github".to_string()),
-                    positional: sub_m
-                        .remove_many::<String>("positional")
-                        .map(|v| v.collect())
-                        .unwrap_or_default(),
+                    provider: sub_m.remove_one::<String>("provider").unwrap_or_else(|| "github".to_string()),
+                    positional: sub_m.remove_many::<String>("positional").map(|v| v.collect()).unwrap_or_default(),
                 }))
             }
             _ => None,
@@ -245,13 +127,9 @@ impl Cli {
 
         Self {
             command,
-            workspace: matches
-                .remove_one::<String>("workspace")
-                .unwrap_or_else(|| ".".to_string()),
+            workspace: matches.remove_one::<String>("workspace").unwrap_or_else(|| ".".to_string()),
             offline: matches.get_flag("offline"),
-            provider: matches
-                .remove_one::<String>("provider")
-                .unwrap_or_else(|| "github".to_string()),
+            provider: matches.remove_one::<String>("provider").unwrap_or_else(|| "github".to_string()),
             dry_run: matches.get_flag("dry_run"),
             sync_bodies,
             repo: matches.remove_one::<String>("repo"),
@@ -293,94 +171,62 @@ impl Cli {
 fn main() {
     let cli = Cli::parse();
 
-    if let Some(cmd) = cli.command {
-        match cmd {
-            Subcommands::CreateIssue(args) => {
-                if let Err(err) = execute_create_issue(&args) {
-                    eprintln!("ERROR: {}", err);
-                    process::exit(1);
-                }
-            }
+    if let Some(Subcommands::CreateIssue(args)) = cli.command {
+        if let Err(err) = execute_create_issue(&args) {
+            eprintln!("ERROR: {}", err);
+            process::exit(1);
         }
+        return;
+    }
+
+    let workspace_path = PathBuf::from(&cli.workspace);
+    let canonical_workspace = match workspace_path.canonicalize() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Error: Cannot resolve workspace path '{}': {}", cli.workspace, e);
+            process::exit(1);
+        }
+    };
+
+    let options = ReconcileOptions {
+        workspace_root: canonical_workspace,
+        offline: cli.offline,
+        dry_run: cli.dry_run,
+        provider: cli.provider.clone(),
+        sync_bodies: cli.sync_bodies,
+        repo: cli.repo.clone(),
+        default_branch: cli.default_branch.clone(),
+    };
+
+    println!("Starting backlog reconciliation for workspace: {}", options.workspace_root.display());
+    println!("Mode: {}", if options.offline { "OFFLINE" } else { "ONLINE (Provider: GitHub)" });
+    if options.dry_run {
+        println!("Dry-run enabled: No changes will be written to disk or tracker.");
+    }
+
+    let result = if options.offline {
+        let tracker = OfflineTracker::new();
+        run_reconciliation(&tracker, &options)
     } else {
-        let workspace_path = PathBuf::from(&cli.workspace);
+        let tracker = GitHubTracker::new();
+        run_reconciliation(&tracker, &options)
+    };
 
-        let canonical_workspace = match workspace_path.canonicalize() {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!(
-                    "Error: Cannot resolve workspace path '{}': {}",
-                    cli.workspace, e
-                );
-                process::exit(1);
+    match result {
+        Ok(summary) => {
+            println!("Reconciliation completed successfully:");
+            println!("  - Total specifications scanned: {}", summary.total_specs_scanned);
+            println!("  - Frontmatter issue IDs updated: {}", summary.frontmatters_updated);
+            println!("  - Checklist items reconciled:   {}", summary.checklists_updated);
+            println!("  - Placeholder blocks purged:     {}", summary.placeholders_purged);
+            if !options.offline {
+                println!("  - Remote issues synced:          {}", summary.remote_issues_synced);
             }
-        };
-
-        let options = ReconcileOptions {
-            workspace_root: canonical_workspace,
-            offline: cli.offline,
-            dry_run: cli.dry_run,
-            provider: cli.provider.clone(),
-            sync_bodies: cli.sync_bodies,
-            repo: cli.repo.clone(),
-            default_branch: cli.default_branch.clone(),
-        };
-
-        println!(
-            "Starting backlog reconciliation for workspace: {}",
-            options.workspace_root.display()
-        );
-        println!(
-            "Mode: {}",
-            if options.offline {
-                "OFFLINE"
-            } else {
-                "ONLINE (Provider: GitHub)"
-            }
-        );
-        if options.dry_run {
-            println!("Dry-run enabled: No changes will be written to disk or tracker.");
+            process::exit(0);
         }
-
-        let result = if options.offline {
-            let tracker = OfflineTracker::new();
-            run_reconciliation(&tracker, &options)
-        } else {
-            let tracker = GitHubTracker::new();
-            run_reconciliation(&tracker, &options)
-        };
-
-        match result {
-            Ok(summary) => {
-                println!("Reconciliation completed successfully:");
-                println!(
-                    "  - Total specifications scanned: {}",
-                    summary.total_specs_scanned
-                );
-                println!(
-                    "  - Frontmatter issue IDs updated: {}",
-                    summary.frontmatters_updated
-                );
-                println!(
-                    "  - Checklist items reconciled:   {}",
-                    summary.checklists_updated
-                );
-                println!(
-                    "  - Placeholder blocks purged:     {}",
-                    summary.placeholders_purged
-                );
-                if !options.offline {
-                    println!(
-                        "  - Remote issues synced:          {}",
-                        summary.remote_issues_synced
-                    );
-                }
-                process::exit(0);
-            }
-            Err(err) => {
-                eprintln!("ERROR: Backlog reconciliation failed: {}", err);
-                process::exit(1);
-            }
+        Err(err) => {
+            eprintln!("ERROR: Backlog reconciliation failed: {}", err);
+            process::exit(1);
         }
     }
 }

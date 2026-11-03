@@ -1,203 +1,40 @@
-//! Use Case specification (`docs/use-cases/UC-*.md`) synthesis from indexed SysML v2 `UseCaseDef` nodes.
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
+//! # Use Case Specification Markdown Synthesis
 //!
-//! Safety & Traceability: Realises: [REQ-SYNC-FORWARD-USE-CASE-EMITTER]
-//! Contract: Projects each allocated `UseCaseMeta` into a canonical UML Use Case Markdown specification with Check 13B compliant `graph TD` diagrams, actors, preconditions, triggers, main success scenario steps, alternate/exception flows, postconditions, and realization matrices.
-//! Bounds & Faults: Enforces checked UTF-8 slicing (`.get`, `.first`), saturating step numbering (`saturating_add`), and provenance-safe fallback prose free of `ENGINEERING_PARAMETER_TERMS` with zero panics.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Realises: [REQ-0604], [REQ-SYNC-FORWARD-USE-CASE-EMITTER]
+//! Projects each allocated `UseCaseMeta` into a canonical `docs/use-cases/UC-*.md` specification
+//! with Check 13B compliant `graph TD` diagrams, actors, preconditions, triggers, main success
+//! scenario steps, alternate/exception flows, postconditions, and realization matrices.
+//!
+//! ## 2. Preconditions, Postconditions & Mathematical Invariants
+//! - **Preconditions**: `index.uc_metas` contains allocated Use Case metadata entries.
+//! - **Postconditions**: Populates `generated_files` with `use-cases/UC-XX-*.md` entries.
+//! - **Invariants**: Every Use Case links to its subject Feature and (when present) paired User Story.
+//!
+//! ## 3. Failure Modes, Degraded Operation & Recovery
+//! - Use Cases lacking explicit alternate flows or postconditions synthesize deterministic fallback clauses.
+//!
+//! ## 4. Concurrency, Memory & Resource Bounds
+//! - Single-threaded `O(U * S)` iteration over allocated Use Cases and User Stories.
+//!
+//! ## 5. Dependencies & Integration Contracts
+//! - Consumes `use_case_renderer` and `use_case_diagrams`; invoked by `forward::sync_forward_to_map`.
+//!
+//! ## 6. Verification & Acceptance Criteria
+//! - Verified by Use Case emission tests in `sync/forward/tests*.rs`.
+//!
+//! ## 7. Realization & Traceability
+//! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-USE-CASE-EMITTER]
 
 use super::*;
 
-/// Consolidated borrowed context for resolving UML Use Case behavioral sections for a single `UseCaseMeta`.
-/// Realises: [REQ-SYNC-FORWARD-USE-CASE-EMITTER]
-struct UseCaseClauseCtx<'a> {
-    uc_m: &'a UseCaseMeta<'a>,
-    parsed_doc: &'a ParsedUseCaseDoc,
-    primary_actor: &'a str,
-    clean_display: &'a str,
-    objective_opt: Option<&'a str>,
-}
-
-/// Resolves `(primary_actor, actors_markdown)` for `uc_m` from `parsed_doc`, AST actors, package interaction lifelines, or `"Operator"`.
-/// Realises: [REQ-SYNC-FORWARD-USE-CASE-EMITTER]
-fn resolve_use_case_actors(
-    uc_m: &UseCaseMeta<'_>,
-    parsed_doc: &ParsedUseCaseDoc,
-) -> (String, String) {
-    let cleaned_ast_actors: Vec<String> = uc_m
-        .uc
-        .actors
-        .iter()
-        .map(|a| {
-            a.trim()
-                .trim_matches(|c: char| matches!(c, '`' | '"' | '\'' | '[' | ']'))
-                .trim()
-                .to_string()
-        })
-        .filter(|a| !a.is_empty())
-        .collect();
-    let cleaned_singular_actor: Option<String> = uc_m
-        .uc
-        .actor
-        .as_deref()
-        .map(|a| {
-            a.trim()
-                .trim_matches(|c: char| matches!(c, '`' | '"' | '\'' | '[' | ']'))
-                .trim()
-                .to_string()
-        })
-        .filter(|a| !a.is_empty());
-
-    let actors: Vec<String> = if !parsed_doc.actors.is_empty() {
-        parsed_doc.actors.clone()
-    } else if !cleaned_ast_actors.is_empty() {
-        cleaned_ast_actors
-    } else if let Some(a) = cleaned_singular_actor {
-        vec![a]
-    } else if let Some(pkg_init_actor) = extract_package_interaction_initiator_actor(uc_m.pkg) {
-        vec![pkg_init_actor]
-    } else {
-        vec!["Operator".to_string()]
-    };
-
-    let primary_actor = actors
-        .first()
-        .cloned()
-        .unwrap_or_else(|| "Operator".to_string());
-    let actors_markdown = actors
-        .iter()
-        .map(|a| format!("- `{a}`"))
-        .collect::<Vec<_>>()
-        .join("\n");
-    (primary_actor, actors_markdown)
-}
-
-/// Resolves `(preconditions, trigger)` Markdown blocks for `ctx`.
-/// Realises: [REQ-SYNC-FORWARD-USE-CASE-EMITTER]
-fn resolve_use_case_preconditions_and_trigger(ctx: &UseCaseClauseCtx<'_>) -> (String, String) {
-    let subject = &ctx.uc_m.engine_name;
-    let primary_actor = ctx.primary_actor;
-    let clean_display = ctx.clean_display;
-
-    let preconditions = if !ctx.parsed_doc.preconditions.is_empty() {
-        ctx.parsed_doc
-            .preconditions
-            .iter()
-            .map(|p| format!("- {}", p))
-            .collect::<Vec<_>>()
-            .join("\n")
-    } else if !ctx.uc_m.uc.preconditions.is_empty() {
-        ctx.uc_m
-            .uc
-            .preconditions
-            .iter()
-            .map(|p| format!("- {}", p))
-            .collect::<Vec<_>>()
-            .join("\n")
-    } else if let Some(obj) = ctx.objective_opt {
-        format!(
-            "- `{subject}` is initialized and ready to enforce `{obj}`.\n\
-             - `{primary_actor}` holds authorized operational access to `{subject}`."
-        )
-    } else {
-        format!(
-            "- `{subject}` is initialized in its nominal operational state for `{clean_display}`.\n\
-             - `{primary_actor}` holds authorized operational access to `{subject}`."
-        )
-    };
-
-    let trigger = if !ctx.parsed_doc.trigger.is_empty() {
-        format!("- {}", ctx.parsed_doc.trigger)
-    } else if let Some(obj) = ctx.objective_opt {
-        format!("- {obj}")
-    } else {
-        format!("- `{primary_actor}` initiates `{clean_display}` request on `{subject}`.")
-    };
-
-    (preconditions, trigger)
-}
-
-/// Resolves numbered `## 4. Main Success Scenario` steps for `ctx`.
-/// Realises: [REQ-SYNC-FORWARD-USE-CASE-EMITTER]
-fn resolve_use_case_scenario_steps(ctx: &UseCaseClauseCtx<'_>) -> Vec<String> {
-    let subject = &ctx.uc_m.engine_name;
-    let primary_actor = ctx.primary_actor;
-    let clean_display = ctx.clean_display;
-
-    if !ctx.parsed_doc.main_scenario.is_empty() {
-        ctx.parsed_doc.main_scenario.clone()
-    } else if !ctx.uc_m.uc.steps.is_empty() {
-        ctx.uc_m
-            .uc
-            .steps
-            .iter()
-            .enumerate()
-            .map(|(i, s)| {
-                let trimmed = s.trim().trim_matches('"');
-                let d_len = trimmed.chars().take_while(|c| c.is_ascii_digit()).count();
-                let has_num =
-                    d_len > 0 && trimmed.get(d_len..).is_some_and(|r| r.starts_with(". "));
-                if has_num {
-                    trimmed.to_string()
-                } else {
-                    format!("{}. {}", i.saturating_add(1), trimmed)
-                }
-            })
-            .collect()
-    } else if let Some(obj) = ctx.objective_opt {
-        if !ctx.parsed_doc.alternate_flows.is_empty() {
-            let diag_summary = ctx.parsed_doc.alternate_flows.join(", ");
-            vec![
-                format!(
-                    "1. `{primary_actor}` invokes `{clean_display}` on `{subject}` targeting objective `{obj}`."
-                ),
-                format!(
-                    "2. `{subject}` verifies boundary preconditions and evaluates `{obj}` invariants (guarding `{diag_summary}`)."
-                ),
-                format!(
-                    "3. `{subject}` records verified `{clean_display}` outcome and returns status to `{primary_actor}`."
-                ),
-            ]
-        } else {
-            vec![
-                format!(
-                    "1. `{primary_actor}` invokes `{clean_display}` on `{subject}` targeting objective `{obj}`."
-                ),
-                format!(
-                    "2. `{subject}` verifies boundary preconditions and executes `{obj}`."
-                ),
-                format!(
-                    "3. `{subject}` confirms declared postconditions for `{clean_display}` and returns status to `{primary_actor}`."
-                ),
-            ]
-        }
-    } else if !ctx.parsed_doc.alternate_flows.is_empty() {
-        let diag_summary = ctx.parsed_doc.alternate_flows.join(", ");
-        vec![
-            format!("1. `{primary_actor}` invokes `{clean_display}` on `{subject}`."),
-            format!(
-                "2. `{subject}` evaluates declared preconditions and invariant guards for `{clean_display}` (`{diag_summary}`)."
-            ),
-            format!(
-                "3. `{subject}` completes `{clean_display}` state transition and returns verified status to `{primary_actor}`."
-            ),
-        ]
-    } else {
-        vec![
-            format!("1. `{primary_actor}` invokes `{clean_display}` request on `{subject}`."),
-            format!(
-                "2. `{subject}` verifies declared preconditions and structural boundary guards for `{clean_display}`."
-            ),
-            format!(
-                "3. `{subject}` executes `{clean_display}` behavioral transformation while preserving subsystem invariants."
-            ),
-            format!(
-                "4. `{subject}` confirms postcondition satisfaction and returns completion status to `{primary_actor}`."
-            ),
-        ]
-    }
-}
-
 /// Resolves `(alternate_flows, postconditions)` Markdown blocks for `ctx`.
-/// Realises: [REQ-SYNC-FORWARD-USE-CASE-EMITTER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-USE-CASE-EMITTER]
 fn resolve_use_case_alternates_and_postconditions(ctx: &UseCaseClauseCtx<'_>) -> (String, String) {
     let subject = &ctx.uc_m.engine_name;
     let primary_actor = ctx.primary_actor;
@@ -268,8 +105,48 @@ fn resolve_use_case_alternates_and_postconditions(ctx: &UseCaseClauseCtx<'_>) ->
     (alternate_flows, postconditions)
 }
 
+/// Resolves `(spec_source, source_refs)` Markdown links for a Use Case based on modular vs single-file schema layout.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-USE-CASE-EMITTER]
+fn resolve_use_case_sources(has_modular_schema: bool, subsys_dir: &str) -> (String, String) {
+    let spec_source = if !has_modular_schema {
+        "[schema/model.sysml](../../schema/model.sysml)".to_string()
+    } else if subsys_dir == "conops" {
+        "[schema/conops/activities.sysml](../../schema/conops/activities.sysml)".to_string()
+    } else {
+        format!(
+            "[schema/subsystems/{subsys_dir}/behavior.sysml](../../schema/subsystems/{subsys_dir}/behavior.sysml)"
+        )
+    };
+
+    let source_refs = if !has_modular_schema {
+        r#"- System Architecture Model: `schema/model.sysml`
+- Normative Systems Engineering Standard: ISO/IEC/IEEE 29148:2018 §6.4.2 Concept of Operations
+
+Operational use case realization and traceability links derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 29148."#
+            .to_string()
+    } else if subsys_dir == "conops" {
+        r#"- ConOps Operational Activities: `schema/conops/activities.sysml`
+- System Architecture Model: `schema/model.sysml`
+- Normative Systems Engineering Standard: ISO/IEC/IEEE 29148:2018 §6.4.2 Concept of Operations
+
+Operational use case realization and traceability links derive from `schema/conops/activities.sysml` pursuant to ISO/IEC/IEEE 29148."#
+            .to_string()
+    } else {
+        format!(
+            r#"- Subsystem Behavior Specification: `schema/subsystems/{subsys_dir}/behavior.sysml`
+- ConOps Operational Activities: `schema/conops/activities.sysml`
+- System Architecture Model: `schema/model.sysml`
+- Normative Systems Engineering Standard: ISO/IEC/IEEE 29148:2018 §6.4.2 Concept of Operations
+
+Operational use case realization and traceability links derive from `schema/subsystems/{subsys_dir}/behavior.sysml` pursuant to ISO/IEC/IEEE 29148."#
+        )
+    };
+
+    (spec_source, source_refs)
+}
+
 /// Builds `(realization_matrix_table, spec_source, source_refs)` for `uc_m`.
-/// Realises: [REQ-SYNC-FORWARD-USE-CASE-EMITTER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-USE-CASE-EMITTER]
 fn build_use_case_realization_and_sources(
     uc_m: &UseCaseMeta<'_>,
     index: &ForwardSyncIndex<'_>,
@@ -320,141 +197,95 @@ fn build_use_case_realization_and_sources(
 {}{}",
         us_row, feat_row
     );
-
-    let subsys_dir = &uc_m.subsys_dir;
-    let spec_source = if !index.has_modular_schema {
-        "[schema/model.sysml](../../schema/model.sysml)".to_string()
-    } else if subsys_dir == "conops" {
-        "[schema/conops/activities.sysml](../../schema/conops/activities.sysml)".to_string()
-    } else {
-        format!(
-            "[schema/subsystems/{subsys_dir}/behavior.sysml](../../schema/subsystems/{subsys_dir}/behavior.sysml)"
-        )
-    };
-
-    let source_refs = if !index.has_modular_schema {
-        r#"- System Architecture Model: `schema/model.sysml`
-- Normative Systems Engineering Standard: ISO/IEC/IEEE 29148:2018 §6.4.2 Concept of Operations
-
-Operational use case realization and traceability links derive from `schema/model.sysml` pursuant to ISO/IEC/IEEE 29148."#
-            .to_string()
-    } else if subsys_dir == "conops" {
-        r#"- ConOps Operational Activities: `schema/conops/activities.sysml`
-- System Architecture Model: `schema/model.sysml`
-- Normative Systems Engineering Standard: ISO/IEC/IEEE 29148:2018 §6.4.2 Concept of Operations
-
-Operational use case realization and traceability links derive from `schema/conops/activities.sysml` pursuant to ISO/IEC/IEEE 29148."#
-            .to_string()
-    } else {
-        format!(
-            r#"- Subsystem Behavior Specification: `schema/subsystems/{subsys_dir}/behavior.sysml`
-- ConOps Operational Activities: `schema/conops/activities.sysml`
-- System Architecture Model: `schema/model.sysml`
-- Normative Systems Engineering Standard: ISO/IEC/IEEE 29148:2018 §6.4.2 Concept of Operations
-
-Operational use case realization and traceability links derive from `schema/subsystems/{subsys_dir}/behavior.sysml` pursuant to ISO/IEC/IEEE 29148."#
-        )
-    };
-
+    let (spec_source, source_refs) =
+        resolve_use_case_sources(index.has_modular_schema, &uc_m.subsys_dir);
     (realization_matrix_table, spec_source, source_refs)
 }
 
+/// Renders a single `UC-XX-*.md` specification document and returns `(rel_path, content)`.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-USE-CASE-EMITTER]
+fn render_single_use_case_spec(
+    uc_m: &UseCaseMeta<'_>,
+    index: &ForwardSyncIndex<'_>,
+) -> (String, String) {
+    let u_num = uc_m.u_num;
+    let clean_name = strip_use_case_prefix(&uc_m.uc.name);
+    let clean_display = to_display_name(clean_name);
+    let uc_slug = sanitize_id(clean_name);
+    let rel_path = format!("use-cases/UC-{:02}-{}.md", u_num, uc_slug);
+    let _uc_date = resolve_date(&index.target_out_dir, &rel_path, index.today_iso);
+    let uc_issue_id =
+        format_issue_id_cell(resolve_existing_issue_id(&index.target_out_dir, &rel_path));
+    let title = format!("Use Case {:02}: {}", u_num, clean_display);
+
+    let parsed_doc = parse_use_case_doc(uc_m.uc.doc.as_deref());
+    let objective_opt = uc_m
+        .uc
+        .objective
+        .as_deref()
+        .map(|o| o.trim().trim_matches('"').trim())
+        .filter(|o| !o.is_empty());
+
+    let (primary_actor, actors_markdown) = resolve_use_case_actors(uc_m, &parsed_doc);
+    let clause_ctx = UseCaseClauseCtx {
+        uc_m,
+        parsed_doc: &parsed_doc,
+        primary_actor: &primary_actor,
+        clean_display: &clean_display,
+        objective_opt,
+    };
+
+    let (preconditions, trigger) = resolve_use_case_preconditions_and_trigger(&clause_ctx);
+    let resolved_scenario_steps = resolve_use_case_scenario_steps(&clause_ctx);
+    let main_scenario = resolved_scenario_steps.join("\n");
+    let (alternate_flows, postconditions) =
+        resolve_use_case_alternates_and_postconditions(&clause_ctx);
+    let (realization_matrix_table, spec_source, source_refs) =
+        build_use_case_realization_and_sources(uc_m, index);
+
+    let subject = &uc_m.engine_name;
+    let uc_diagram = generate_use_case_diagram(
+        &primary_actor,
+        subject,
+        &clean_display,
+        &resolved_scenario_steps,
+    );
+
+    let content = format!(
+        "| Attribute | Specification Detail |\n\
+| :--- | :--- |\n\
+| **Issue ID** | {uc_issue_id} |\n\
+| **Title** | {title} |\n\
+| **Type** | use-case |\n\
+| **Primary Actor** | {primary_actor} |\n\
+| **Scope** | {subject} |\n\
+| **Level** | User Goal |\n\
+| **Generation Mode** | subagent |\n\
+| **Specification Source** | {spec_source} |\n\n\
+# {title}\n\n\
+## UML Diagrams\n\n```mermaid\n{uc_diagram}\n```\n\n\
+## 1. Actors\n{actors_markdown}\n\n\
+## 2. Preconditions\n{preconditions}\n\n\
+## 3. Trigger\n{trigger}\n\n\
+## 4. Main Success Scenario\n{main_scenario}\n\n\
+## 5. Alternate and Exception Flows\n{alternate_flows}\n\n\
+## 6. Postconditions\n{postconditions}\n\n\
+## 8. Realization Matrix\n{realization_matrix_table}\
+## Source References\n\
+Use case operational flows and lifecycle activity references:\n\
+{source_refs}\n"
+    );
+    (rel_path, content)
+}
+
 /// Synthesizes all `use-cases/UC-XX-*.md` specifications from `index.uc_metas` into `generated_files`.
-/// Realises: [REQ-SYNC-FORWARD-USE-CASE-EMITTER]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-USE-CASE-EMITTER]
 pub(crate) fn emit_use_case_specs(
     index: &ForwardSyncIndex<'_>,
     generated_files: &mut BTreeMap<String, String>,
 ) {
     for uc_m in &index.uc_metas {
-        let u_num = uc_m.u_num;
-        let clean_name = strip_use_case_prefix(&uc_m.uc.name);
-        let clean_display = to_display_name(clean_name);
-        let uc_slug = sanitize_id(clean_name);
-        let rel_path = format!("use-cases/UC-{:02}-{}.md", u_num, uc_slug);
-        let _uc_date = resolve_date(&index.target_out_dir, &rel_path, index.today_iso);
-        let uc_issue_id =
-            format_issue_id_cell(resolve_existing_issue_id(&index.target_out_dir, &rel_path));
-        let title = format!("Use Case {:02}: {}", u_num, clean_display);
-
-        let parsed_doc = parse_use_case_doc(uc_m.uc.doc.as_deref());
-        let objective_opt = uc_m
-            .uc
-            .objective
-            .as_deref()
-            .map(|o| o.trim().trim_matches('"').trim())
-            .filter(|o| !o.is_empty());
-
-        let (primary_actor, actors_markdown) = resolve_use_case_actors(uc_m, &parsed_doc);
-        let clause_ctx = UseCaseClauseCtx {
-            uc_m,
-            parsed_doc: &parsed_doc,
-            primary_actor: &primary_actor,
-            clean_display: &clean_display,
-            objective_opt,
-        };
-
-        let (preconditions, trigger) = resolve_use_case_preconditions_and_trigger(&clause_ctx);
-        let resolved_scenario_steps = resolve_use_case_scenario_steps(&clause_ctx);
-        let main_scenario = resolved_scenario_steps.join("\n");
-        let (alternate_flows, postconditions) =
-            resolve_use_case_alternates_and_postconditions(&clause_ctx);
-        let (realization_matrix_table, spec_source, source_refs) =
-            build_use_case_realization_and_sources(uc_m, index);
-
-        let subject = &uc_m.engine_name;
-        let uc_diagram = generate_use_case_diagram(
-            &primary_actor,
-            subject,
-            &clean_display,
-            &resolved_scenario_steps,
-        );
-
-        let content = format!(
-            r#"| Attribute | Specification Detail |
-| :--- | :--- |
-| **Issue ID** | {uc_issue_id} |
-| **Title** | {title} |
-| **Type** | use-case |
-| **Primary Actor** | {primary_actor} |
-| **Scope** | {subject} |
-| **Level** | User Goal |
-| **Generation Mode** | subagent |
-| **Specification Source** | {spec_source} |
-
-# {title}
-
-## UML Diagrams
-
-```mermaid
-{uc_diagram}
-```
-
-## 1. Actors
-{actors_markdown}
-
-## 2. Preconditions
-{preconditions}
-
-## 3. Trigger
-{trigger}
-
-## 4. Main Success Scenario
-{main_scenario}
-
-## 5. Alternate and Exception Flows
-{alternate_flows}
-
-## 6. Postconditions
-{postconditions}
-
-## 8. Realization Matrix
-{realization_matrix_table}
-## Source References
-Use case operational flows and lifecycle activity references:
-{source_refs}
-"#
-        );
-
+        let (rel_path, content) = render_single_use_case_spec(uc_m, index);
         generated_files.insert(rel_path, content);
     }
 }

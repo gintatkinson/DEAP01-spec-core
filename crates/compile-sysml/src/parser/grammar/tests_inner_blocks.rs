@@ -44,23 +44,23 @@ package TestPackage {
 "#;
         let pkg = SysmlParser::parse_source(source, "TestModel")?;
         assert_eq!(pkg.use_case_defs.len(), 1);
-        let uc = pkg
-            .use_case_defs
-            .first()
-            .ok_or("missing first element of pkg.use_case_defs")?;
+        let uc = pkg.use_case_defs.first().ok_or("missing first element of pkg.use_case_defs")?;
         assert_eq!(uc.name, "UC_01_Vision");
-        assert!(uc.doc.is_some());
         let doc = uc.doc.as_ref().ok_or("use case doc missing")?;
-        assert!(doc.contains("Actors: HumanEngineer, CIContinuousIntegrationRunner"));
-        assert!(doc.contains("Subject: SystemVisionEngine"));
-        assert!(doc.contains("Preconditions: Compiler runtime environment is initialized"));
-        assert!(doc.contains("Trigger: Compilation pipeline startup command"));
-        assert!(doc.contains("Main Success Scenario:"));
-        assert!(doc.contains("1. Operator dispatches compilation command"));
-        assert!(doc.contains("Alternate and Exception Flows:"));
-        assert!(doc.contains("5a. Prohibited domain term detected"));
-        assert!(doc.contains("5j. Circular dependency detected"));
-        assert!(doc.contains("Postconditions: Foundational compiler invariants"));
+        for snippet in [
+            "Actors: HumanEngineer, CIContinuousIntegrationRunner",
+            "Subject: SystemVisionEngine",
+            "Preconditions: Compiler runtime environment is initialized",
+            "Trigger: Compilation pipeline startup command",
+            "Main Success Scenario:",
+            "1. Operator dispatches compilation command",
+            "Alternate and Exception Flows:",
+            "5a. Prohibited domain term detected",
+            "5j. Circular dependency detected",
+            "Postconditions: Foundational compiler invariants",
+        ] {
+            assert!(doc.contains(snippet));
+        }
         Ok(())
     }
 
@@ -91,27 +91,11 @@ package TestPackage {
 "#;
         let pkg = SysmlParser::parse_source(source, "TestModel")?;
         assert_eq!(pkg.use_case_defs.len(), 1);
-        let uc = pkg
-            .use_case_defs
-            .first()
-            .ok_or("missing first element of pkg.use_case_defs")?;
+        let uc = pkg.use_case_defs.first().ok_or("missing first element of pkg.use_case_defs")?;
         assert_eq!(uc.name, "UC_05_Physical_Metrology");
         assert_eq!(uc.subject.as_deref(), Some("MetrologyFlowEngine"));
-        assert_eq!(uc.actors.len(), 1);
-        assert_eq!(
-            uc.actors
-                .first()
-                .ok_or("missing first element of uc.actors")?,
-            "CIContinuousIntegrationRunner"
-        );
-        assert_eq!(uc.steps.len(), 1);
-        assert_eq!(
-            uc.steps
-                .first()
-                .ok_or("missing first element of uc.steps")?,
-            "GrammarLoweringEngine"
-        );
-        assert!(uc.doc.is_some());
+        assert_eq!(uc.actors, vec!["CIContinuousIntegrationRunner"]);
+        assert_eq!(uc.steps, vec!["GrammarLoweringEngine"]);
         let doc = uc.doc.as_ref().ok_or("use case doc missing")?;
         assert!(doc.contains("Outer summary for UC_05"));
         assert!(doc.contains("Actors: CIContinuousIntegrationRunner, HumanEngineer"));
@@ -120,82 +104,7 @@ package TestPackage {
         Ok(())
     }
 
-    /// Verifies that all 12 inner braced-body declaration parsers fail closed with `Err(ParseError)` on unrecognized statements and preserve consecutive standalone inner `doc` comments.
-    #[test]
-    fn test_issue_504_inner_blocks_fail_closed_and_preserve_consecutive_docs(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let bad_cases = [
-            (
-                "port",
-                "package P {\n    port def X {\n        bogus_stmt x;\n    }\n}\n",
-            ),
-            (
-                "action",
-                "package P {\n    action def X {\n        bogus_stmt x;\n    }\n}\n",
-            ),
-            (
-                "requirement",
-                "package P {\n    requirement def X {\n        bogus_stmt x;\n    }\n}\n",
-            ),
-            (
-                "state",
-                "package P {\n    state def X {\n        bogus_stmt x;\n    }\n}\n",
-            ),
-            (
-                "connection",
-                "package P {\n    connection def X {\n        bogus_stmt x;\n    }\n}\n",
-            ),
-            (
-                "use case",
-                "package P {\n    use case def X {\n        bogus_stmt x;\n    }\n}\n",
-            ),
-            (
-                "item",
-                "package P {\n    item def X {\n        bogus_stmt x;\n    }\n}\n",
-            ),
-            (
-                "hazard",
-                "package P {\n    hazard def X {\n        bogus_stmt x;\n    }\n}\n",
-            ),
-            (
-                "risk",
-                "package P {\n    risk def X {\n        bogus_stmt x;\n    }\n}\n",
-            ),
-            (
-                "test case",
-                "package P {\n    test case def X {\n        bogus_stmt x;\n    }\n}\n",
-            ),
-            (
-                "capability",
-                "package P {\n    capability def X {\n        bogus_stmt x;\n    }\n}\n",
-            ),
-            (
-                "interaction",
-                "package P {\n    interaction def X {\n        bogus_stmt x;\n    }\n}\n",
-            ),
-        ];
-
-        for (label, src) in bad_cases {
-            let err = SysmlParser::parse_source(src, "P").err().ok_or_else(|| {
-                format!(
-                    "expected Err(ParseError) for unknown inner statement in {}",
-                    label
-                )
-            })?;
-            assert_eq!(
-                err.span.line, 3,
-                "expected error on line 3 for {}, got {:?}",
-                label, err
-            );
-            assert!(
-                err.span.col > 0,
-                "expected positive column for {}, got {:?}",
-                label,
-                err
-            );
-        }
-
-        let valid_docs_src = r#"
+    const CONSECUTIVE_INNER_DOCS_FIXTURE: &str = r#"
 package ConsecutiveInnerDocsPkg {
     port def P1 {
         /* port header doc 1 */
@@ -279,39 +188,52 @@ package ConsecutiveInnerDocsPkg {
     }
 }
 "#;
-        let pkg = SysmlParser::parse_source(valid_docs_src, "ConsecutiveInnerDocsPkg")?;
+
+    /// Verifies that all 12 inner braced-body declaration parsers fail closed with `Err(ParseError)` on unrecognized statements and preserve consecutive standalone inner `doc` comments.
+    #[test]
+    fn test_issue_504_inner_blocks_fail_closed_and_preserve_consecutive_docs(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let bad_cases = [
+            ("port", "package P {\n    port def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("action", "package P {\n    action def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("requirement", "package P {\n    requirement def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("state", "package P {\n    state def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("connection", "package P {\n    connection def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("use case", "package P {\n    use case def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("item", "package P {\n    item def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("hazard", "package P {\n    hazard def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("risk", "package P {\n    risk def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("test case", "package P {\n    test case def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("capability", "package P {\n    capability def X {\n        bogus_stmt x;\n    }\n}\n"),
+            ("interaction", "package P {\n    interaction def X {\n        bogus_stmt x;\n    }\n}\n"),
+        ];
+
+        for (label, src) in bad_cases {
+            let err = SysmlParser::parse_source(src, "P").err().ok_or_else(|| {
+                format!("expected Err(ParseError) for unknown inner statement in {}", label)
+            })?;
+            assert_eq!(err.span.line, 3, "expected error on line 3 for {}, got {:?}", label, err);
+            assert!(err.span.col > 0, "expected positive column for {}, got {:?}", label, err);
+        }
+
+        let pkg = SysmlParser::parse_source(CONSECUTIVE_INNER_DOCS_FIXTURE, "ConsecutiveInnerDocsPkg")?;
         let p1 = pkg.port_defs.first().ok_or("missing P1")?;
         assert_eq!(p1.doc.as_deref(), Some("port header doc 1"));
-        assert_eq!(
-            p1.item_flows.first().and_then(|f| f.doc.as_deref()),
-            Some("flow doc")
-        );
-        let a1 = pkg.action_defs.first().ok_or("missing A1")?;
-        assert_eq!(a1.doc.as_deref(), Some("action inner doc 1"));
+        assert_eq!(p1.item_flows.first().and_then(|f| f.doc.as_deref()), Some("flow doc"));
+        assert_eq!(pkg.action_defs.first().ok_or("missing A1")?.doc.as_deref(), Some("action inner doc 1"));
         let r1 = pkg.requirement_defs.first().ok_or("missing R1")?;
         assert_eq!(r1.text, "req doc 1");
-        assert_eq!(
-            r1.attributes.first().and_then(|a| a.doc.as_deref()),
-            Some("attr doc")
-        );
+        assert_eq!(r1.attributes.first().and_then(|a| a.doc.as_deref()), Some("attr doc"));
         let i1 = pkg.item_defs.first().ok_or("missing I1")?;
         assert_eq!(i1.doc.as_deref(), Some("item doc 1"));
-        assert_eq!(
-            i1.attributes.first().and_then(|a| a.doc.as_deref()),
-            Some("item attr doc")
-        );
-        let h1 = pkg.hazard_defs.first().ok_or("missing H1")?;
-        assert_eq!(h1.doc.as_deref(), Some("hazard doc 1"));
-        let k1 = pkg.risk_defs.first().ok_or("missing K1")?;
-        assert_eq!(k1.doc.as_deref(), Some("risk doc 1"));
-        let t1 = pkg.test_case_defs.first().ok_or("missing T1")?;
-        assert_eq!(t1.doc.as_deref(), Some("test doc 1"));
+        assert_eq!(i1.attributes.first().and_then(|a| a.doc.as_deref()), Some("item attr doc"));
+        assert_eq!(pkg.hazard_defs.first().ok_or("missing H1")?.doc.as_deref(), Some("hazard doc 1"));
+        assert_eq!(pkg.risk_defs.first().ok_or("missing K1")?.doc.as_deref(), Some("risk doc 1"));
+        assert_eq!(pkg.test_case_defs.first().ok_or("missing T1")?.doc.as_deref(), Some("test doc 1"));
         let cap1 = pkg.capability_defs.first().ok_or("missing Cap1")?;
         assert_eq!(cap1.doc.as_deref(), Some("cap doc 1"));
         assert_eq!(cap1.description.as_deref(), Some("cap doc 1"));
-        let int1 = pkg.interaction_defs.first().ok_or("missing Int1")?;
-        assert_eq!(int1.doc.as_deref(), Some("inter doc 1"));
-
+        assert_eq!(pkg.interaction_defs.first().ok_or("missing Int1")?.doc.as_deref(), Some("inter doc 1"));
         Ok(())
     }
 
@@ -329,33 +251,15 @@ package Issue504CompositePkg {
     ) {
         pair != outcome;
     }
-
-    calc def CalcColonReturn {
-        return : Result<(u32, u64), E> = compute(x, y);
-    }
-
-    calc def CalcTypeReturn {
-        return type *const [u8; 16];
-    }
-
-    calc def CalcBareTypeReturn {
-        return &'a mut [u8; 32];
-    }
-
-    calc def CalcCallExprReturn {
-        return compute_norm(a, b);
-    }
-
-    calc def CalcAssignNoTypeReturn {
-        return out_val = x + y;
-    }
+    calc def CalcColonReturn { return : Result<(u32, u64), E> = compute(x, y); }
+    calc def CalcTypeReturn { return type *const [u8; 16]; }
+    calc def CalcBareTypeReturn { return &'a mut [u8; 32]; }
+    calc def CalcCallExprReturn { return compute_norm(a, b); }
+    calc def CalcAssignNoTypeReturn { return out_val = x + y; }
 }
 "#;
         let pkg = SysmlParser::parse_source(src, "Issue504CompositePkg")?;
-        let con = pkg
-            .constraint_defs
-            .first()
-            .ok_or("missing MultiParamConstraint")?;
+        let con = pkg.constraint_defs.first().ok_or("missing MultiParamConstraint")?;
         assert_eq!(
             con.parameters,
             vec![
@@ -370,26 +274,18 @@ package Issue504CompositePkg {
         let c0 = pkg.calc_defs.first().ok_or("missing CalcColonReturn")?;
         assert_eq!(c0.return_type.as_deref(), Some("Result<(u32, u64), E>"));
         assert_eq!(c0.expression.as_deref(), Some("compute ( x , y )"));
-
         let c1 = pkg.calc_defs.get(1).ok_or("missing CalcTypeReturn")?;
         assert_eq!(c1.return_type.as_deref(), Some("*const [u8; 16]"));
         assert_eq!(c1.expression, None);
-
         let c2 = pkg.calc_defs.get(2).ok_or("missing CalcBareTypeReturn")?;
         assert_eq!(c2.return_type.as_deref(), Some("&'a mut [u8; 32]"));
         assert_eq!(c2.expression, None);
-
         let c3 = pkg.calc_defs.get(3).ok_or("missing CalcCallExprReturn")?;
         assert_eq!(c3.return_type, None);
         assert_eq!(c3.expression.as_deref(), Some("compute_norm ( a , b )"));
-
-        let c4 = pkg
-            .calc_defs
-            .get(4)
-            .ok_or("missing CalcAssignNoTypeReturn")?;
+        let c4 = pkg.calc_defs.get(4).ok_or("missing CalcAssignNoTypeReturn")?;
         assert_eq!(c4.return_type, None);
         assert_eq!(c4.expression.as_deref(), Some("x + y"));
-
         Ok(())
     }
 

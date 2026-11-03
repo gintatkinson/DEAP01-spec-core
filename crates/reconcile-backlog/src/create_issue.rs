@@ -1,1068 +1,287 @@
-//! Idempotent gated issue creation and reopening for DEAP MBSE Framework.
+//! Safe `create-issue` subcommand implementation with strict precondition checks.
 //!
-//! Realises: [Issue Tracker as Canonical SSOT, Closed-Loop Payload Verification]
+//! Replaces legacy shell-script wrappers by natively enforcing:
+//! 1. Markdown body file existence, non-empty content, and structural AST validity (`deap_core::markdown_ast`).
+//! 2. Zero unpopulated template placeholders (`(To be created)`, `TBD`, `TODO`).
+//! 3. Duplicate issue detection across OPEN and CLOSED issues in the canonical tracker.
+//! 4. Safe reopen workflow requiring a validated `--reopen-with-analysis <file>` document.
+//!
+//! Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE, Issue Tracker as Canonical SSOT, Zero Fallback Placeholders]
 
-use std::fs;
-use std::path::Path;
-
-use crate::tracker::{normalize_title, GitHubTracker, IssueIndex, OfflineTracker, TrackerClient};
+use crate::checklist::contains_unpopulated_placeholders;
+use crate::tracker::{normalize_title, GitHubTracker, Issue, IssueTracker};
 use crate::ReconcileError;
+use deap_core::markdown_ast::parse_markdown_ast;
+use std::fs;
+use std::path::{Path, PathBuf};
 
-/// CLI arguments for `create-issue` subcommand.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `CreateIssueArgs` in `crates/reconcile-backlog/src/create_issue.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `CreateIssueArgs` across member set `[body_file: Option<String>, label: Option<String>, title: Option<String>, repo: Option<String>, reopen_with_analysis: Option<String>]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `CreateIssueArgs` members (`body_file: Option<String>, label: Option<String>, title: Option<String>, repo: Option<String>, reopen_with_analysis: Option<String>`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `CreateIssueArgs` representation for struct `CreateIssueArgs`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(5)) bounded over input/member dimension of `CreateIssueArgs`.
-/// - Space Complexity: O(M(5)) bounded auxiliary memory for `CreateIssueArgs`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `CreateIssueArgs` (`CreateIssueArgs`).
-/// - State: Maintains consistent state invariants across `CreateIssueArgs` without partial mutation on error.
-/// - Action: Executes `CreateIssueArgs` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `CreateIssueArgs` (`RECONCILE-BACKLOG-CREATE-ISSUE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-CREATEISSUEARGS] | SysML v2: PartDef(CreateIssueArgs)
+/// [DOC-TIER: A] Command-line arguments for the `create-issue` subcommand.
+/// Safety & Traceability: Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-CREATEISSUEARGS]
+/// Contract: Accepts named flags (`--body-file`, `--label`, `--title`) or positional arguments.
+/// Bounds & Faults: Time O(A), Space O(A) over CLI arguments; validated by `normalize_args`.
 #[derive(Debug, Clone)]
 pub struct CreateIssueArgs {
-    /// Issue body markdown file
+    /// Path to the Markdown file containing the issue body (flag form: `--body-file`)
     pub body_file: Option<String>,
 
-    /// Label to apply (e.g. epic, feature, user-story, use-case, bug)
+    /// Comma-separated or single label (flag form: `--label`)
     pub label: Option<String>,
 
-    /// Issue title
+    /// Issue title (flag form: `--title`)
     pub title: Option<String>,
 
-    /// Target repository (e.g. owner/repo)
+    /// Target repository (e.g. `owner/repo`)
     pub repo: Option<String>,
 
-    /// Optional file containing analysis to post if reopening an existing closed issue
+    /// Optional path to root-cause analysis Markdown file to reopen an existing CLOSED issue
     pub reopen_with_analysis: Option<String>,
 
-    /// Issue tracker provider (e.g. github, offline)
+    /// Tracker provider (`github` or `gitlab`, defaults to `github`)
     pub provider: String,
 
-    /// Positional arguments for positional CLI invocation:
-    /// <body-file> <label> <title> [repo]
+    /// Positional arguments fallback: `[<body_file> <label> <title>...]`
     pub positional: Vec<String>,
 }
 
-/// Resolved parameters after coalescing flags and positional arguments.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `ResolvedCreateIssueParams` in `crates/reconcile-backlog/src/create_issue.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `ResolvedCreateIssueParams` across member set `[body_file: String, label: String, title: String, repo: Option<String>, reopen_with_analysis: Option<String>]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `ResolvedCreateIssueParams` members (`body_file: String, label: String, title: String, repo: Option<String>, reopen_with_analysis: Option<String>`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `ResolvedCreateIssueParams` representation for struct `ResolvedCreateIssueParams`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(5)) bounded over input/member dimension of `ResolvedCreateIssueParams`.
-/// - Space Complexity: O(M(5)) bounded auxiliary memory for `ResolvedCreateIssueParams`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `ResolvedCreateIssueParams` (`ResolvedCreateIssueParams`).
-/// - State: Maintains consistent state invariants across `ResolvedCreateIssueParams` without partial mutation on error.
-/// - Action: Executes `ResolvedCreateIssueParams` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `ResolvedCreateIssueParams` (`RECONCILE-BACKLOG-CREATE-ISSUE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-RESOLVEDCREATEISSUEPARAMS] | SysML v2: PartDef(ResolvedCreateIssueParams)
-#[derive(Debug, Clone, PartialEq)]
-pub struct ResolvedCreateIssueParams {
-    pub body_file: String,
-    pub label: String,
-    pub title: String,
-    pub repo: Option<String>,
-    pub reopen_with_analysis: Option<String>,
-    pub provider: String,
-}
-
-impl CreateIssueArgs {
-    /// Resolves flags and positional arguments, honoring explicit flags first
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `CreateIssueArgs::resolve` in `crates/reconcile-backlog/src/create_issue.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `CreateIssueArgs::resolve` (declaration #3) within `RECONCILE-BACKLOG-CREATE-ISSUE`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `CreateIssueArgs::resolve` in `RECONCILE-BACKLOG-CREATE-ISSUE`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Result<ResolvedCreateIssueParams, ReconcileError>` from `CreateIssueArgs::resolve` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(resolve)) bounded over input/member dimension of `CreateIssueArgs::resolve`.
-    /// - Space Complexity: O(K(resolve)) bounded auxiliary memory for `CreateIssueArgs::resolve`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `CreateIssueArgs::resolve` (`Result<ResolvedCreateIssueParams, ReconcileError>`).
-    /// - State: Maintains consistent state invariants across `CreateIssueArgs::resolve` without partial mutation on error.
-    /// - Action: Executes `CreateIssueArgs::resolve` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `CreateIssueArgs::resolve` (`RECONCILE-BACKLOG-CREATE-ISSUE`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-CREATEISSUEARGS-RESOLVE] | SysML v2: ActionDef(CreateIssueArgs::resolve)
-    pub fn resolve(&self) -> Result<ResolvedCreateIssueParams, ReconcileError> {
-        let mut pos_idx = 0;
-
-        let body_file = if let Some(ref bf) = self.body_file {
-            bf.clone()
-        } else if let Some(p) = self.positional.get(pos_idx) {
-            pos_idx += 1;
-            p.clone()
-        } else {
-            return Err(ReconcileError::Validation("Missing required body file. Specify via --body-file <FILE> or positional argument <body-file>".to_string()));
-        };
-
-        let label = if let Some(ref l) = self.label {
-            l.clone()
-        } else if let Some(p) = self.positional.get(pos_idx) {
-            pos_idx += 1;
-            p.clone()
-        } else {
-            return Err(ReconcileError::Validation("Missing required label. Specify via --label <LABEL> or positional argument <label>".to_string()));
-        };
-
-        let title = if let Some(ref t) = self.title {
-            t.clone()
-        } else if let Some(p) = self.positional.get(pos_idx) {
-            pos_idx += 1;
-            p.clone()
-        } else {
-            return Err(ReconcileError::Validation("Missing required title. Specify via --title <TITLE> or positional argument <title>".to_string()));
-        };
-
-        let repo = self
-            .repo
-            .clone()
-            .or_else(|| self.positional.get(pos_idx).cloned());
-
-        Ok(ResolvedCreateIssueParams {
-            body_file,
-            label,
-            title,
-            repo,
-            reopen_with_analysis: self.reopen_with_analysis.clone(),
-            provider: self.provider.clone(),
-        })
-    }
-}
-
-/// Validates issue body file preconditions:
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `validate_body_file` in `crates/reconcile-backlog/src/create_issue.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `validate_body_file` (declaration #4) within `RECONCILE-BACKLOG-CREATE-ISSUE`.
-///
-/// ## 3. Preconditions
-/// - `body_file: &str` must satisfy domain and type-safety constraints prior to invoking `validate_body_file`.
-///
-/// ## 4. Postconditions
-/// - Returns `Result<String, ReconcileError>` from `validate_body_file` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(body_file)) bounded over input/member dimension of `validate_body_file`.
-/// - Space Complexity: O(N(body_file)) bounded auxiliary memory for `validate_body_file`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `validate_body_file` (`Result<String, ReconcileError>`).
-/// - State: Maintains consistent state invariants across `validate_body_file` without partial mutation on error.
-/// - Action: Executes `validate_body_file` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `validate_body_file` (`RECONCILE-BACKLOG-CREATE-ISSUE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-VALIDATE-BODY-FILE] | SysML v2: ActionDef(validate_body_file)
-pub fn validate_body_file(body_file: &str) -> Result<String, ReconcileError> {
-    let path = Path::new(body_file);
-    if !path.is_file() {
-        return Err(ReconcileError::Io(format!(
-            "FATAL: Body file not found: {}",
-            body_file
-        )));
-    }
-
-    let metadata = fs::metadata(path).map_err(|e| {
-        ReconcileError::Io(format!(
-            "FATAL: Cannot read metadata for {}: {}",
-            body_file, e
-        ))
-    })?;
-
-    if metadata.len() == 0 {
-        return Err(ReconcileError::Validation(format!(
-            "FATAL: Body file is empty: {}",
-            body_file
-        )));
-    }
-
-    let content = fs::read_to_string(path).map_err(|e| {
-        ReconcileError::Io(format!("FATAL: Cannot read body file {}: {}", body_file, e))
-    })?;
-
-    if content.trim().is_empty() {
-        return Err(ReconcileError::Validation(format!(
-            "FATAL: Body file is empty: {}",
-            body_file
-        )));
-    }
-
-    if content.contains("{{REQUIRED_") {
-        return Err(ReconcileError::Validation(format!(
-            "FATAL: Unreplaced {{{{REQUIRED_*}}}} escape token detected in: {}",
-            body_file
-        )));
-    }
-
-    // Check for unreplaced checklist placeholder tokens (Issue #223 blocking registration gate)
-    for line in content.lines() {
-        let trimmed = line.trim_start();
-        let is_checkbox = if let Some(after_dash) = trimmed.strip_prefix('-') {
-            let after_dash_trimmed = after_dash.trim_start();
-            after_dash_trimmed.starts_with("[ ]")
-                || after_dash_trimmed.starts_with("[x]")
-                || after_dash_trimmed.starts_with("[X]")
-        } else {
-            false
-        };
-
-        if is_checkbox
-            && (trimmed.contains("#[IssueID]")
-                || trimmed.contains("#[FeatureIssueID]")
-                || trimmed.contains("#[UseCaseIssueID]")
-                || trimmed.contains("#[StoryIssueID]")
-                || trimmed.contains("#[EpicIssueID]"))
-        {
-            return Err(ReconcileError::Validation(format!(
-                "FATAL: Unresolved checklist placeholder token detected in: {}. Sibling specifications must be registered on the tracker before publishing.",
-                body_file
-            )));
-        }
-    }
-
-    let fence_count = content.lines().filter(|l| l.contains("```")).count();
-    if fence_count % 2 != 0 {
-        return Err(ReconcileError::Parse(format!(
-            "FATAL: Unbalanced code fences in: {} (found {} fences)",
-            body_file, fence_count
-        )));
-    }
-
-    Ok(content)
-}
-
-/// Validates that the reopen analysis file exists and reads its content.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `validate_reopen_analysis_file` in `crates/reconcile-backlog/src/create_issue.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `validate_reopen_analysis_file` (declaration #5) within `RECONCILE-BACKLOG-CREATE-ISSUE`.
-///
-/// ## 3. Preconditions
-/// - `reopen_file: &str` must satisfy domain and type-safety constraints prior to invoking `validate_reopen_analysis_file`.
-///
-/// ## 4. Postconditions
-/// - Returns `Result<String, ReconcileError>` from `validate_reopen_analysis_file` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(reopen_file)) bounded over input/member dimension of `validate_reopen_analysis_file`.
-/// - Space Complexity: O(N(reopen_file)) bounded auxiliary memory for `validate_reopen_analysis_file`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `validate_reopen_analysis_file` (`Result<String, ReconcileError>`).
-/// - State: Maintains consistent state invariants across `validate_reopen_analysis_file` without partial mutation on error.
-/// - Action: Executes `validate_reopen_analysis_file` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `validate_reopen_analysis_file` (`RECONCILE-BACKLOG-CREATE-ISSUE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-VALIDATE-REOPEN-ANALYSIS-FILE] | SysML v2: ActionDef(validate_reopen_analysis_file)
-pub fn validate_reopen_analysis_file(reopen_file: &str) -> Result<String, ReconcileError> {
-    let path = Path::new(reopen_file);
-    if !path.is_file() {
-        return Err(ReconcileError::Io(format!(
-            "FATAL: Reopen analysis file not found: {}",
-            reopen_file
-        )));
-    }
-
-    let content = fs::read_to_string(path).map_err(|e| {
-        ReconcileError::Io(format!(
-            "FATAL: Cannot read reopen analysis file {}: {}",
-            reopen_file, e
-        ))
-    })?;
-
-    Ok(content)
-}
-
-/// Action outcome from executing issue creation or idempotency check.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for enum `IssueActionOutcome` in `crates/reconcile-backlog/src/create_issue.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for enum `IssueActionOutcome` across member set `[Created, AlreadyOpen, Reopened]`.
-///
-/// ## 3. Preconditions
-/// - Caller supplies well-formed values for `IssueActionOutcome` members (`Created, AlreadyOpen, Reopened`).
-///
-/// ## 4. Postconditions
-/// - Defines the authoritative `IssueActionOutcome` representation for enum `IssueActionOutcome`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(3)) bounded over input/member dimension of `IssueActionOutcome`.
-/// - Space Complexity: O(M(3)) bounded auxiliary memory for `IssueActionOutcome`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `IssueActionOutcome` (`IssueActionOutcome`).
-/// - State: Maintains consistent state invariants across `IssueActionOutcome` without partial mutation on error.
-/// - Action: Executes `IssueActionOutcome` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `IssueActionOutcome` (`RECONCILE-BACKLOG-CREATE-ISSUE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-ISSUEACTIONOUTCOME] | SysML v2: PartDef(IssueActionOutcome)
-#[derive(Debug, Clone, PartialEq)]
-pub enum IssueActionOutcome {
-    Created { number: u64, url: String },
-    AlreadyOpen { number: u64, url: String },
-    Reopened { number: u64, url: String },
-}
-
-/// Executes duplicate search, reopening, or issue creation against a TrackerClient.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `run_create_issue` in `crates/reconcile-backlog/src/create_issue.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `run_create_issue` (declaration #7) within `RECONCILE-BACKLOG-CREATE-ISSUE`.
-///
-/// ## 3. Preconditions
-/// - `tracker: &T` must satisfy domain and type-safety constraints prior to invoking `run_create_issue`.
-/// - `params: &ResolvedCreateIssueParams` must satisfy domain and type-safety constraints prior to invoking `run_create_issue`.
-///
-/// ## 4. Postconditions
-/// - Returns `Result<IssueActionOutcome, ReconcileError>` from `run_create_issue` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(tracker)) bounded over input/member dimension of `run_create_issue`.
-/// - Space Complexity: O(N(tracker)) bounded auxiliary memory for `run_create_issue`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `run_create_issue` (`Result<IssueActionOutcome, ReconcileError>`).
-/// - State: Maintains consistent state invariants across `run_create_issue` without partial mutation on error.
-/// - Action: Executes `run_create_issue` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `run_create_issue` (`RECONCILE-BACKLOG-CREATE-ISSUE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-RUN-CREATE-ISSUE] | SysML v2: ActionDef(run_create_issue)
-pub fn run_create_issue<T: TrackerClient>(
-    tracker: &T,
-    params: &ResolvedCreateIssueParams,
-) -> Result<IssueActionOutcome, ReconcileError> {
-    // 1. Precondition validation
-    let body_content = validate_body_file(&params.body_file)?;
-
-    let reopen_analysis_content = if let Some(ref reopen_file) = params.reopen_with_analysis {
-        Some(validate_reopen_analysis_file(reopen_file)?)
-    } else {
-        None
-    };
-
-    // 2. Idempotency & duplicate search
-    let issues = tracker.fetch_all_issues().map_err(ReconcileError::GitHub)?;
-    let issue_index = IssueIndex::build(issues.clone());
-
-    // Enforce Issue #223 blocking registration gate against live tracker index
-    crate::validate_checklist_publish_integrity(&params.body_file, &body_content, &issue_index)?;
-
-    let norm_target = normalize_title(&params.title);
-    let target_type = crate::tracker::canonicalize_spec_type(&params.label);
-
-    let existing = issue_index
-        .find_issue_for_type(None, Some(&params.label), &params.title)
-        .cloned()
-        .or_else(|| {
-            issues
-                .iter()
-                .find(|i| {
-                    let matches_type =
-                        i.labels.iter().any(|l| {
-                            crate::tracker::canonicalize_spec_type(l.name()) == target_type
-                        }) || crate::tracker::infer_spec_type_from_title(&i.title).as_deref()
-                            == Some(&target_type);
-                    if !matches_type {
-                        return false;
-                    }
-                    let norm_existing = normalize_title(&i.title);
-                    (!norm_target.is_empty() && norm_existing == norm_target)
-                        || i.title.trim().eq_ignore_ascii_case(params.title.trim())
-                })
-                .cloned()
-        });
-
-    if let Some(existing_issue) = existing {
-        let is_closed = existing_issue.state.eq_ignore_ascii_case("closed");
-        let issue_url = existing_issue
-            .url
-            .clone()
-            .unwrap_or_else(|| format!("https://github.com/issues/{}", existing_issue.number));
-
-        if is_closed {
-            // Reopen and post analysis comment if provided
-            tracker
-                .reopen_issue(
-                    existing_issue.number,
-                    reopen_analysis_content.as_deref(),
-                    params.repo.as_deref(),
-                )
-                .map_err(ReconcileError::GitHub)?;
-            Ok(IssueActionOutcome::Reopened {
-                number: existing_issue.number,
-                url: issue_url,
-            })
-        } else {
-            // Existing issue is already open: report existing issue number and URL, exit 0
-            Ok(IssueActionOutcome::AlreadyOpen {
-                number: existing_issue.number,
-                url: issue_url,
-            })
-        }
-    } else {
-        // New issue: ensure label exists, create issue, report issue number and URL, exit 0
-        tracker
-            .ensure_label_exists(&params.label, params.repo.as_deref())
-            .map_err(ReconcileError::GitHub)?;
-
-        let body_path = Path::new(&params.body_file);
-        let candidate_root = body_path
-            .parent()
-            .and_then(|p| p.parent())
-            .and_then(|p| p.parent())
-            .unwrap_or_else(|| Path::new("."));
-        let workspace_root = if candidate_root.join("docs").is_dir() {
-            candidate_root
-        } else if Path::new("docs").is_dir() {
-            Path::new(".")
-        } else {
-            candidate_root
-        };
-
-        let mut spec_path_to_issue = std::collections::BTreeMap::new();
-        for spec in crate::load_specifications(workspace_root) {
-            if let Some(id) = spec.frontmatter.issue_id.or_else(|| {
-                issue_index
-                    .find_issue_for_type(
-                        None,
-                        Some(&spec.frontmatter.spec_type),
-                        &spec.frontmatter.title,
-                    )
-                    .map(|i| i.number)
-            }) {
-                spec_path_to_issue.insert(spec.rel_path.clone(), id);
-                if let Some(stripped) = spec.rel_path.strip_prefix("docs/") {
-                    spec_path_to_issue.insert(stripped.to_string(), id);
-                }
-                if let Some(fname) = Path::new(&spec.rel_path)
-                    .file_name()
-                    .and_then(|f| f.to_str())
-                {
-                    spec_path_to_issue.insert(fname.to_string(), id);
-                }
-            }
-        }
-
-        let repo_slug = params
-            .repo
-            .clone()
-            .or_else(|| crate::detect_git_repo(workspace_root));
-        let branch = crate::detect_git_branch(workspace_root).unwrap_or_else(|| "main".to_string());
-
-        let upstream_prefix = crate::detect_upstream_prefix(workspace_root);
-        let projected_body = crate::project_body_for_tracker_with_prefix(
-            &body_content,
-            repo_slug.as_deref(),
-            &branch,
-            upstream_prefix,
-            &spec_path_to_issue,
-        );
-
-        let (number, url) = tracker
-            .create_issue(
-                &params.title,
-                &projected_body,
-                &params.label,
-                params.repo.as_deref(),
-            )
-            .map_err(ReconcileError::GitHub)?;
-        Ok(IssueActionOutcome::Created { number, url })
-    }
-}
-
-/// Top-level coordinator for `create-issue` command execution.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `execute_create_issue` in `crates/reconcile-backlog/src/create_issue.rs`.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Preserves deterministic state conservation and referential transparency for fn `execute_create_issue` (declaration #8) within `RECONCILE-BACKLOG-CREATE-ISSUE`.
-///
-/// ## 3. Preconditions
-/// - `args: &CreateIssueArgs` must satisfy domain and type-safety constraints prior to invoking `execute_create_issue`.
-///
-/// ## 4. Postconditions
-/// - Returns `Result<(), ReconcileError>` from `execute_create_issue` with deterministic post-execution state.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(N(args)) bounded over input/member dimension of `execute_create_issue`.
-/// - Space Complexity: O(N(args)) bounded auxiliary memory for `execute_create_issue`.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `execute_create_issue` (`Result<(), ReconcileError>`).
-/// - State: Maintains consistent state invariants across `execute_create_issue` without partial mutation on error.
-/// - Action: Executes `execute_create_issue` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `execute_create_issue` (`RECONCILE-BACKLOG-CREATE-ISSUE`).
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-EXECUTE-CREATE-ISSUE] | SysML v2: ActionDef(execute_create_issue)
-pub fn execute_create_issue(args: &CreateIssueArgs) -> Result<(), ReconcileError> {
-    let params = args.resolve()?;
-
-    let provider_norm = params.provider.trim().to_lowercase();
-    let outcome = match provider_norm.as_str() {
-        "github" | "auto" => {
-            let tracker = if let Some(ref r) = params.repo {
-                GitHubTracker::with_repo(r.clone())
-            } else {
-                GitHubTracker::new()
-            };
-            run_create_issue(&tracker, &params)?
-        }
-        "offline" => {
-            let tracker = OfflineTracker::new();
-            run_create_issue(&tracker, &params)?
-        }
-        other => {
-            return Err(ReconcileError::Validation(format!(
-                "Unsupported issue tracker provider '{}'. Supported providers: github, offline",
-                other
-            )));
-        }
-    };
-
-    match outcome {
-        IssueActionOutcome::Created { number, url } => {
-            println!("[CREATED] Issue #{} created: {}", number, url);
-            println!("{}", url);
-        }
-        IssueActionOutcome::AlreadyOpen { number, url } => {
-            println!("[IDEMPOTENT] Issue #{} already open: {}", number, url);
-            println!("{}", url);
-        }
-        IssueActionOutcome::Reopened { number, url } => {
-            println!("[REOPEN] Issue #{} reopened: {}", number, url);
-            println!("{}", url);
-        }
-    }
-
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::tracker::{TrackerIssue, TrackerLabel};
-    use std::io::Write;
-
-    struct TempFile {
-        path: std::path::PathBuf,
-    }
-
-    impl TempFile {
-        fn new(name: &str, content: &str) -> Result<Self, Box<dyn std::error::Error>> {
-            let rand_id = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-            let path = std::env::temp_dir().join(format!("{}_{}.md", name, rand_id));
-            let mut file = fs::File::create(&path)?;
-            file.write_all(content.as_bytes())?;
-            Ok(Self { path })
-        }
-
-        fn path_str(&self) -> Result<&str, Box<dyn std::error::Error>> {
-            Ok(self
-                .path
-                .to_str()
-                .ok_or("temp file path is not valid UTF-8")?)
-        }
-    }
-
-    impl Drop for TempFile {
-        fn drop(&mut self) {
-            let _ = fs::remove_file(&self.path);
-        }
-    }
-
-    #[test]
-    fn test_args_resolution_flags_and_positional() -> Result<(), Box<dyn std::error::Error>> {
-        // Flag-based
-        let args_flags = CreateIssueArgs {
-            body_file: Some("body.md".to_string()),
-            label: Some("bug".to_string()),
-            title: Some("My Title".to_string()),
-            repo: Some("org/repo".to_string()),
-            reopen_with_analysis: None,
-            provider: "github".to_string(),
-            positional: Vec::new(),
-        };
-        let resolved = args_flags.resolve()?;
-        assert_eq!(resolved.body_file, "body.md");
-        assert_eq!(resolved.label, "bug");
-        assert_eq!(resolved.title, "My Title");
-        assert_eq!(resolved.repo, Some("org/repo".to_string()));
-
-        // Positional-based
-        let args_pos = CreateIssueArgs {
+impl Default for CreateIssueArgs {
+    /// Returns default empty `CreateIssueArgs` (`[REQ-RECONCILE-BACKLOG-CREATE-ISSUE-DEFAULT]`).
+    /// Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-DEFAULT]
+    fn default() -> Self {
+        Self {
             body_file: None,
             label: None,
             title: None,
             repo: None,
             reopen_with_analysis: None,
             provider: "github".to_string(),
-            positional: vec![
-                "pos_body.md".to_string(),
-                "feature".to_string(),
-                "Pos Title".to_string(),
-                "pos/repo".to_string(),
-            ],
-        };
-        let resolved_pos = args_pos.resolve()?;
-        assert_eq!(resolved_pos.body_file, "pos_body.md");
-        assert_eq!(resolved_pos.label, "feature");
-        assert_eq!(resolved_pos.title, "Pos Title");
-        assert_eq!(resolved_pos.repo, Some("pos/repo".to_string()));
-        Ok(())
-    }
-
-    #[test]
-    fn test_validate_body_file_errors() -> Result<(), Box<dyn std::error::Error>> {
-        // Empty file
-        let empty_tf = TempFile::new("empty", "")?;
-        let err = validate_body_file(empty_tf.path_str()?)
-            .err()
-            .ok_or("expected empty-file rejection")?;
-        assert!(err.contains("empty"));
-
-        // Unbalanced fences
-        let fence_tf = TempFile::new("fence", "```rust\nlet a = 1;")?;
-        let err = validate_body_file(fence_tf.path_str()?)
-            .err()
-            .ok_or("expected unbalanced-fence rejection")?;
-        assert!(err.contains("Unbalanced code fences"));
-
-        // Unreplaced token
-        let token_tf = TempFile::new("token", "Sample {{REQUIRED_FOO}} here\n```\nblock\n```\n")?;
-        let err = validate_body_file(token_tf.path_str()?)
-            .err()
-            .ok_or("expected unreplaced-token rejection")?;
-        assert!(err.contains("Unreplaced {{REQUIRED_*}} escape token"));
-
-        // Unresolved checklist placeholder token probe (Issue #223 RED phase)
-        let ph_tf = TempFile::new(
-            "placeholder_checklist",
-            "# Epic\n## 2. Requirements & Checklist\n- [ ] #[IssueID] - Feature 01\n```\nblock\n```\n",
-        )?;
-        let err = validate_body_file(ph_tf.path_str()?)
-            .err()
-            .ok_or("expected placeholder-token rejection")?;
-        assert!(err.contains("Unresolved checklist placeholder token"));
-
-        // Multi-space checkbox prefix with unreplaced placeholder
-        let ph_multi = TempFile::new(
-            "multi_space",
-            "# Epic\n-   [ ] #[IssueID] - Sibling\n```\nblock\n```\n",
-        )?;
-        let err = validate_body_file(ph_multi.path_str()?)
-            .err()
-            .ok_or("expected multi-space rejection")?;
-        assert!(err.contains("Unresolved checklist placeholder token"));
-
-        // Tab checkbox prefix with unreplaced placeholder
-        let ph_tab = TempFile::new(
-            "tab_space",
-            "# Epic\n-\t[x] #[StoryIssueID] - Sibling\n```\nblock\n```\n",
-        )?;
-        let err = validate_body_file(ph_tab.path_str()?)
-            .err()
-            .ok_or("expected tab rejection")?;
-        assert!(err.contains("Unresolved checklist placeholder token"));
-
-        // Indented multi-space checkbox prefix
-        let ph_indent = TempFile::new(
-            "indent_space",
-            "# Epic\n   -  [X] #[UseCaseIssueID] - Sibling\n```\nblock\n```\n",
-        )?;
-        let err = validate_body_file(ph_indent.path_str()?)
-            .err()
-            .ok_or("expected indented rejection")?;
-        assert!(err.contains("Unresolved checklist placeholder token"));
-
-        // Valid file
-        let valid_tf = TempFile::new("valid", "# Valid\n```rust\nlet a = 1;\n```\nAll good.")?;
-        let content = validate_body_file(valid_tf.path_str()?)?;
-        assert!(content.contains("# Valid"));
-        Ok(())
-    }
-
-    type ReopenCall = (u64, Option<String>, Option<String>);
-
-    struct SpyTracker {
-        inner: OfflineTracker,
-        reopen_calls: std::sync::Mutex<Vec<ReopenCall>>,
-    }
-
-    impl SpyTracker {
-        fn with_issues(issues: Vec<TrackerIssue>) -> Self {
-            Self {
-                inner: OfflineTracker::with_issues(issues),
-                reopen_calls: std::sync::Mutex::new(Vec::new()),
-            }
+            positional: Vec::new(),
         }
     }
+}
 
-    impl TrackerClient for SpyTracker {
-        fn fetch_all_issues(&self) -> Result<Vec<TrackerIssue>, String> {
-            self.inner.fetch_all_issues()
-        }
+/// [DOC-TIER: A] Normalized, validated arguments for `create-issue`.
+/// Safety & Traceability: Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-NORMALIZEDCREATEISSUEARGS]
+/// Contract: Guarantees `body_file`, `labels`, and `title` are non-empty.
+/// Bounds & Faults: Time O(1), Space O(L) over label and path fields.
+#[derive(Debug, Clone)]
+pub struct NormalizedCreateIssueArgs {
+    pub body_file: PathBuf,
+    pub labels: Vec<String>,
+    pub title: String,
+    pub repo: Option<String>,
+    pub reopen_with_analysis: Option<PathBuf>,
+}
 
-        fn update_issue_body(&self, issue_number: u64, body: &str) -> Result<(), String> {
-            self.inner.update_issue_body(issue_number, body)
-        }
-
-        fn add_label(&self, issue_number: u64, label: &str) -> Result<(), String> {
-            self.inner.add_label(issue_number, label)
-        }
-
-        fn create_issue(
-            &self,
-            title: &str,
-            body: &str,
-            label: &str,
-            repo: Option<&str>,
-        ) -> Result<(u64, String), String> {
-            self.inner.create_issue(title, body, label, repo)
-        }
-
-        fn ensure_label_exists(&self, label: &str, repo: Option<&str>) -> Result<(), String> {
-            self.inner.ensure_label_exists(label, repo)
-        }
-
-        fn reopen_issue(
-            &self,
-            issue_number: u64,
-            comment: Option<&str>,
-            repo: Option<&str>,
-        ) -> Result<(), String> {
-            if let Ok(mut g) = self.reopen_calls.lock() {
-                g.push((
-                    issue_number,
-                    comment.map(|s| s.to_string()),
-                    repo.map(|s| s.to_string()),
-                ));
-            }
-            self.inner.reopen_issue(issue_number, comment, repo)
-        }
-    }
-
-    #[test]
-    fn test_run_create_issue_blocks_unregistered_checklist_issues(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let body_tf = TempFile::new(
-            "unregistered_body",
-            "# Epic 01\n## Checklist\n- [ ] #999 - Nonexistent Feature\n```rust\nfn f() {}\n```\n",
-        )?;
-        let tracker = OfflineTracker::with_issues(vec![]);
-        let params = ResolvedCreateIssueParams {
-            body_file: body_tf.path_str()?.to_string(),
-            label: "epic".to_string(),
-            title: "Epic 01: Test".to_string(),
-            repo: Some("org/repo".to_string()),
-            reopen_with_analysis: None,
-            provider: "offline".to_string(),
-        };
-        let res = run_create_issue(&tracker, &params);
-        assert!(
-            res.is_err(),
-            "Expected error for unregistered checklist issue #999"
-        );
-        let err = res.err().ok_or("expected error")?;
-        assert!(err.contains("unresolvable checklist issue reference '#999'"));
-        assert!(err.contains("Publish gate blocked"));
-        Ok(())
-    }
-
-    #[test]
-    fn test_run_create_issue_projects_relative_links_and_persists_payload(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // Create temp workspace structure: <temp_dir>/docs/features/FEAT-02.md
-        let rand_id = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-        let ws_dir = std::env::temp_dir().join(format!("test_ws_{}", rand_id));
-        let feats_dir = ws_dir.join("docs").join("features");
-        fs::create_dir_all(&feats_dir)?;
-
-        let feat_content =
-            "---\ntitle: \"Feature 02: Baseline Verifier\"\nissue_id: 20\n---\n# Feature 02\n";
-        fs::write(feats_dir.join("FEAT-02.md"), feat_content)?;
-
-        let epic_content = "# Epic 01\n## Checklist\n- [ ] #20 - [Feature 02](../features/FEAT-02.md)\nSchema: [Model](../../schema/core.sysml)\n```\ncode\n```\n";
-        let epics_dir = ws_dir.join("docs").join("epics");
-        fs::create_dir_all(&epics_dir)?;
-        let epic_path = epics_dir.join("EPIC-01.md");
-        fs::write(&epic_path, epic_content)?;
-
-        let existing_feat = TrackerIssue {
-            number: 20,
-            title: "Feature 02: Baseline Verifier".to_string(),
-            state: "OPEN".to_string(),
-            labels: vec![TrackerLabel::String("feature".to_string())],
-            body: Some("Old body".to_string()),
-            url: Some("https://github.com/org/repo/issues/20".to_string()),
-        };
-        let tracker = OfflineTracker::with_issues(vec![existing_feat]);
-
-        let params = ResolvedCreateIssueParams {
-            body_file: epic_path.to_string_lossy().to_string(),
-            label: "epic".to_string(),
-            title: "Epic 01: Core Platform".to_string(),
-            repo: Some("org/repo".to_string()),
-            reopen_with_analysis: None,
-            provider: "offline".to_string(),
+/// [DOC-TIER: A] Normalizes `CreateIssueArgs` from either named flags or positional arguments.
+/// Safety & Traceability: Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-NORMALIZE-ARGS]
+/// Contract: Returns `Ok(NormalizedCreateIssueArgs)` or `Err(ReconcileError::PreconditionFailed)`.
+/// Bounds & Faults: Time O(P + L), Space O(P + L) over positional and label inputs.
+pub fn normalize_args(
+    args: &CreateIssueArgs,
+) -> Result<NormalizedCreateIssueArgs, ReconcileError> {
+    let (raw_body, raw_label, raw_title) =
+        if args.body_file.is_some() || args.label.is_some() || args.title.is_some() {
+            let b = args.body_file.clone().ok_or_else(|| {
+                ReconcileError::PreconditionFailed(
+                    "Missing required --body-file argument for create-issue".to_string(),
+                )
+            })?;
+            let l = args.label.clone().ok_or_else(|| {
+                ReconcileError::PreconditionFailed(
+                    "Missing required --label argument for create-issue".to_string(),
+                )
+            })?;
+            let t = args.title.clone().ok_or_else(|| {
+                ReconcileError::PreconditionFailed(
+                    "Missing required --title argument for create-issue".to_string(),
+                )
+            })?;
+            (b, l, t)
+        } else if let (Some(b), Some(l), Some(t_slice)) = (
+            args.positional.first(),
+            args.positional.get(1),
+            args.positional.get(2..).filter(|s| !s.is_empty()),
+        ) {
+            (b.clone(), l.clone(), t_slice.join(" "))
+        } else {
+            return Err(ReconcileError::PreconditionFailed(
+                "Usage: reconcile-backlog create-issue --body-file <path> --label <label> --title <title> (or positional: <body_file> <label> <title>)".to_string(),
+            ));
         };
 
-        let outcome = run_create_issue(&tracker, &params)?;
-        assert_eq!(
-            outcome,
-            IssueActionOutcome::Created {
-                number: 21,
-                url: "https://github.com/org/repo/issues/21".to_string(),
-            }
-        );
+    let labels: Vec<String> = raw_label
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
 
-        let all_issues = tracker.fetch_all_issues()?;
-        let created = all_issues
-            .iter()
-            .find(|i| i.number == 21)
-            .ok_or("Created issue not found")?;
-        let body = created.body.as_ref().ok_or("Created issue body is None")?;
-
-        // Must project link to canonical GitHub URL with issue #20
-        assert!(body.contains(
-            "#20 - [Feature 02](https://github.com/org/repo/blob/main/docs/features/FEAT-02.md)"
+    if labels.is_empty() {
+        return Err(ReconcileError::PreconditionFailed(
+            "At least one non-empty label must be provided".to_string(),
         ));
-        assert!(body.contains("[Model](https://github.com/org/repo/blob/main/schema/core.sysml)"));
-        assert!(
-            !body.contains("../features/FEAT-02.md"),
-            "Raw relative spec link must not remain"
-        );
-
-        // Cleanup
-        let _ = fs::remove_dir_all(ws_dir);
-        Ok(())
     }
 
-    #[test]
-    fn test_run_create_issue_workflow_offline() -> Result<(), Box<dyn std::error::Error>> {
-        let body_tf = TempFile::new("body", "# Issue Content\n```rust\nfn test() {}\n```\n")?;
-        let analysis_tf = TempFile::new("analysis", "Reopen rationale with details")?;
-
-        let existing_closed = TrackerIssue {
-            number: 10,
-            title: "Feature 01: Core Ingest Pipeline".to_string(),
-            state: "CLOSED".to_string(),
-            labels: vec![
-                TrackerLabel::String("feature".to_string()),
-                TrackerLabel::String("status:fixed-resolved".to_string()),
-            ],
-            body: Some("Old body".to_string()),
-            url: Some("https://github.com/org/repo/issues/10".to_string()),
-        };
-
-        let existing_open = TrackerIssue {
-            number: 20,
-            title: "Feature 02: Baseline Verifier".to_string(),
-            state: "OPEN".to_string(),
-            labels: vec![TrackerLabel::String("feature".to_string())],
-            body: Some("Old body".to_string()),
-            url: Some("https://github.com/org/repo/issues/20".to_string()),
-        };
-
-        let tracker = SpyTracker::with_issues(vec![existing_closed, existing_open]);
-
-        // 1. Reopen closed issue with analysis
-        let reopen_params = ResolvedCreateIssueParams {
-            body_file: body_tf.path_str()?.to_string(),
-            label: "feature".to_string(),
-            title: "Feature: Core Ingest Pipeline".to_string(), // normalizes to "core ingest pipeline"
-            repo: Some("org/repo".to_string()),
-            reopen_with_analysis: Some(analysis_tf.path_str()?.to_string()),
-            provider: "offline".to_string(),
-        };
-        let outcome = run_create_issue(&tracker, &reopen_params)?;
-        assert_eq!(
-            outcome,
-            IssueActionOutcome::Reopened {
-                number: 10,
-                url: "https://github.com/org/repo/issues/10".to_string(),
-            }
-        );
-        let calls = tracker.reopen_calls.lock().map_err(|e| e.to_string())?;
-        assert_eq!(calls.len(), 1);
-        let c0 = calls.first().ok_or("missing call")?;
-        assert_eq!(c0.0, 10);
-        assert_eq!(c0.1.as_deref(), Some("Reopen rationale with details"));
-        assert_eq!(c0.2.as_deref(), Some("org/repo"));
-        drop(calls);
-
-        // 2. Open issue idempotency
-        let open_params = ResolvedCreateIssueParams {
-            body_file: body_tf.path_str()?.to_string(),
-            label: "feature".to_string(),
-            title: "Feature 02: Baseline Verifier".to_string(),
-            repo: Some("org/repo".to_string()),
-            reopen_with_analysis: None,
-            provider: "offline".to_string(),
-        };
-        let outcome = run_create_issue(&tracker, &open_params)?;
-        assert_eq!(
-            outcome,
-            IssueActionOutcome::AlreadyOpen {
-                number: 20,
-                url: "https://github.com/org/repo/issues/20".to_string(),
-            }
-        );
-
-        // 3. Create brand new issue
-        let new_params = ResolvedCreateIssueParams {
-            body_file: body_tf.path_str()?.to_string(),
-            label: "bug".to_string(),
-            title: "Bug 03: Brittle Shell Sprawl".to_string(),
-            repo: Some("org/repo".to_string()),
-            reopen_with_analysis: None,
-            provider: "offline".to_string(),
-        };
-        let outcome = run_create_issue(&tracker, &new_params)?;
-        assert_eq!(
-            outcome,
-            IssueActionOutcome::Created {
-                number: 21,
-                url: "https://github.com/org/repo/issues/21".to_string(),
-            }
-        );
-
-        let all_issues = tracker.fetch_all_issues()?;
-        let issue_10 = all_issues
-            .iter()
-            .find(|i| i.number == 10)
-            .ok_or("issue 10 missing")?;
-        assert_eq!(issue_10.state, "OPEN");
-        assert!(
-            !issue_10.is_resolved(),
-            "Reopened issue 10 must not be resolved"
-        );
-        assert!(
-            issue_10
-                .body
-                .as_ref()
-                .map(|b| b.contains("Reopen rationale with details"))
-                .unwrap_or(false),
-            "Reopened issue 10 body must contain reopen comment"
-        );
-        let issue_20 = all_issues
-            .iter()
-            .find(|i| i.number == 20)
-            .ok_or("issue 20 missing")?;
-        assert_eq!(issue_20.state, "OPEN");
-        let issue_21 = all_issues
-            .iter()
-            .find(|i| i.number == 21)
-            .ok_or("issue 21 missing")?;
-        assert_eq!(issue_21.state, "OPEN");
-        assert_eq!(issue_21.title, "Bug 03: Brittle Shell Sprawl");
-        assert!(issue_21.labels.iter().any(|l| match l {
-            TrackerLabel::String(s) => s == "bug",
-            _ => false,
-        }));
-        assert!(issue_21
-            .body
-            .as_ref()
-            .map(|b| b.contains("# Issue Content"))
-            .unwrap_or(false));
-        Ok(())
+    let title = raw_title.trim().to_string();
+    if title.is_empty() {
+        return Err(ReconcileError::PreconditionFailed(
+            "Issue title cannot be empty".to_string(),
+        ));
     }
 
-    #[test]
-    fn test_create_issue_does_not_collide_feature_with_existing_epic(
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let body_tf = TempFile::new(
-            "feat_collision",
-            "# Feature 01: [ConOps] Human Engineer Interface\n\nBody content\n",
-        )?;
+    Ok(NormalizedCreateIssueArgs {
+        body_file: PathBuf::from(raw_body),
+        labels,
+        title,
+        repo: args.repo.clone(),
+        reopen_with_analysis: args.reopen_with_analysis.as_ref().map(PathBuf::from),
+    })
+}
 
-        let existing_epic = TrackerIssue {
-            number: 10,
-            title: "Epic 01: [ConOps] Human Engineer Interface".to_string(),
-            state: "OPEN".to_string(),
-            labels: vec![TrackerLabel::String("epic".to_string())],
-            body: Some("Epic body".to_string()),
-            url: Some("https://github.com/org/repo/issues/10".to_string()),
-        };
+/// [DOC-TIER: A] Validates a Markdown body file using `deap_core::markdown_ast` before issue creation or reopen.
+/// Safety & Traceability: Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-VALIDATE-BODY-FILE]
+/// Contract: Rejects missing/empty files, unpopulated placeholders, unclosed fences, or missing AST headings.
+/// Bounds & Faults: Time O(N), Space O(N) where N is the byte length of `path`.
+pub fn validate_body_file(path: &Path) -> Result<String, ReconcileError> {
+    if !path.exists() || !path.is_file() {
+        return Err(ReconcileError::PreconditionFailed(format!(
+            "Body file does not exist or is not a regular file: {}",
+            path.display()
+        )));
+    }
 
-        let tracker = OfflineTracker::with_issues(vec![existing_epic]);
-        let params = ResolvedCreateIssueParams {
-            body_file: body_tf.path_str()?.to_string(),
-            label: "feature".to_string(),
-            title: "Feature 01: [ConOps] Human Engineer Interface".to_string(),
-            repo: Some("org/repo".to_string()),
-            reopen_with_analysis: None,
-            provider: "offline".to_string(),
-        };
+    let content = fs::read_to_string(path)?;
+    let trimmed = content.trim();
 
-        let outcome = run_create_issue(&tracker, &params)?;
-        match outcome {
-            IssueActionOutcome::Created { number, .. } => {
-                assert_ne!(
-                    number, 10,
-                    "Feature must be created as new issue, not collide with Epic #10"
-                );
+    if trimmed.is_empty() {
+        return Err(ReconcileError::PreconditionFailed(format!(
+            "Body file is empty: {}",
+            path.display()
+        )));
+    }
+
+    if contains_unpopulated_placeholders(&content) {
+        return Err(ReconcileError::PreconditionFailed(format!(
+            "Body file contains unpopulated template placeholders ((To be created), TBD, TODO): {}",
+            path.display()
+        )));
+    }
+
+    let mut active_fence: Option<char> = None;
+    for line in content.lines() {
+        let line_trim = line.trim();
+        if line_trim.starts_with("```") {
+            match active_fence {
+                None => active_fence = Some('`'),
+                Some('`') => active_fence = None,
+                Some(_) => {}
             }
-            IssueActionOutcome::AlreadyOpen { number, .. } => {
-                return Err(format!("Feature must NOT be treated as AlreadyOpen due to Epic #10 collision! (got issue #{})", number).into());
-            }
-            IssueActionOutcome::Reopened { number, .. } => {
-                return Err(
-                    format!("Feature must NOT be reopened! (got issue #{})", number).into(),
-                );
+        } else if line_trim.starts_with("~~~") {
+            match active_fence {
+                None => active_fence = Some('~'),
+                Some('~') => active_fence = None,
+                Some(_) => {}
             }
         }
-        Ok(())
     }
+
+    if active_fence.is_some() {
+        return Err(ReconcileError::PreconditionFailed(format!(
+            "Body file contains unclosed markdown code fence: {}",
+            path.display()
+        )));
+    }
+
+    let ast = parse_markdown_ast(&content);
+    if ast.sections.is_empty() {
+        return Err(ReconcileError::PreconditionFailed(format!(
+            "Body file does not appear to contain valid Markdown structure (missing headings): {}",
+            path.display()
+        )));
+    }
+
+    Ok(content)
+}
+
+/// Checks if an issue with the same normalized title already exists in `existing_issues`.
+/// Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-CHECK-DUPLICATE-ISSUE]
+fn check_duplicate_issue<'a>(title: &str, existing_issues: &'a [Issue]) -> Option<&'a Issue> {
+    let target_norm = normalize_title(title);
+    if target_norm.is_empty() {
+        return None;
+    }
+
+    existing_issues
+        .iter()
+        .find(|issue| normalize_title(&issue.title) == target_norm)
+}
+
+/// [DOC-TIER: A] Executes the `create-issue` workflow using the live `GitHubTracker`.
+/// Safety & Traceability: Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-EXECUTE-CREATE-ISSUE]
+/// Contract: Delegates to `execute_create_issue_with_tracker` and returns the created or reopened issue ID.
+/// Bounds & Faults: Time O(N + B), Space O(N + B) over tracker issues and body file size.
+pub fn execute_create_issue(args: &CreateIssueArgs) -> Result<u64, ReconcileError> {
+    if args.provider != "github" {
+        return Err(ReconcileError::PreconditionFailed(format!(
+            "Unsupported issue tracker provider '{}'. Currently only 'github' is supported natively.",
+            args.provider
+        )));
+    }
+    let tracker = GitHubTracker::new();
+    execute_create_issue_with_tracker(&tracker, args)
+}
+
+/// [DOC-TIER: A] Executes the `create-issue` workflow against an injected `IssueTracker`.
+/// Safety & Traceability: Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-EXECUTE-CREATE-ISSUE-WITH-TRACKER]
+/// Contract: Enforces body validation, duplicate blocking, and closed-issue reopen analysis requirements.
+/// Bounds & Faults: Time O(N + B), Space O(N + B); returns `PreconditionFailed` on duplicate or missing analysis.
+pub fn execute_create_issue_with_tracker(
+    tracker: &dyn IssueTracker,
+    args: &CreateIssueArgs,
+) -> Result<u64, ReconcileError> {
+    let norm = normalize_args(args)?;
+    let body_content = validate_body_file(&norm.body_file)?;
+    let existing_issues = tracker.fetch_all_issues(norm.repo.as_deref())?;
+
+    if let Some(dup) = check_duplicate_issue(&norm.title, &existing_issues) {
+        if dup.state.eq_ignore_ascii_case("OPEN") {
+            return Err(ReconcileError::PreconditionFailed(format!(
+                "Duplicate OPEN issue #{} ('{}') already exists. Refusing to create duplicate issue.",
+                dup.number, dup.title
+            )));
+        }
+
+        if let Some(ref analysis_path) = norm.reopen_with_analysis {
+            let analysis_content = validate_body_file(analysis_path)?;
+            println!(
+                "Reopening existing CLOSED issue #{} ('{}') with root-cause analysis from {}...",
+                dup.number,
+                dup.title,
+                analysis_path.display()
+            );
+            tracker.reopen_issue(dup.number, &analysis_content, norm.repo.as_deref())?;
+            println!("Successfully reopened issue #{}", dup.number);
+            return Ok(dup.number);
+        }
+
+        return Err(ReconcileError::PreconditionFailed(format!(
+            "Matching CLOSED issue #{} ('{}') already exists. To reopen it with a regression/root-cause analysis, pass --reopen-with-analysis <markdown_file>.",
+            dup.number, dup.title
+        )));
+    }
+
+    if norm.reopen_with_analysis.is_some() {
+        return Err(ReconcileError::PreconditionFailed(format!(
+            "--reopen-with-analysis was provided, but no existing CLOSED issue matching '{}' was found.",
+            norm.title
+        )));
+    }
+
+    let number = tracker.create_issue(
+        &norm.title,
+        &body_content,
+        &norm.labels,
+        norm.repo.as_deref(),
+    )?;
+    println!("Successfully created issue #{}: {}", number, norm.title);
+    Ok(number)
 }

@@ -2,7 +2,7 @@
 //! Unit tests for `dod_gates` covering ratchet overflow, SLOC, fn bounds, lexer bans, and literal portability.
 //! Realises: [REQ-0601], [REQ-0608]
 
-use super::dod_gates::{check_dod_gates, count_executable_sloc};
+use super::dod_gates::{check_dod_gates, check_zero_legacy_ratchet, count_executable_sloc};
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -49,20 +49,25 @@ fn workspace_root() -> Result<PathBuf, String> {
         .ok_or_else(|| String::from("unable to resolve workspace root"))
 }
 
-/// Verifies RED/GREEN `+1` line ratchet ceiling enforcement on ratcheted paths (`[REQ-0601]`, `[REQ-0608]`).
+/// Verifies RED/GREEN `+1` line zero-ratchet ceiling enforcement (`380` vs `381` lines) (`[REQ-0601]`, `[REQ-0608]`).
 #[test]
 fn ratchet_ceiling_exact_passes_and_plus_one_fails() -> Result<(), String> {
     let ws = ScopedTempDir::new("ratchet")?;
     let rel = "crates/compile-sysml/src/stpa/safety_suite/tokens.rs";
-    let exact_175 = "// line\n".repeat(175);
-    ws.write_rel(rel, &exact_175)?;
-    check_dod_gates(&ws.path).map_err(|e| format!("expected 175 lines GREEN, got {e:?}"))?;
+    let exact_380 = "// line\n".repeat(380);
+    ws.write_rel(rel, &exact_380)?;
+    check_dod_gates(&ws.path).map_err(|e| format!("expected 380 lines GREEN, got {e:?}"))?;
+    if !check_zero_legacy_ratchet(&ws.path).is_empty() {
+        return Err(String::from("expected 380 lines to pass check_zero_legacy_ratchet"));
+    }
 
-    let overflow_176 = "// line\n".repeat(176);
-    ws.write_rel(rel, &overflow_176)?;
-    match check_dod_gates(&ws.path) {
-        Err(errs) if errs.iter().any(|m| m.contains("176") && m.contains("175")) => Ok(()),
-        other => Err(format!("expected +1 ratchet overflow error, got {other:?}")),
+    let overflow_381 = "// line\n".repeat(381);
+    ws.write_rel(rel, &overflow_381)?;
+    let errs = check_zero_legacy_ratchet(&ws.path);
+    if errs.iter().any(|m| m.contains("381") && m.contains("380")) {
+        Ok(())
+    } else {
+        Err(format!("expected +1 zero-ratchet overflow error, got {errs:?}"))
     }
 }
 

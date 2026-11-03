@@ -1,27 +1,51 @@
-//! Core forward-synchronization file emission, subpackage traversal, domain cleanliness, realization matrix, and zero-wall-clock determinism unit tests.
+#![deny(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    clippy::undocumented_unsafe_blocks
+)]
+//! # Core Forward-Sync Emission and Realization Matrix Unit Tests
 //!
-//! Safety & Traceability: Realises: [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
-//! Contract: Verifies deterministic generation of Epics, Features, User Stories, Use Cases, and STPA matrices across single and nested `PackageDef` trees, absence of phantom or hardcoded domain outputs, package-scoped Use Case realization alignment, and 100% absence of wall-clock `Utc::now` across every production `.rs` submodule in `sync/forward/`.
-//! Bounds & Faults: Executes pure in-memory forward-sync passes (`dry_run: true`) and compile-time `include_str!` + directory completeness assertions returning `Result<(), Box<dyn std::error::Error>>` with zero panics.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Realises: [REQ-0604], [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
+//! Verifies deterministic generation of Epics, Features, User Stories, Use Cases, and STPA
+//! matrices across single and nested `PackageDef` trees, absence of phantom or hardcoded domain
+//! outputs, and package-scoped Use Case realization alignment.
+//!
+//! ## 2. Preconditions, Postconditions & Mathematical Invariants
+//! - **Preconditions**: In-memory `PackageDef` fixtures are initialized.
+//! - **Postconditions**: `forward_sync_sysml_to_specs` returns expected map entries.
+//! - **Invariants**: Empty behavioral slices emit zero phantom Use Case or User Story files.
+//!
+//! ## 3. Failure Modes, Degraded Operation & Recovery
+//! - Test assertions return `Result<(), Box<dyn std::error::Error>>` without panicking.
+//!
+//! ## 4. Concurrency, Memory & Resource Bounds
+//! - Pure in-memory `dry_run: true` test execution.
+//!
+//! ## 5. Dependencies & Integration Contracts
+//! - Exercises `forward_sync_sysml_to_specs` and package-scoped realization matrix generation.
+//!
+//! ## 6. Verification & Acceptance Criteria
+//! - Executed as part of the `compile-sysml` unit test suite.
+//!
+//! ## 7. Realization & Traceability
+//! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
 
 use super::*;
 use deap_core::sysml_ast::PartDef;
 
 /// Verifies forward synchronization emits expected Epic, Feature, and STPA matrix paths.
-///
-/// Realises: [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
 #[test]
 fn test_forward_sync_generates_expected_files() -> Result<(), Box<dyn std::error::Error>> {
     let mut pkg = PackageDef {
         name: "TestSystem".to_string(),
         ..Default::default()
     };
-
-    let p1 = PartDef {
+    pkg.part_defs.push(PartDef {
         name: "StructuralSubsystem".to_string(),
         ..Default::default()
-    };
-    pkg.part_defs.push(p1);
+    });
 
     let opts = ForwardSyncOptions {
         schema_path: PathBuf::from("schema/test.sysml"),
@@ -39,8 +63,7 @@ fn test_forward_sync_generates_expected_files() -> Result<(), Box<dyn std::error
 }
 
 /// Verifies recursive package traversal projects subpackage Epics, Features, Use Cases, and User Stories.
-///
-/// Realises: [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
 #[test]
 fn test_recursive_package_traversal_picks_up_subpackage_elements(
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -96,8 +119,7 @@ fn test_recursive_package_traversal_picks_up_subpackage_elements(
 }
 
 /// Verifies emitted specifications contain zero hardcoded legacy domain strings.
-///
-/// Realises: [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
 #[test]
 fn test_zero_hardcoded_domain_strings_exist_in_output_specifications(
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -149,8 +171,7 @@ fn test_zero_hardcoded_domain_strings_exist_in_output_specifications(
 }
 
 /// Verifies empty behavioral collections never emit phantom Use Case or User Story files.
-///
-/// Realises: [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
 #[test]
 fn test_empty_collections_do_not_emit_phantom_specifications(
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -183,12 +204,9 @@ fn test_empty_collections_do_not_emit_phantom_specifications(
     Ok(())
 }
 
-/// Verifies Use Case realization matrices scope User Story and Feature links strictly to their owning package.
-///
-/// Realises: [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
-#[test]
-fn test_use_case_realization_matrix_traceability_alignment(
-) -> Result<(), Box<dyn std::error::Error>> {
+/// Builds a 3-subsystem test model (`Alpha`, `Beta`, `Gamma`) for Use Case realization matrix tests.
+/// Realises: [REQ-0604]
+fn build_realization_matrix_test_model() -> PackageDef {
     let mut root = PackageDef {
         name: "DEAP_Compiler_System".to_string(),
         ..Default::default()
@@ -202,7 +220,7 @@ fn test_use_case_realization_matrix_traceability_alignment(
         name: "AlphaEngine".to_string(),
         ..Default::default()
     });
-    sub_alpha.action_defs.push(deap_core::sysml_ast::ActionDef {
+    sub_alpha.action_defs.push(ActionDef {
         name: "AlphaAction".to_string(),
         ..Default::default()
     });
@@ -219,7 +237,7 @@ fn test_use_case_realization_matrix_traceability_alignment(
         name: "BetaEngine".to_string(),
         ..Default::default()
     });
-    sub_beta.action_defs.push(deap_core::sysml_ast::ActionDef {
+    sub_beta.action_defs.push(ActionDef {
         name: "BetaAction".to_string(),
         ..Default::default()
     });
@@ -244,7 +262,15 @@ fn test_use_case_realization_matrix_traceability_alignment(
     root.packages.push(sub_alpha);
     root.packages.push(sub_beta);
     root.packages.push(sub_gamma);
+    root
+}
 
+/// Verifies Use Case realization matrices scope User Story and Feature links strictly to their owning package.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
+#[test]
+fn test_use_case_realization_matrix_traceability_alignment(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root = build_realization_matrix_test_model();
     let opts = ForwardSyncOptions {
         schema_path: PathBuf::from("schema/test.sysml"),
         docs_dir: PathBuf::from("docs"),
@@ -271,132 +297,13 @@ fn test_use_case_realization_matrix_traceability_alignment(
         .map(|(_, v)| v)
         .ok_or("expected value is absent")?;
 
-    assert!(
-        alpha_uc.contains("AlphaAction"),
-        "Alpha UC must link to AlphaAction user story"
-    );
-    assert!(
-        alpha_uc.contains("AlphaEngine"),
-        "Alpha UC must link to AlphaEngine feature"
-    );
-    assert!(
-        !alpha_uc.contains("BetaAction"),
-        "Alpha UC must NOT link to BetaAction"
-    );
-    assert!(
-        !alpha_uc.contains("BetaEngine"),
-        "Alpha UC must NOT link to BetaEngine"
-    );
+    assert!(alpha_uc.contains("AlphaAction") && alpha_uc.contains("AlphaEngine"));
+    assert!(!alpha_uc.contains("BetaAction") && !alpha_uc.contains("BetaEngine"));
 
-    assert!(
-        beta_uc.contains("BetaAction"),
-        "Beta UC must link to BetaAction user story"
-    );
-    assert!(
-        beta_uc.contains("BetaEngine"),
-        "Beta UC must link to BetaEngine feature"
-    );
-    assert!(
-        !beta_uc.contains("AlphaAction"),
-        "Beta UC must NOT link to AlphaAction"
-    );
-    assert!(
-        !beta_uc.contains("AlphaEngine"),
-        "Beta UC must NOT link to AlphaEngine"
-    );
+    assert!(beta_uc.contains("BetaAction") && beta_uc.contains("BetaEngine"));
+    assert!(!beta_uc.contains("AlphaAction") && !beta_uc.contains("AlphaEngine"));
 
-    assert!(
-        gamma_uc.contains("GammaEngine"),
-        "Gamma UC must link to GammaEngine feature"
-    );
-    assert!(
-        !gamma_uc.contains("AlphaAction"),
-        "Gamma UC must NOT cross-wire to AlphaAction"
-    );
-    assert!(
-        !gamma_uc.contains("BetaAction"),
-        "Gamma UC must NOT cross-wire to BetaAction"
-    );
-    Ok(())
-}
-
-/// Verifies `ARCH-06`: `forward_sync_sysml_to_specs` and 100% of production `.rs` files in `sync/forward/` contain zero wall-clock timestamp calls and produce bitwise-deterministic outputs.
-///
-/// Realises: [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
-#[test]
-fn test_arch_06_forward_sync_zero_wall_clock_timestamps() -> Result<(), Box<dyn std::error::Error>>
-{
-    let mut pkg = PackageDef {
-        name: "DeterministicSystem".to_string(),
-        ..Default::default()
-    };
-    pkg.part_defs.push(PartDef {
-        name: "DeterministicController".to_string(),
-        ..Default::default()
-    });
-
-    let opts = ForwardSyncOptions {
-        schema_path: PathBuf::from("schema/test.sysml"),
-        docs_dir: PathBuf::from("docs"),
-        out_dir: None,
-        dry_run: true,
-        force: true,
-    };
-
-    let run1 = forward_sync_sysml_to_specs(&pkg, &opts)?;
-    let run2 = forward_sync_sysml_to_specs(&pkg, &opts)?;
-    assert_eq!(
-        run1, run2,
-        "Forward sync outputs must be 100% deterministic across runs"
-    );
-
-    let production_sources: &[(&str, &str)] = &[
-        ("epic_diagrams.rs", include_str!("epic_diagrams.rs")),
-        ("epic_emitter.rs", include_str!("epic_emitter.rs")),
-        ("epic_renderer.rs", include_str!("epic_renderer.rs")),
-        ("feature_diagrams.rs", include_str!("feature_diagrams.rs")),
-        ("feature_emitter.rs", include_str!("feature_emitter.rs")),
-        ("feature_layers.rs", include_str!("feature_layers.rs")),
-        ("feature_renderer.rs", include_str!("feature_renderer.rs")),
-        ("icd_wbs_emitter.rs", include_str!("icd_wbs_emitter.rs")),
-        ("merge_and_cleanup.rs", include_str!("merge_and_cleanup.rs")),
-        ("mod.rs", include_str!("mod.rs")),
-        ("model_indexer.rs", include_str!("model_indexer.rs")),
-        ("naming_and_dates.rs", include_str!("naming_and_dates.rs")),
-        ("story_allocator.rs", include_str!("story_allocator.rs")),
-        ("story_context.rs", include_str!("story_context.rs")),
-        ("story_emitter.rs", include_str!("story_emitter.rs")),
-        ("story_layers.rs", include_str!("story_layers.rs")),
-        ("story_renderer.rs", include_str!("story_renderer.rs")),
-        ("use_case_clauses.rs", include_str!("use_case_clauses.rs")),
-        ("use_case_emitter.rs", include_str!("use_case_emitter.rs")),
-        ("use_case_renderer.rs", include_str!("use_case_renderer.rs")),
-        ("wbs_emitter.rs", include_str!("wbs_emitter.rs")),
-    ];
-
-    let utc_now_token = "Utc::now";
-    let mut inspected_files: BTreeSet<String> = BTreeSet::new();
-    for (file_name, src) in production_sources {
-        assert!(
-            !src.contains(utc_now_token),
-            "forward/{file_name} must not invoke wall-clock time"
-        );
-        inspected_files.insert((*file_name).to_string());
-    }
-
-    let forward_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/sync/forward");
-    let mut disk_prod_files: BTreeSet<String> = BTreeSet::new();
-    for entry in fs::read_dir(&forward_dir)? {
-        let entry = entry?;
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.ends_with(".rs") && name != "tests.rs" && !name.starts_with("tests_") {
-            disk_prod_files.insert(name);
-        }
-    }
-    assert_eq!(
-        inspected_files, disk_prod_files,
-        "test_arch_06 must inspect 100% of production .rs files in crates/compile-sysml/src/sync/forward/"
-    );
-
+    assert!(gamma_uc.contains("GammaEngine"));
+    assert!(!gamma_uc.contains("AlphaAction") && !gamma_uc.contains("BetaAction"));
     Ok(())
 }

@@ -180,44 +180,36 @@ impl<'a> SysmlParser<'a> {
         }
     }
 
-    /// Parses a directional or conjugated `port` / `port def` declaration and its inner attributes and item flows into a `PortDef`.
+    /// Consumes a leading `in`, `out`, or `inout` direction keyword if present at the cursor.
     /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-PORT-DECL]
-    pub(crate) fn parse_port_decl(&mut self, doc: Option<String>) -> Result<PortDef, ParseError> {
-        let mut direction = "inout".to_string();
+    fn take_direction_keyword(&mut self) -> Option<&'static str> {
         for (tok, dir) in [
             (TokenKind::In, "in"),
             (TokenKind::Out, "out"),
             (TokenKind::Inout, "inout"),
         ] {
-            if self.check(&tok) {
-                self.advance();
-                direction = dir.to_string();
-                break;
+            if self.eat(&tok) {
+                return Some(dir);
             }
         }
+        None
+    }
+
+    /// Parses a directional or conjugated `port` / `port def` declaration and its inner attributes and item flows into a `PortDef`.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-PORT-DECL]
+    pub(crate) fn parse_port_decl(&mut self, doc: Option<String>) -> Result<PortDef, ParseError> {
+        let mut direction = self.take_direction_keyword().unwrap_or("inout").to_string();
         self.expect(&TokenKind::Port)?;
-        if self.check(&TokenKind::Def) {
-            self.advance();
-        }
+        self.eat(&TokenKind::Def);
         if direction == "inout" {
-            for (tok, dir) in [
-                (TokenKind::In, "in"),
-                (TokenKind::Out, "out"),
-                (TokenKind::Inout, "inout"),
-            ] {
-                if self.check(&tok) {
-                    self.advance();
-                    direction = dir.to_string();
-                    break;
-                }
+            if let Some(dir) = self.take_direction_keyword() {
+                direction = dir.to_string();
             }
         }
         let name = self.expect_ident()?;
         let mut is_conjugated = false;
-        let type_name = if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
-            self.advance();
-            if self.check(&TokenKind::Tilde) {
-                self.advance();
+        let type_name = if self.eat(&TokenKind::Colon) || self.eat(&TokenKind::ColonGt) {
+            if self.eat(&TokenKind::Tilde) {
                 is_conjugated = true;
             }
             self.parse_type_expr()?
@@ -233,195 +225,95 @@ impl<'a> SysmlParser<'a> {
             ..Default::default()
         };
         if self.check(&TokenKind::OpenBrace) {
-            self.advance();
-            while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
-                self.skip_trivia();
-                let mut f_doc = self.take_inner_doc_comment();
-                self.skip_trivia();
-                while let Some(next_doc) = self.take_inner_doc_comment() {
-                    if port.doc.is_none() {
-                        port.doc = f_doc;
-                    }
-                    f_doc = Some(next_doc);
-                    self.skip_trivia();
-                }
-                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
-                    if port.doc.is_none() {
-                        port.doc = f_doc;
-                    }
-                    break;
-                }
-                if self.check(&TokenKind::Attribute) {
-                    let attr = self.parse_attribute_decl(f_doc)?;
-                    let clean_val = attr
-                        .default_value
-                        .unwrap_or_default()
-                        .trim()
-                        .trim_matches('"')
-                        .to_string();
-                    if attr.name == "protocol_family" {
-                        port.protocol_family = clean_val;
-                    } else if attr.name == "port_category" {
-                        port.port_category = clean_val;
-                    } else {
-                        port.electrical_attributes.insert(attr.name, clean_val);
-                    }
-                } else if self.check(&TokenKind::Flow)
-                    || self.check(&TokenKind::Item)
-                    || self.check(&TokenKind::In)
-                    || self.check(&TokenKind::Out)
-                    || self.check(&TokenKind::Inout)
-                {
-                    let mut flow_dir = "out".to_string();
-                    if (self.check(&TokenKind::Flow) || self.check(&TokenKind::Item))
-                        && !matches!(
-                            self.tokens.get(self.pos.saturating_add(1)).map(|t| &t.kind),
-                            Some(TokenKind::Colon | TokenKind::ColonGt | TokenKind::Semi)
-                        )
-                    {
-                        self.advance();
-                    }
-                    for (tok, dir) in [
-                        (TokenKind::In, "in"),
-                        (TokenKind::Out, "out"),
-                        (TokenKind::Inout, "inout"),
-                    ] {
-                        if self.check(&tok) {
-                            self.advance();
-                            flow_dir = dir.to_string();
-                            break;
-                        }
-                    }
-                    while (self.check(&TokenKind::Flow) || self.check(&TokenKind::Item))
-                        && !matches!(
-                            self.tokens.get(self.pos.saturating_add(1)).map(|t| &t.kind),
-                            Some(TokenKind::Colon | TokenKind::ColonGt | TokenKind::Semi)
-                        )
-                    {
-                        self.advance();
-                    }
-                    let flow_name = self.expect_ident()?;
-                    let flow_type =
-                        if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
-                            self.advance();
-                            self.parse_type_expr()?
-                        } else {
-                            "Item".to_string()
-                        };
-                    self.expect_semi()?;
-                    port.item_flows.push(FlowDef {
-                        name: flow_name,
-                        direction: flow_dir,
-                        item_type: flow_type,
-                        doc: f_doc,
-                        ..Default::default()
-                    });
-                } else {
-                    let tok = self.peek();
-                    return Err(ParseError {
-                        message: format!(
-                            "Unexpected token '{:?}' in port declaration body",
-                            tok.kind
-                        ),
-                        span: tok.span,
-                    });
-                }
-            }
-            self.expect(&TokenKind::CloseBrace)?;
+            self.parse_port_body(&mut port)?;
         } else {
             self.expect_semi()?;
         }
         Ok(port)
     }
 
-    /// Parses an `attribute` or `attribute def` declaration with optional type expression and default value into an `AttributeDef`.
-    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-ATTRIBUTE-DECL]
-    pub(crate) fn parse_attribute_decl(
-        &mut self,
-        doc: Option<String>,
-    ) -> Result<AttributeDef, ParseError> {
-        self.expect(&TokenKind::Attribute)?;
-        if self.check(&TokenKind::Def) {
-            self.advance();
+    /// Parses the braced body of a `port` or `port def` declaration into `port`.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-PORT-DECL]
+    fn parse_port_body(&mut self, port: &mut PortDef) -> Result<(), ParseError> {
+        self.expect(&TokenKind::OpenBrace)?;
+        while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
+            self.skip_trivia();
+            let mut f_doc = self.take_inner_doc_comment();
+            self.skip_trivia();
+            while let Some(next_doc) = self.take_inner_doc_comment() {
+                if port.doc.is_none() {
+                    port.doc = f_doc;
+                }
+                f_doc = Some(next_doc);
+                self.skip_trivia();
+            }
+            if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
+                if port.doc.is_none() {
+                    port.doc = f_doc;
+                }
+                break;
+            }
+            if self.check(&TokenKind::Attribute) {
+                let attr = self.parse_attribute_decl(f_doc)?;
+                let clean_val = attr
+                    .default_value
+                    .unwrap_or_default()
+                    .trim()
+                    .trim_matches('"')
+                    .to_string();
+                if attr.name == "protocol_family" {
+                    port.protocol_family = clean_val;
+                } else if attr.name == "port_category" {
+                    port.port_category = clean_val;
+                } else {
+                    port.electrical_attributes.insert(attr.name, clean_val);
+                }
+            } else if matches!(
+                self.peek_kind(),
+                TokenKind::Flow | TokenKind::Item | TokenKind::In | TokenKind::Out | TokenKind::Inout
+            ) {
+                port.item_flows.push(self.parse_port_flow_member(f_doc)?);
+            } else {
+                let tok = self.peek();
+                return Err(ParseError {
+                    message: format!("Unexpected token '{:?}' in port declaration body", tok.kind),
+                    span: tok.span,
+                });
+            }
         }
-
-        let name = self.expect_ident()?;
-        let mut type_name = "String".to_string();
-        let mut default_value = None;
-
-        if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
-            self.advance();
-            type_name = self.parse_type_expr()?;
-        }
-
-        if self.check(&TokenKind::Eq) || self.check(&TokenKind::ColonEq) {
-            self.advance();
-            default_value = Some(self.read_until_semi());
-        } else {
-            self.expect_semi()?;
-        }
-
-        Ok(AttributeDef {
-            name,
-            type_name,
-            default_value,
-            doc,
-        })
+        self.expect(&TokenKind::CloseBrace)?;
+        Ok(())
     }
 
-    /// Parses an `item` or `item def` payload declaration and its inner `attribute` members into an `ItemDef`.
-    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-ITEM-DECL]
-    pub(crate) fn parse_item_decl(&mut self, doc: Option<String>) -> Result<ItemDef, ParseError> {
-        self.expect(&TokenKind::Item)?;
-        if self.check(&TokenKind::Def) {
+    /// Parses a single `flow` / `item` member statement inside a `port` declaration body.
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-PORT-DECL]
+    fn parse_port_flow_member(&mut self, f_doc: Option<String>) -> Result<FlowDef, ParseError> {
+        let next_is_sep = |s: &Self| {
+            matches!(
+                s.tokens.get(s.pos.saturating_add(1)).map(|t| &t.kind),
+                Some(TokenKind::Colon | TokenKind::ColonGt | TokenKind::Semi)
+            )
+        };
+        if (self.check(&TokenKind::Flow) || self.check(&TokenKind::Item)) && !next_is_sep(self) {
             self.advance();
         }
-
-        let name = self.expect_ident()?;
-        let mut item_doc = doc;
-        let mut attributes = Vec::new();
-
-        if self.check(&TokenKind::OpenBrace) {
+        let flow_dir = self.take_direction_keyword().unwrap_or("out").to_string();
+        while (self.check(&TokenKind::Flow) || self.check(&TokenKind::Item)) && !next_is_sep(self) {
             self.advance();
-            while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
-                self.skip_trivia();
-                let mut a_doc = self.take_inner_doc_comment();
-                self.skip_trivia();
-                while let Some(next_doc) = self.take_inner_doc_comment() {
-                    if item_doc.is_none() {
-                        item_doc = a_doc;
-                    }
-                    a_doc = Some(next_doc);
-                    self.skip_trivia();
-                }
-                if self.check(&TokenKind::CloseBrace) || self.is_at_end() {
-                    if item_doc.is_none() {
-                        item_doc = a_doc;
-                    }
-                    break;
-                }
-                if self.check(&TokenKind::Attribute) {
-                    attributes.push(self.parse_attribute_decl(a_doc)?);
-                } else {
-                    let tok = self.peek();
-                    return Err(ParseError {
-                        message: format!(
-                            "Unexpected token '{:?}' in item declaration body",
-                            tok.kind
-                        ),
-                        span: tok.span,
-                    });
-                }
-            }
-            self.expect(&TokenKind::CloseBrace)?;
+        }
+        let flow_name = self.expect_ident()?;
+        let flow_type = if self.eat(&TokenKind::Colon) || self.eat(&TokenKind::ColonGt) {
+            self.parse_type_expr()?
         } else {
-            self.expect_semi()?;
-        }
-
-        Ok(ItemDef {
-            name,
-            doc: item_doc,
-            attributes,
+            "Item".to_string()
+        };
+        self.expect_semi()?;
+        Ok(FlowDef {
+            name: flow_name,
+            direction: flow_dir,
+            item_type: flow_type,
+            doc: f_doc,
+            ..Default::default()
         })
     }
 }

@@ -164,9 +164,6 @@ pub fn parse_markdown_ast(source: &str) -> ParsedMarkdownAst {
 }
 
 /// Formats Markdown source into canonical `CommonMark` text using `pulldown-cmark-to-cmark`.
-///
-/// # Errors
-/// Returns an error string if the underlying `CommonMark` serializer fails.
 /// Realises: [REQ-0401]
 pub fn format_markdown_cmark(source: &str) -> Result<String, String> {
     let options = Options::all();

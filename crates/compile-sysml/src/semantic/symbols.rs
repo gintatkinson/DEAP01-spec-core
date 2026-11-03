@@ -1,8 +1,20 @@
+#![deny(clippy::too_many_lines, clippy::too_many_arguments, clippy::undocumented_unsafe_blocks)]
 //! Symbol table and scope resolution for SysML v2 / KerML models.
 //!
-//! Safety & Traceability: Realises: [REQ-SEMANTIC-SYMBOLS-MODULE]
-//! Contract: Indexes hierarchical packages, parts, ports, attributes, requirements, and states into deterministic `BTreeMap` lookup tables.
-//! Bounds & Faults: Caps AST traversal depth at `MAX_AST_DEPTH` (64) using explicit iterative work-stacks with zero panicking operations.
+//! ## 1. Safety Intent & Regulatory Scope
+//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for SysML v2 symbol resolution.
+//! ## 2. Invariants & Mathematical Properties
+//! Indexes hierarchical packages, parts, ports, attributes, requirements, and states into deterministic `BTreeMap` lookup tables.
+//! ## 3. Preconditions
+//! AST inputs conform to `deap_core::sysml_ast` structural invariants within `MAX_AST_DEPTH` (64).
+//! ## 4. Postconditions
+//! Provides deterministic qualified, scoped, imported, and port-level symbol resolution with zero panicking operations.
+//! ## 5. Algorithmic Complexity Bounds
+//! Time Complexity: O(log N) qualified lookup; O(I * K) scoped import resolution. Space Complexity: O(N) symbol storage.
+//! ## 6. Failure Modes & Fault Tolerance
+//! - Interface / State / Action / Resource: Caps AST traversal depth at `MAX_AST_DEPTH` (64) using explicit iterative work-stacks.
+//! ## 7. Realization & Traceability
+//! Realises: [REQ-0603, REQ-SEMANTIC-SYMBOLS-MODULE]
 
 use deap_core::sysml_ast::*;
 use std::collections::BTreeMap;
@@ -14,46 +26,20 @@ use std::collections::BTreeMap;
 /// Bounds & Faults: Terminates traversal safely without stack overflow when `depth >= MAX_AST_DEPTH`.
 pub const MAX_AST_DEPTH: usize = 64;
 
-/// Work-stack frame for bounded iterative `PackageDef` symbol indexing.
-/// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-INDEX-PACKAGE]
-struct PackageIndexFrame<'a> {
-    pkg: &'a PackageDef,
-    parent_scope: String,
-    depth: usize,
-}
-
-/// Work-stack frame for bounded iterative `PartDef` symbol indexing.
-/// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-INDEX-PART]
-struct PartIndexFrame<'a> {
-    part: &'a PartDef,
-    parent_scope: String,
-    depth: usize,
-}
-
 /// Classification of SysML v2 entities in the symbol table.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for enum `SymbolKind` in `crates/compile-sysml/src/semantic/symbols.rs`.
-///
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for enum `SymbolKind`.
 /// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for enum `SymbolKind` across member set `[Package, Part, Port, Attribute, Action, Operation]`.
-///
+/// - Preserves structural type invariants for enum `SymbolKind` across all SysML v2 AST definition kinds.
 /// ## 3. Preconditions
-/// - Caller supplies well-formed values for `SymbolKind` members (`Package, Part, Port, Attribute, Action, Operation`).
-///
+/// - Caller supplies well-formed values for `SymbolKind` variants.
 /// ## 4. Postconditions
-/// - Defines the authoritative `SymbolKind` representation for enum `SymbolKind`.
-///
+/// - Defines the authoritative `SymbolKind` representation.
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(6)) bounded over input/member dimension of `SymbolKind`.
-/// - Space Complexity: O(M(6)) bounded auxiliary memory for `SymbolKind`.
-///
+/// - Time Complexity: O(1). Space Complexity: O(1).
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `SymbolKind` (`SymbolKind`).
-/// - State: Maintains consistent state invariants across `SymbolKind` without partial mutation on error.
-/// - Action: Executes `SymbolKind` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `SymbolKind` (`SEMANTIC-SYMBOLS`).
-///
+/// - Interface / State / Action / Resource: Copyable scalar discriminant with zero allocation.
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLKIND] | SysML v2: PartDef(SymbolKind)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -81,27 +67,17 @@ pub enum SymbolKind {
 /// A resolved symbol entry in the symbol table.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `Symbol` in `crates/compile-sysml/src/semantic/symbols.rs`.
-///
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `Symbol`.
 /// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `Symbol` across member set `[name: String, qualified_name: String, kind: SymbolKind, parent: Option<String>, type_name: Option<String>]`.
-///
+/// - Preserves structural type invariants for struct `Symbol` across `name`, `qualified_name`, `kind`, and metadata fields.
 /// ## 3. Preconditions
-/// - Caller supplies well-formed values for `Symbol` members (`name: String, qualified_name: String, kind: SymbolKind, parent: Option<String>, type_name: Option<String>`).
-///
+/// - Caller supplies well-formed identifier and scope strings.
 /// ## 4. Postconditions
-/// - Defines the authoritative `Symbol` representation for struct `Symbol`.
-///
+/// - Defines the authoritative `Symbol` record stored in `SymbolTable`.
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(5)) bounded over input/member dimension of `Symbol`.
-/// - Space Complexity: O(M(5)) bounded auxiliary memory for `Symbol`.
-///
+/// - Time Complexity: O(1) field access. Space Complexity: O(L) over identifier string lengths.
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `Symbol` (`Symbol`).
-/// - State: Maintains consistent state invariants across `Symbol` without partial mutation on error.
-/// - Action: Executes `Symbol` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `Symbol` (`SEMANTIC-SYMBOLS`).
-///
+/// - Interface / State / Action / Resource: Value struct with bounded string fields.
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOL] | SysML v2: PartDef(Symbol)
 #[derive(Debug, Clone, PartialEq)]
@@ -119,27 +95,17 @@ pub struct Symbol {
 /// Symbol table providing scope resolution and entity lookup.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `SymbolTable` in `crates/compile-sysml/src/semantic/symbols.rs`.
-///
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `SymbolTable`.
 /// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `SymbolTable` across member set `[symbols: BTreeMap<String, Symbol>, by_name: BTreeMap<String, Vec<String>>, package_imports: BTreeMap<String, Vec<ImportDef>>]`.
-///
+/// - Preserves deterministic ordering across `symbols`, `by_name`, and `package_imports` `BTreeMap` indices.
 /// ## 3. Preconditions
-/// - Caller supplies well-formed values for `SymbolTable` members (`symbols: BTreeMap<String, Symbol>, by_name: BTreeMap<String, Vec<String>>, package_imports: BTreeMap<String, Vec<ImportDef>>`).
-///
+/// - Populated via `SymbolTable::build_from_package` or `SymbolTable::new`.
 /// ## 4. Postconditions
-/// - Defines the authoritative `SymbolTable` representation for struct `SymbolTable`.
-///
+/// - Defines the authoritative `SymbolTable` representation for semantic resolution.
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(3)) bounded over input/member dimension of `SymbolTable`.
-/// - Space Complexity: O(M(3)) bounded auxiliary memory for `SymbolTable`.
-///
+/// - Time Complexity: O(N log N) construction. Space Complexity: O(N) symbol entries.
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Validates boundary inputs and types for `SymbolTable` (`SymbolTable`).
-/// - State: Maintains consistent state invariants across `SymbolTable` without partial mutation on error.
-/// - Action: Executes `SymbolTable` deterministically with zero unbounded recursion or blocking.
-/// - Resource: Bounds stack and heap allocations within `SymbolTable` (`SEMANTIC-SYMBOLS`).
-///
+/// - Interface / State / Action / Resource: Deterministic `BTreeMap` storage without hash randomization.
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE] | SysML v2: PartDef(SymbolTable)
 #[derive(Debug, Clone, Default)]
@@ -153,61 +119,13 @@ pub struct SymbolTable {
 }
 
 impl SymbolTable {
-    /// Executes deterministic fn `SymbolTable::new` within `crates/compile-sysml/src/semantic/symbols.rs`.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SymbolTable::new` in `crates/compile-sysml/src/semantic/symbols.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SymbolTable::new` (declaration #4) within `SEMANTIC-SYMBOLS`.
-    ///
-    /// ## 3. Preconditions
-    /// - Invoked within a valid execution context for `SymbolTable::new` in `SEMANTIC-SYMBOLS`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Self` from `SymbolTable::new` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(K(new)) bounded over input/member dimension of `SymbolTable::new`.
-    /// - Space Complexity: O(K(new)) bounded auxiliary memory for `SymbolTable::new`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SymbolTable::new` (`Self`).
-    /// - State: Maintains consistent state invariants across `SymbolTable::new` without partial mutation on error.
-    /// - Action: Executes `SymbolTable::new` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SymbolTable::new` (`SEMANTIC-SYMBOLS`).
-    ///
-    /// ## 7. Realization & Traceability
+    /// Constructs an empty `SymbolTable`.
     /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-NEW] | SysML v2: ActionDef(SymbolTable::new)
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Build a comprehensive symbol table from a PackageDef hierarchy.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SymbolTable::build_from_package` in `crates/compile-sysml/src/semantic/symbols.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SymbolTable::build_from_package` (declaration #5) within `SEMANTIC-SYMBOLS`.
-    ///
-    /// ## 3. Preconditions
-    /// - `pkg: &PackageDef` must satisfy domain and type-safety constraints prior to invoking `SymbolTable::build_from_package`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Self` from `SymbolTable::build_from_package` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(pkg)) bounded over input/member dimension of `SymbolTable::build_from_package`.
-    /// - Space Complexity: O(N(pkg)) bounded auxiliary memory for `SymbolTable::build_from_package`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SymbolTable::build_from_package` (`Self`).
-    /// - State: Maintains consistent state invariants across `SymbolTable::build_from_package` without partial mutation on error.
-    /// - Action: Executes `SymbolTable::build_from_package` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SymbolTable::build_from_package` (`SEMANTIC-SYMBOLS`).
-    ///
-    /// ## 7. Realization & Traceability
+    /// Build a comprehensive symbol table from a `PackageDef` hierarchy.
     /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-BUILD-FROM-PACKAGE] | SysML v2: ActionDef(SymbolTable::build_from_package)
     pub fn build_from_package(pkg: &PackageDef) -> Self {
         let mut table = Self::new();
@@ -216,64 +134,14 @@ impl SymbolTable {
     }
 
     /// Look up a symbol by exact qualified name.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SymbolTable::lookup` in `crates/compile-sysml/src/semantic/symbols.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SymbolTable::lookup` (declaration #6) within `SEMANTIC-SYMBOLS`.
-    ///
-    /// ## 3. Preconditions
-    /// - `qualified_name: &str` must satisfy domain and type-safety constraints prior to invoking `SymbolTable::lookup`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Option<&Symbol>` from `SymbolTable::lookup` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(qualified_name)) bounded over input/member dimension of `SymbolTable::lookup`.
-    /// - Space Complexity: O(N(qualified_name)) bounded auxiliary memory for `SymbolTable::lookup`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SymbolTable::lookup` (`Option<&Symbol>`).
-    /// - State: Maintains consistent state invariants across `SymbolTable::lookup` without partial mutation on error.
-    /// - Action: Executes `SymbolTable::lookup` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SymbolTable::lookup` (`SEMANTIC-SYMBOLS`).
-    ///
-    /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-LOOKUP] | SysML v2: ActionDef(SymbolTable::lookup)
     pub fn lookup(&self, qualified_name: &str) -> Option<&Symbol> {
         self.symbols.get(qualified_name)
     }
 
     /// Look up a symbol within a given parent scope or fall back to global scope.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SymbolTable::lookup_in_scope` in `crates/compile-sysml/src/semantic/symbols.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SymbolTable::lookup_in_scope` (declaration #7) within `SEMANTIC-SYMBOLS`.
-    ///
-    /// ## 3. Preconditions
-    /// - `scope: &str` must satisfy domain and type-safety constraints prior to invoking `SymbolTable::lookup_in_scope`.
-    /// - `name: &str` must satisfy domain and type-safety constraints prior to invoking `SymbolTable::lookup_in_scope`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Option<&Symbol>` from `SymbolTable::lookup_in_scope` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(scope)) bounded over input/member dimension of `SymbolTable::lookup_in_scope`.
-    /// - Space Complexity: O(N(scope)) bounded auxiliary memory for `SymbolTable::lookup_in_scope`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SymbolTable::lookup_in_scope` (`Option<&Symbol>`).
-    /// - State: Maintains consistent state invariants across `SymbolTable::lookup_in_scope` without partial mutation on error.
-    /// - Action: Executes `SymbolTable::lookup_in_scope` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SymbolTable::lookup_in_scope` (`SEMANTIC-SYMBOLS`).
-    ///
-    /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-LOOKUP-IN-SCOPE] | SysML v2: ActionDef(SymbolTable::lookup_in_scope)
     pub fn lookup_in_scope(&self, scope: &str, name: &str) -> Option<&Symbol> {
-        // 1. If `name` contains `::`, call `self.lookup(name)`.
         if name.contains("::") {
             if let Some(sym) = self.lookup(name) {
                 return Some(sym);
@@ -285,74 +153,36 @@ impl SymbolTable {
                 }
             }
         }
-
-        // 2. If `!scope.is_empty()`, check direct scoped name `format!("{}::{}", scope, name)`.
         if !scope.is_empty() {
             let scoped_name = format!("{}::{}", scope, name);
             if let Some(sym) = self.symbols.get(&scoped_name) {
                 return Some(sym);
             }
         }
+        if let Some(sym) = self.lookup_via_imports(scope, name) {
+            return Some(sym);
+        }
+        if let Some(sym) = self.symbols.get(name) {
+            return Some(sym);
+        }
+        self.by_name
+            .get(name)
+            .and_then(|qnames| qnames.first())
+            .and_then(|first| self.symbols.get(first))
+    }
 
-        // 3. Check imported namespaces in `scope` (or traversing enclosing parent scopes):
+    /// Resolves `name` by traversing `package_imports` from `scope` up to enclosing parent scopes.
+    /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-LOOKUP-IN-SCOPE]
+    fn lookup_via_imports(&self, scope: &str, name: &str) -> Option<&Symbol> {
         let mut curr_scope = Some(scope);
         while let Some(s) = curr_scope {
             if let Some(imports) = self.package_imports.get(s) {
                 for import in imports {
-                    // Wildcard imports (e.g. import Subsystem_1::*; where path is "Subsystem_1::*" or "Subsystem_1")
-                    if import.is_wildcard
-                        || import.path.ends_with("::*")
-                        || import.path.ends_with("::**")
-                    {
-                        let base = import.path.trim_end_matches("::**").trim_end_matches("::*");
-
-                        // Check direct qualified name under base prefix
-                        let candidate_qname = format!("{}::{}", base, name);
-                        if let Some(sym) = self.symbols.get(&candidate_qname) {
-                            return Some(sym);
-                        }
-
-                        // Also check recursive wildcard imports if applicable
-                        if import.is_recursive || import.path.ends_with("::**") {
-                            let prefix = format!("{}::", base);
-                            if let Some(qnames) = self.by_name.get(name) {
-                                for q in qnames {
-                                    if q.starts_with(&prefix) {
-                                        if let Some(sym) = self.symbols.get(q) {
-                                            return Some(sym);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Also check if base is a relative package inside the enclosing root scope
-                        if let Some((root_scope, _)) = s.split_once("::") {
-                            let candidate_rooted = format!("{}::{}::{}", root_scope, base, name);
-                            if let Some(sym) = self.symbols.get(&candidate_rooted) {
-                                return Some(sym);
-                            }
-                        }
-                    } else {
-                        // Explicit element import (e.g. import Subsystem_1::SystemVisionEngine;)
-                        let target_elem = import.path.rsplit("::").next().unwrap_or(&import.path);
-                        if target_elem == name {
-                            if let Some(sym) = self.symbols.get(&import.path) {
-                                return Some(sym);
-                            }
-                            // Also check relative to root scope if applicable
-                            if let Some((root_scope, _)) = s.split_once("::") {
-                                let candidate_rooted = format!("{}::{}", root_scope, import.path);
-                                if let Some(sym) = self.symbols.get(&candidate_rooted) {
-                                    return Some(sym);
-                                }
-                            }
-                        }
+                    if let Some(sym) = self.resolve_single_import(s, import, name) {
+                        return Some(sym);
                     }
                 }
             }
-
-            // Traverse to enclosing parent scope
             curr_scope = if let Some((parent, _)) = s.rsplit_once("::") {
                 Some(parent)
             } else if !s.is_empty() {
@@ -361,141 +191,135 @@ impl SymbolTable {
                 None
             };
         }
-
-        // 4. Fall back to direct name in global scope
-        if let Some(sym) = self.symbols.get(name) {
-            return Some(sym);
-        }
-
-        // 5. Fall back to unqualified search in self.by_name
-        if let Some(qnames) = self.by_name.get(name) {
-            if let Some(first) = qnames.first() {
-                return self.symbols.get(first);
-            }
-        }
-
         None
     }
 
-    /// Look up a port on a part given "PartName.portName" or in a specific part scope.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SymbolTable::lookup_port` in `crates/compile-sysml/src/semantic/symbols.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SymbolTable::lookup_port` (declaration #8) within `SEMANTIC-SYMBOLS`.
-    ///
-    /// ## 3. Preconditions
-    /// - `port_ref: &str` must satisfy domain and type-safety constraints prior to invoking `SymbolTable::lookup_port`.
-    /// - `current_part: Option<&str>` must satisfy domain and type-safety constraints prior to invoking `SymbolTable::lookup_port`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Option<&Symbol>` from `SymbolTable::lookup_port` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(port_ref)) bounded over input/member dimension of `SymbolTable::lookup_port`.
-    /// - Space Complexity: O(N(port_ref)) bounded auxiliary memory for `SymbolTable::lookup_port`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SymbolTable::lookup_port` (`Option<&Symbol>`).
-    /// - State: Maintains consistent state invariants across `SymbolTable::lookup_port` without partial mutation on error.
-    /// - Action: Executes `SymbolTable::lookup_port` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SymbolTable::lookup_port` (`SEMANTIC-SYMBOLS`).
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-LOOKUP-PORT] | SysML v2: ActionDef(SymbolTable::lookup_port)
-    pub fn lookup_port(&self, port_ref: &str, current_part: Option<&str>) -> Option<&Symbol> {
-        if let Some((part_name, port_name)) = port_ref.split_once('.') {
-            if !port_name.contains('.') {
-                // Find candidate part
-                if let Some(part_qnames) = self.by_name.get(part_name) {
-                    for part_q in part_qnames {
-                        let candidate_port_q = format!("{}::{}", part_q, port_name);
-                        if let Some(sym) = self.symbols.get(&candidate_port_q) {
-                            if sym.kind == SymbolKind::Port {
+    /// Evaluates a single wildcard or explicit `ImportDef` within `scope_str` for `name`.
+    /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-LOOKUP-IN-SCOPE]
+    fn resolve_single_import(
+        &self,
+        scope_str: &str,
+        import: &ImportDef,
+        name: &str,
+    ) -> Option<&Symbol> {
+        if import.is_wildcard || import.path.ends_with("::*") || import.path.ends_with("::**") {
+            let base = import.path.trim_end_matches("::**").trim_end_matches("::*");
+            let candidate_qname = format!("{}::{}", base, name);
+            if let Some(sym) = self.symbols.get(&candidate_qname) {
+                return Some(sym);
+            }
+            if import.is_recursive || import.path.ends_with("::**") {
+                let prefix = format!("{}::", base);
+                if let Some(qnames) = self.by_name.get(name) {
+                    for q in qnames {
+                        if q.starts_with(&prefix) {
+                            if let Some(sym) = self.symbols.get(q) {
                                 return Some(sym);
-                            }
-                        }
-
-                        // Also check via the part's type definition if the part is a typed instance
-                        if let Some(part_sym) = self.symbols.get(part_q) {
-                            if let Some(ref type_name) = part_sym.type_name {
-                                if let Some(type_qnames) = self.by_name.get(type_name) {
-                                    for type_q in type_qnames {
-                                        let candidate_type_port_q =
-                                            format!("{}::{}", type_q, port_name);
-                                        if let Some(sym) = self.symbols.get(&candidate_type_port_q)
-                                        {
-                                            if sym.kind == SymbolKind::Port {
-                                                return Some(sym);
-                                            }
-                                        }
-                                    }
-                                }
                             }
                         }
                     }
                 }
             }
-        } else if let Some(part) = current_part {
-            let candidate_q = format!("{}::{}", part, port_ref);
-            if let Some(sym) = self.symbols.get(&candidate_q) {
-                if sym.kind == SymbolKind::Port {
+            if let Some((root_scope, _)) = scope_str.split_once("::") {
+                let candidate_rooted = format!("{}::{}::{}", root_scope, base, name);
+                if let Some(sym) = self.symbols.get(&candidate_rooted) {
                     return Some(sym);
                 }
             }
+        } else {
+            let target_elem = import.path.rsplit("::").next().unwrap_or(&import.path);
+            if target_elem == name {
+                if let Some(sym) = self.symbols.get(&import.path) {
+                    return Some(sym);
+                }
+                if let Some((root_scope, _)) = scope_str.split_once("::") {
+                    let candidate_rooted = format!("{}::{}", root_scope, import.path);
+                    if let Some(sym) = self.symbols.get(&candidate_rooted) {
+                        return Some(sym);
+                    }
+                }
+            }
+        }
+        None
+    }
 
+    /// Look up a port on a part given `"PartName.portName"` or in a specific part scope.
+    /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-LOOKUP-PORT] | SysML v2: ActionDef(SymbolTable::lookup_port)
+    pub fn lookup_port(&self, port_ref: &str, current_part: Option<&str>) -> Option<&Symbol> {
+        if let Some((part_name, port_name)) = port_ref.split_once('.') {
+            if !port_name.contains('.') {
+                if let Some(sym) = self.lookup_dotted_port(part_name, port_name) {
+                    return Some(sym);
+                }
+            }
+        } else if let Some(part) = current_part {
+            let candidate_q = format!("{}::{}", part, port_ref);
+            if let Some(sym) = self
+                .symbols
+                .get(&candidate_q)
+                .filter(|s| s.kind == SymbolKind::Port)
+            {
+                return Some(sym);
+            }
             if let Some(part_qnames) = self.by_name.get(part) {
                 for part_q in part_qnames {
                     let candidate_scoped_q = format!("{}::{}", part_q, port_ref);
-                    if let Some(sym) = self.symbols.get(&candidate_scoped_q) {
-                        if sym.kind == SymbolKind::Port {
+                    if let Some(sym) = self
+                        .symbols
+                        .get(&candidate_scoped_q)
+                        .filter(|s| s.kind == SymbolKind::Port)
+                    {
+                        return Some(sym);
+                    }
+                }
+            }
+        }
+        if let Some(port_qnames) = self.by_name.get(port_ref) {
+            for q in port_qnames {
+                if let Some(sym) = self.symbols.get(q).filter(|s| s.kind == SymbolKind::Port) {
+                    return Some(sym);
+                }
+            }
+        }
+        None
+    }
+
+    /// Resolves `"part_name.port_name"` across direct part symbols and typed part definitions.
+    /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-LOOKUP-PORT]
+    fn lookup_dotted_port(&self, part_name: &str, port_name: &str) -> Option<&Symbol> {
+        let part_qnames = self.by_name.get(part_name)?;
+        for part_q in part_qnames {
+            let candidate_port_q = format!("{}::{}", part_q, port_name);
+            if let Some(sym) = self
+                .symbols
+                .get(&candidate_port_q)
+                .filter(|s| s.kind == SymbolKind::Port)
+            {
+                return Some(sym);
+            }
+            if let Some(type_name) = self
+                .symbols
+                .get(part_q)
+                .and_then(|part_sym| part_sym.type_name.as_ref())
+            {
+                if let Some(type_qnames) = self.by_name.get(type_name) {
+                    for type_q in type_qnames {
+                        let candidate_type_port_q = format!("{}::{}", type_q, port_name);
+                        if let Some(sym) = self
+                            .symbols
+                            .get(&candidate_type_port_q)
+                            .filter(|s| s.kind == SymbolKind::Port)
+                        {
                             return Some(sym);
                         }
                     }
                 }
             }
         }
-
-        // Fall back to unqualified search
-        if let Some(port_qnames) = self.by_name.get(port_ref) {
-            for q in port_qnames {
-                if let Some(sym) = self.symbols.get(q) {
-                    if sym.kind == SymbolKind::Port {
-                        return Some(sym);
-                    }
-                }
-            }
-        }
-
         None
     }
 
     /// Get all symbols of a specific kind.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SymbolTable::all_of_kind` in `crates/compile-sysml/src/semantic/symbols.rs`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Preserves deterministic state conservation and referential transparency for fn `SymbolTable::all_of_kind` (declaration #9) within `SEMANTIC-SYMBOLS`.
-    ///
-    /// ## 3. Preconditions
-    /// - `kind: SymbolKind` must satisfy domain and type-safety constraints prior to invoking `SymbolTable::all_of_kind`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns `Vec<&Symbol>` from `SymbolTable::all_of_kind` with deterministic post-execution state.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(N(kind)) bounded over input/member dimension of `SymbolTable::all_of_kind`.
-    /// - Space Complexity: O(N(kind)) bounded auxiliary memory for `SymbolTable::all_of_kind`.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Validates boundary inputs and types for `SymbolTable::all_of_kind` (`Vec<&Symbol>`).
-    /// - State: Maintains consistent state invariants across `SymbolTable::all_of_kind` without partial mutation on error.
-    /// - Action: Executes `SymbolTable::all_of_kind` deterministically with zero unbounded recursion or blocking.
-    /// - Resource: Bounds stack and heap allocations within `SymbolTable::all_of_kind` (`SEMANTIC-SYMBOLS`).
-    ///
-    /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-ALL-OF-KIND] | SysML v2: ActionDef(SymbolTable::all_of_kind)
     pub fn all_of_kind(&self, kind: SymbolKind) -> Vec<&Symbol> {
         self.symbols.values().filter(|s| s.kind == kind).collect()
@@ -503,735 +327,11 @@ impl SymbolTable {
 
     /// Inserts `symbol` into both the qualified `symbols` map and unqualified `by_name` index.
     /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-INSERT]
-    fn insert(&mut self, symbol: Symbol) {
+    pub(crate) fn insert(&mut self, symbol: Symbol) {
         self.by_name
             .entry(symbol.name.clone())
             .or_default()
             .push(symbol.qualified_name.clone());
         self.symbols.insert(symbol.qualified_name.clone(), symbol);
-    }
-
-    /// Iteratively indexes `root_pkg` and nested packages/parts in pre-order up to `MAX_AST_DEPTH`.
-    /// Uses an explicit `Vec` work-stack with saturating depth increments so deep trees never overflow the call stack.
-    /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-INDEX-PACKAGE]
-    fn index_package(&mut self, root_pkg: &PackageDef, root_parent_scope: &str) {
-        let mut stack = vec![PackageIndexFrame {
-            pkg: root_pkg,
-            parent_scope: root_parent_scope.to_string(),
-            depth: 0,
-        }];
-
-        while let Some(frame) = stack.pop() {
-            if frame.depth >= MAX_AST_DEPTH {
-                continue;
-            }
-            let pkg_qname = self.register_package_scope(frame.pkg, &frame.parent_scope);
-            self.register_package_leaf_members(frame.pkg, &pkg_qname);
-
-            let next_depth = frame.depth.saturating_add(1);
-            if next_depth < MAX_AST_DEPTH {
-                for part in &frame.pkg.part_defs {
-                    self.index_part(part, &pkg_qname, next_depth);
-                }
-                for subpkg in frame.pkg.packages.iter().rev() {
-                    stack.push(PackageIndexFrame {
-                        pkg: subpkg,
-                        parent_scope: pkg_qname.clone(),
-                        depth: next_depth,
-                    });
-                }
-            }
-        }
-    }
-
-    /// Computes the qualified package scope name and registers package-level symbol and import bindings.
-    /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-INDEX-PACKAGE]
-    fn register_package_scope(&mut self, pkg: &PackageDef, parent_scope: &str) -> String {
-        let is_synthetic_multi_root =
-            parent_scope.is_empty() && crate::parser::grammar::is_synthetic_forest_root(pkg);
-
-        let pkg_qname = if is_synthetic_multi_root {
-            String::new()
-        } else if parent_scope.is_empty() {
-            pkg.name.clone()
-        } else if pkg.name.is_empty() {
-            parent_scope.to_string()
-        } else {
-            format!("{}::{}", parent_scope, pkg.name)
-        };
-
-        if !pkg_qname.is_empty() {
-            self.package_imports
-                .insert(pkg_qname.clone(), pkg.imports.clone());
-            if !pkg.name.is_empty() && pkg.name != pkg_qname {
-                self.package_imports
-                    .entry(pkg.name.clone())
-                    .or_default()
-                    .extend(pkg.imports.clone());
-            }
-
-            self.insert(Symbol {
-                name: pkg.name.clone(),
-                qualified_name: pkg_qname.clone(),
-                kind: SymbolKind::Package,
-                parent: if parent_scope.is_empty() {
-                    None
-                } else {
-                    Some(parent_scope.to_string())
-                },
-                type_name: None,
-                direction: None,
-                is_conjugated: false,
-                doc: pkg.doc.clone(),
-            });
-        } else if !pkg.imports.is_empty() {
-            self.package_imports
-                .entry(String::new())
-                .or_default()
-                .extend(pkg.imports.clone());
-        }
-
-        pkg_qname
-    }
-
-    /// Registers non-recursive leaf member definitions declared directly inside `pkg`.
-    /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-INDEX-PACKAGE]
-    fn register_package_leaf_members(&mut self, pkg: &PackageDef, pkg_qname: &str) {
-        let parent_scope = pkg_qname.to_string();
-        for attr in &pkg.attribute_defs {
-            self.insert(Symbol {
-                name: attr.name.clone(),
-                qualified_name: format!("{}::{}", pkg_qname, attr.name),
-                kind: SymbolKind::Attribute,
-                parent: Some(parent_scope.clone()),
-                type_name: Some(attr.type_name.clone()),
-                direction: None,
-                is_conjugated: false,
-                doc: attr.doc.clone(),
-            });
-        }
-
-        for port in &pkg.port_defs {
-            self.insert(Symbol {
-                name: port.name.clone(),
-                qualified_name: format!("{}::{}", pkg_qname, port.name),
-                kind: SymbolKind::Port,
-                parent: Some(parent_scope.clone()),
-                type_name: Some(port.type_name.clone()),
-                direction: Some(port.direction.clone()),
-                is_conjugated: port.is_conjugated,
-                doc: port.doc.clone(),
-            });
-        }
-
-        for act in &pkg.action_defs {
-            self.insert(Symbol {
-                name: act.name.clone(),
-                qualified_name: format!("{}::{}", pkg_qname, act.name),
-                kind: SymbolKind::Action,
-                parent: Some(parent_scope.clone()),
-                type_name: None,
-                direction: None,
-                is_conjugated: false,
-                doc: act.doc.clone(),
-            });
-        }
-
-        for con in &pkg.constraint_defs {
-            self.insert(Symbol {
-                name: con.name.clone(),
-                qualified_name: format!("{}::{}", pkg_qname, con.name),
-                kind: SymbolKind::Constraint,
-                parent: Some(parent_scope.clone()),
-                type_name: None,
-                direction: None,
-                is_conjugated: false,
-                doc: con.doc.clone(),
-            });
-        }
-
-        for req in &pkg.requirement_defs {
-            self.insert(Symbol {
-                name: req.name.clone(),
-                qualified_name: format!("{}::{}", pkg_qname, req.name),
-                kind: SymbolKind::Requirement,
-                parent: Some(parent_scope.clone()),
-                type_name: None,
-                direction: None,
-                is_conjugated: false,
-                doc: req.doc.clone(),
-            });
-        }
-
-        self.register_package_safety_and_state_members(pkg, pkg_qname);
-    }
-
-    /// Registers state, connection, hazard, and risk leaf definitions declared directly inside `pkg`.
-    /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-INDEX-PACKAGE]
-    fn register_package_safety_and_state_members(&mut self, pkg: &PackageDef, pkg_qname: &str) {
-        let parent_scope = pkg_qname.to_string();
-        for state in &pkg.state_defs {
-            self.insert(Symbol {
-                name: state.name.clone(),
-                qualified_name: format!("{}::{}", pkg_qname, state.name),
-                kind: SymbolKind::State,
-                parent: Some(parent_scope.clone()),
-                type_name: None,
-                direction: None,
-                is_conjugated: false,
-                doc: state.doc.clone(),
-            });
-        }
-
-        for conn in &pkg.connection_defs {
-            self.insert(Symbol {
-                name: conn.name.clone(),
-                qualified_name: format!("{}::{}", pkg_qname, conn.name),
-                kind: SymbolKind::Connection,
-                parent: Some(parent_scope.clone()),
-                type_name: None,
-                direction: None,
-                is_conjugated: false,
-                doc: conn.doc.clone(),
-            });
-        }
-
-        for hz in &pkg.hazard_defs {
-            self.insert(Symbol {
-                name: hz.name.clone(),
-                qualified_name: format!("{}::{}", pkg_qname, hz.name),
-                kind: SymbolKind::Hazard,
-                parent: Some(parent_scope.clone()),
-                type_name: None,
-                direction: None,
-                is_conjugated: false,
-                doc: hz.doc.clone(),
-            });
-        }
-
-        for rk in &pkg.risk_defs {
-            self.insert(Symbol {
-                name: rk.name.clone(),
-                qualified_name: format!("{}::{}", pkg_qname, rk.name),
-                kind: SymbolKind::Risk,
-                parent: Some(parent_scope.clone()),
-                type_name: None,
-                direction: None,
-                is_conjugated: false,
-                doc: rk.doc.clone(),
-            });
-        }
-    }
-
-    /// Iteratively indexes `root_part` and nested subparts in pre-order starting at `root_depth` up to `MAX_AST_DEPTH`.
-    /// Uses an explicit `Vec` work-stack with saturating depth increments to prevent call-stack exhaustion.
-    /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-INDEX-PART]
-    fn index_part(&mut self, root_part: &PartDef, root_parent_scope: &str, root_depth: usize) {
-        let mut stack = vec![PartIndexFrame {
-            part: root_part,
-            parent_scope: root_parent_scope.to_string(),
-            depth: root_depth,
-        }];
-
-        while let Some(frame) = stack.pop() {
-            if frame.depth >= MAX_AST_DEPTH {
-                continue;
-            }
-            let part_qname = self.register_part_scope_and_members(frame.part, &frame.parent_scope);
-            let next_depth = frame.depth.saturating_add(1);
-            if next_depth < MAX_AST_DEPTH {
-                for subpart in frame.part.parts.iter().rev() {
-                    stack.push(PartIndexFrame {
-                        part: subpart,
-                        parent_scope: part_qname.clone(),
-                        depth: next_depth,
-                    });
-                }
-            }
-        }
-    }
-
-    /// Registers `part` and its direct leaf attributes, ports, actions, constraints, requirements, states, and connections.
-    /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-INDEX-PART]
-    fn register_part_scope_and_members(&mut self, part: &PartDef, parent_scope: &str) -> String {
-        let part_qname = format!("{}::{}", parent_scope, part.name);
-
-        self.insert(Symbol {
-            name: part.name.clone(),
-            qualified_name: part_qname.clone(),
-            kind: SymbolKind::Part,
-            parent: Some(parent_scope.to_string()),
-            type_name: part.type_name.clone(),
-            direction: None,
-            is_conjugated: false,
-            doc: part.doc.clone(),
-        });
-
-        for attr in &part.attributes {
-            self.insert(Symbol {
-                name: attr.name.clone(),
-                qualified_name: format!("{}::{}", part_qname, attr.name),
-                kind: SymbolKind::Attribute,
-                parent: Some(part_qname.clone()),
-                type_name: Some(attr.type_name.clone()),
-                direction: None,
-                is_conjugated: false,
-                doc: attr.doc.clone(),
-            });
-        }
-
-        for port in &part.ports {
-            self.insert(Symbol {
-                name: port.name.clone(),
-                qualified_name: format!("{}::{}", part_qname, port.name),
-                kind: SymbolKind::Port,
-                parent: Some(part_qname.clone()),
-                type_name: Some(port.type_name.clone()),
-                direction: Some(port.direction.clone()),
-                is_conjugated: port.is_conjugated,
-                doc: port.doc.clone(),
-            });
-        }
-
-        self.register_part_behavioral_members(part, &part_qname);
-        part_qname
-    }
-
-    /// Registers direct behavioral and structural constraint members (`actions`, `constraints`, `requirements`, `states`, `connections`) on `part`.
-    /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-INDEX-PART]
-    fn register_part_behavioral_members(&mut self, part: &PartDef, part_qname: &str) {
-        let parent_scope = part_qname.to_string();
-        for act in &part.actions {
-            self.insert(Symbol {
-                name: act.name.clone(),
-                qualified_name: format!("{}::{}", part_qname, act.name),
-                kind: SymbolKind::Action,
-                parent: Some(parent_scope.clone()),
-                type_name: None,
-                direction: None,
-                is_conjugated: false,
-                doc: act.doc.clone(),
-            });
-        }
-
-        for con in &part.constraints {
-            self.insert(Symbol {
-                name: con.name.clone(),
-                qualified_name: format!("{}::{}", part_qname, con.name),
-                kind: SymbolKind::Constraint,
-                parent: Some(parent_scope.clone()),
-                type_name: None,
-                direction: None,
-                is_conjugated: false,
-                doc: con.doc.clone(),
-            });
-        }
-
-        for req in &part.requirements {
-            self.insert(Symbol {
-                name: req.name.clone(),
-                qualified_name: format!("{}::{}", part_qname, req.name),
-                kind: SymbolKind::Requirement,
-                parent: Some(parent_scope.clone()),
-                type_name: None,
-                direction: None,
-                is_conjugated: false,
-                doc: req.doc.clone(),
-            });
-        }
-
-        for state in &part.states {
-            self.insert(Symbol {
-                name: state.name.clone(),
-                qualified_name: format!("{}::{}", part_qname, state.name),
-                kind: SymbolKind::State,
-                parent: Some(parent_scope.clone()),
-                type_name: None,
-                direction: None,
-                is_conjugated: false,
-                doc: state.doc.clone(),
-            });
-        }
-
-        for conn in &part.connections {
-            self.insert(Symbol {
-                name: conn.name.clone(),
-                qualified_name: format!("{}::{}", part_qname, conn.name),
-                kind: SymbolKind::Connection,
-                parent: Some(parent_scope.clone()),
-                type_name: None,
-                direction: None,
-                is_conjugated: false,
-                doc: conn.doc.clone(),
-            });
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_symbol_table_indexing_and_lookup() -> Result<(), Box<dyn std::error::Error>> {
-        let pkg = PackageDef {
-            name: "Platform_SSOT".to_string(),
-            part_defs: vec![
-                PartDef {
-                    name: "ComputeNode".to_string(),
-                    ports: vec![PortDef {
-                        name: "bus_out".to_string(),
-                        type_name: "CANBus".to_string(),
-                        direction: "out".to_string(),
-                        is_conjugated: false,
-                        ..Default::default()
-                    }],
-                    ..Default::default()
-                },
-                PartDef {
-                    name: "Actuator".to_string(),
-                    ports: vec![PortDef {
-                        name: "bus_in".to_string(),
-                        type_name: "CANBus".to_string(),
-                        direction: "in".to_string(),
-                        is_conjugated: false,
-                        ..Default::default()
-                    }],
-                    ..Default::default()
-                },
-            ],
-            ..Default::default()
-        };
-
-        let table = SymbolTable::build_from_package(&pkg);
-        assert!(table.lookup("Platform_SSOT::ComputeNode").is_some());
-        assert!(table
-            .lookup("Platform_SSOT::ComputeNode::bus_out")
-            .is_some());
-
-        let port_sym = table
-            .lookup_port("ComputeNode.bus_out", None)
-            .ok_or("expected value is absent")?;
-        assert_eq!(port_sym.name, "bus_out");
-        assert_eq!(port_sym.direction.as_deref(), Some("out"));
-        Ok(())
-    }
-
-    #[test]
-    fn test_symbol_table_cross_package_import_lookup() -> Result<(), Box<dyn std::error::Error>> {
-        let pkg_competing = PackageDef {
-            name: "AAA_Other".to_string(),
-            part_defs: vec![PartDef {
-                name: "EngineA".to_string(),
-                is_def: true,
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-
-        let pkg_a = PackageDef {
-            name: "Subsystem_A".to_string(),
-            part_defs: vec![PartDef {
-                name: "EngineA".to_string(),
-                is_def: true,
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-
-        let pkg_b = PackageDef {
-            name: "Subsystem_B".to_string(),
-            imports: vec![ImportDef {
-                path: "Subsystem_A".to_string(),
-                is_wildcard: true,
-                ..Default::default()
-            }],
-            part_defs: vec![PartDef {
-                name: "UsageB".to_string(),
-                is_def: false,
-                type_name: Some("EngineA".to_string()),
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-
-        let root_pkg = PackageDef {
-            name: "".to_string(),
-            packages: vec![pkg_competing.clone(), pkg_a.clone(), pkg_b],
-            ..Default::default()
-        };
-
-        let table = SymbolTable::build_from_package(&root_pkg);
-
-        // Verify package_imports records the imports for Subsystem_B
-        assert!(table.package_imports.contains_key("Subsystem_B"));
-        assert_eq!(
-            table
-                .package_imports
-                .get("Subsystem_B")
-                .ok_or("expected value is absent")?
-                .len(),
-            1
-        );
-
-        // Verify that lookup_in_scope("Subsystem_B", "EngineA") resolves to Subsystem_A::EngineA
-        // rather than AAA_Other::EngineA or failing.
-        let resolved = table.lookup_in_scope("Subsystem_B", "EngineA");
-        assert!(
-            resolved.is_some(),
-            "EngineA should resolve via import in Subsystem_B"
-        );
-        assert_eq!(
-            resolved.ok_or("expected value is absent")?.qualified_name,
-            "Subsystem_A::EngineA",
-            "Import scoping should take precedence over unqualified fallback"
-        );
-
-        // Explicit element import test
-        let pkg_d = PackageDef {
-            name: "Subsystem_D".to_string(),
-            imports: vec![ImportDef {
-                path: "Subsystem_A::EngineA".to_string(),
-                is_wildcard: false,
-                ..Default::default()
-            }],
-            part_defs: vec![PartDef {
-                name: "UsageD".to_string(),
-                is_def: false,
-                type_name: Some("EngineA".to_string()),
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-
-        let root_with_d = PackageDef {
-            name: "Root".to_string(),
-            packages: vec![pkg_competing, pkg_a, pkg_d],
-            ..Default::default()
-        };
-        let table_d = SymbolTable::build_from_package(&root_with_d);
-        let resolved_d = table_d.lookup_in_scope("Root::Subsystem_D", "EngineA");
-        assert!(
-            resolved_d.is_some(),
-            "EngineA should resolve via explicit import in Root::Subsystem_D"
-        );
-        assert_eq!(
-            resolved_d.ok_or("expected value is absent")?.qualified_name,
-            "Root::Subsystem_A::EngineA"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn test_symbol_table_package_depth_bound_64_and_65() {
-        let total_levels: usize = 65;
-        let mut curr = PackageDef {
-            name: format!("Pkg_{}", total_levels.saturating_sub(1)),
-            ..Default::default()
-        };
-        for idx in (0..total_levels.saturating_sub(1)).rev() {
-            curr = PackageDef {
-                name: format!("Pkg_{idx}"),
-                packages: vec![curr],
-                ..Default::default()
-            };
-        }
-
-        let table = SymbolTable::build_from_package(&curr);
-        let mut qname = String::from("Pkg_0");
-        assert!(
-            table.lookup(&qname).is_some(),
-            "Root Pkg_0 at depth 0 must be indexed"
-        );
-        for idx in 1..64usize {
-            qname = format!("{qname}::Pkg_{idx}");
-            assert!(
-                table.lookup(&qname).is_some(),
-                "Pkg_{idx} at depth {idx} (< 64) must be indexed"
-            );
-        }
-        let beyond_qname = format!("{qname}::Pkg_64");
-        assert!(
-            table.lookup(&beyond_qname).is_none(),
-            "Pkg_64 at depth 64 (>= MAX_AST_DEPTH) must not be indexed"
-        );
-    }
-
-    #[test]
-    fn test_symbol_table_part_depth_bound_64_and_65() {
-        let max_part_depth: usize = 64;
-        let mut curr_part = PartDef {
-            name: format!("Part_{max_part_depth}"),
-            ..Default::default()
-        };
-        for idx in (1..max_part_depth).rev() {
-            curr_part = PartDef {
-                name: format!("Part_{idx}"),
-                parts: vec![curr_part],
-                ..Default::default()
-            };
-        }
-        let root_pkg = PackageDef {
-            name: "Pkg_0".to_string(),
-            part_defs: vec![curr_part],
-            ..Default::default()
-        };
-
-        let table = SymbolTable::build_from_package(&root_pkg);
-        let mut qname = String::from("Pkg_0");
-        assert!(table.lookup(&qname).is_some());
-        for idx in 1..64usize {
-            qname = format!("{qname}::Part_{idx}");
-            assert!(
-                table.lookup(&qname).is_some(),
-                "Part_{idx} at depth {idx} (< 64) must be indexed"
-            );
-        }
-        let beyond_qname = format!("{qname}::Part_64");
-        assert!(
-            table.lookup(&beyond_qname).is_none(),
-            "Part_64 at depth 64 (>= MAX_AST_DEPTH) must not be indexed"
-        );
-    }
-
-    #[test]
-    fn test_symbol_table_deep_nesting_bounded_stack_and_preorder() -> Result<(), String> {
-        assert_eq!(MAX_AST_DEPTH, 64);
-
-        // 1. Multi-branch pre-order preservation in `by_name`
-        let branch_pkg = PackageDef {
-            name: "Root".to_string(),
-            packages: vec![
-                PackageDef {
-                    name: "Alpha".to_string(),
-                    part_defs: vec![PartDef {
-                        name: "SharedNode".to_string(),
-                        parts: vec![PartDef {
-                            name: "SharedNode".to_string(),
-                            ..Default::default()
-                        }],
-                        ..Default::default()
-                    }],
-                    ..Default::default()
-                },
-                PackageDef {
-                    name: "Beta".to_string(),
-                    part_defs: vec![PartDef {
-                        name: "SharedNode".to_string(),
-                        ..Default::default()
-                    }],
-                    ..Default::default()
-                },
-            ],
-            ..Default::default()
-        };
-        let branch_table = SymbolTable::build_from_package(&branch_pkg);
-        let shared = branch_table
-            .by_name
-            .get("SharedNode")
-            .ok_or_else(|| "missing SharedNode entries".to_string())?;
-        assert_eq!(
-            shared,
-            &vec![
-                "Root::Alpha::SharedNode".to_string(),
-                "Root::Alpha::SharedNode::SharedNode".to_string(),
-                "Root::Beta::SharedNode".to_string(),
-            ]
-        );
-
-        // 2. 2,000-level deep package and part trees inside a fixed 256 KiB stack thread
-        let deep_levels: usize = 2_000;
-        let mut deep_pkg = PackageDef {
-            name: format!("Pkg_{}", deep_levels.saturating_sub(1)),
-            ..Default::default()
-        };
-        for idx in (0..deep_levels.saturating_sub(1)).rev() {
-            deep_pkg = PackageDef {
-                name: format!("Pkg_{idx}"),
-                packages: vec![deep_pkg],
-                ..Default::default()
-            };
-        }
-
-        let mut deep_part = PartDef {
-            name: format!("Part_{}", deep_levels.saturating_sub(1)),
-            ..Default::default()
-        };
-        for idx in (1..deep_levels.saturating_sub(1)).rev() {
-            deep_part = PartDef {
-                name: format!("Part_{idx}"),
-                parts: vec![deep_part],
-                ..Default::default()
-            };
-        }
-        let deep_part_root = PackageDef {
-            name: "PartRoot".to_string(),
-            part_defs: vec![deep_part],
-            ..Default::default()
-        };
-
-        let (pkg_count, part_count) = std::thread::scope(|s| -> Result<(usize, usize), String> {
-            let handle = std::thread::Builder::new()
-                .name("bounded_symbols_2000".to_string())
-                .stack_size(256 * 1024)
-                .spawn_scoped(s, || {
-                    let t_pkg = SymbolTable::build_from_package(&deep_pkg);
-                    let t_part = SymbolTable::build_from_package(&deep_part_root);
-                    (t_pkg.symbols.len(), t_part.symbols.len())
-                })
-                .map_err(|e| format!("failed to spawn scoped thread: {e}"))?;
-            handle
-                .join()
-                .map_err(|_| "bounded-stack symbol thread panicked".to_string())
-        })?;
-
-        assert_eq!(pkg_count, MAX_AST_DEPTH);
-        assert_eq!(part_count, MAX_AST_DEPTH);
-
-        let mut pkg_drain = vec![deep_pkg];
-        while let Some(mut node) = pkg_drain.pop() {
-            pkg_drain.append(&mut node.packages);
-        }
-        let mut part_drain = deep_part_root.part_defs;
-        while let Some(mut node) = part_drain.pop() {
-            part_drain.append(&mut node.parts);
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn test_lookup_port_split_once_and_utf8_identifiers() -> Result<(), Box<dyn std::error::Error>>
-    {
-        let pkg = PackageDef {
-            name: "システム_SSOT".to_string(),
-            part_defs: vec![PartDef {
-                name: "センサー".to_string(),
-                ports: vec![PortDef {
-                    name: "出力ポート".to_string(),
-                    type_name: "CANBus".to_string(),
-                    direction: "out".to_string(),
-                    is_conjugated: false,
-                    ..Default::default()
-                }],
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-
-        let table = SymbolTable::build_from_package(&pkg);
-        let resolved = table
-            .lookup_port("センサー.出力ポート", None)
-            .ok_or("expected UTF-8 port symbol to resolve")?;
-        assert_eq!(resolved.name, "出力ポート");
-        assert_eq!(resolved.kind, SymbolKind::Port);
-
-        // Multi-dot, empty, and malformed dot references must not panic or mis-resolve.
-        assert!(table
-            .lookup_port("システム_SSOT.センサー.出力ポート", Some("センサー"))
-            .is_none());
-        assert!(table.lookup_port(".出力ポート", Some("センサー")).is_none());
-        assert!(table.lookup_port("センサー.", Some("センサー")).is_none());
-        assert!(table.lookup_port("", Some("センサー")).is_none());
-        Ok(())
     }
 }
