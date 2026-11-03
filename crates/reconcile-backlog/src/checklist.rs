@@ -205,6 +205,68 @@ pub(crate) fn replace_stale_issue_in_checklist_line(
     }
 }
 
+/// Updates an existing relative-link checklist line (`](../`, `](./`, or `#<num> - [`) in-place.
+/// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-RECONCILE-CHECKLISTS-IN-CONTENT]
+pub(crate) fn reconcile_relative_checklist_line(
+    line: &str,
+    item_issue: Option<u64>,
+    target_issue: Option<u64>,
+    is_resolved: bool,
+) -> Option<String> {
+    if !(line.contains("](../") || line.contains("](./") || line.contains(" - [")) {
+        return None;
+    }
+    let mut current =
+        update_checkbox_state_on_line(line, is_resolved).unwrap_or_else(|| line.to_string());
+    if let Some(target_num) = target_issue.filter(|&n| n > 0) {
+        if let Some(old_num) = item_issue {
+            if let Some(repatched) =
+                replace_stale_issue_in_checklist_line(&current, old_num, target_num)
+            {
+                current = repatched;
+            }
+        } else {
+            let trimmed_start = current.trim_start();
+            let indent_len = current.len().saturating_sub(trimmed_start.len());
+            let indent = current.get(..indent_len).unwrap_or("");
+            let box_prefix = trimmed_start.get(..6).unwrap_or("- [ ] ");
+            let rest = trimmed_start.get(6..).unwrap_or("").trim_start();
+            current = format!("{}{}#{} - {}", indent, box_prefix, target_num, rest);
+        }
+    }
+    Some(current)
+}
+
+/// Formats a checklist item for a matched section (relative `../` link when `repo.is_none()` in compile-sysml sections).
+/// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-FORMAT-CANONICAL-CHECKLIST-ITEM]
+pub(crate) fn format_section_checklist_item(
+    spec: &DiscoveredSpec,
+    repo: Option<&str>,
+    branch: &str,
+    section_heading_line: &str,
+) -> String {
+    let h_low = section_heading_line.to_lowercase();
+    if repo.is_none()
+        && (h_low.contains("requirements & checklist") || h_low.contains("associated "))
+    {
+        let checkbox = if spec.is_resolved { "[x]" } else { "[ ]" };
+        let clean_rel = spec
+            .rel_path
+            .strip_prefix("./")
+            .unwrap_or(&spec.rel_path)
+            .replace('\\', "/");
+        let rel_target = clean_rel
+            .strip_prefix("docs/")
+            .map(|s| format!("../{}", s))
+            .unwrap_or(clean_rel);
+        return match spec.issue_number.filter(|&n| n > 0) {
+            Some(num) => format!("- {} #{} - [{}]({})", checkbox, num, spec.title, rel_target),
+            None => format!("- {} [{}]({})", checkbox, spec.title, rel_target),
+        };
+    }
+    format_canonical_checklist_item(spec, repo, branch)
+}
+
 /// [DOC-TIER: A] Reconciles checklist items in `content` and returns `(reconciled_content, items_updated_count)`.
 /// Safety & Traceability: Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-RECONCILE-CHECKLISTS-IN-CONTENT]
 /// Contract: Purges unpopulated placeholders and updates `- [ ]` / `- [x]` checkboxes outside code blocks.

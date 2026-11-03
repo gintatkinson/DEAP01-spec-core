@@ -59,6 +59,17 @@ pub trait IssueTracker {
         repo: Option<&str>,
     ) -> Result<(), ReconcileError>;
 
+    /// Updates the title of an existing issue.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-EDIT-ISSUE-BODY]
+    fn edit_issue_title(
+        &self,
+        _number: u64,
+        _new_title: &str,
+        _repo: Option<&str>,
+    ) -> Result<(), ReconcileError> {
+        Ok(())
+    }
+
     /// Creates a new issue and returns its allocated issue number.
     /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-CREATE-ISSUE]
     fn create_issue(

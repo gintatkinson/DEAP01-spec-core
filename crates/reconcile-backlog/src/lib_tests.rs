@@ -98,47 +98,32 @@ impl IssueTracker for MockTracker {
         Ok(self.issues.borrow().clone())
     }
 
-    fn edit_issue_body(
-        &self,
-        number: u64,
-        new_body: &str,
-        _repo: Option<&str>,
-    ) -> Result<(), ReconcileError> {
-        self.edited_bodies
-            .borrow_mut()
-            .push((number, new_body.to_string()));
+    fn edit_issue_body(&self, number: u64, new_body: &str, _repo: Option<&str>) -> Result<(), ReconcileError> {
+        self.edited_bodies.borrow_mut().push((number, new_body.to_string()));
         if let Some(issue) = self.issues.borrow_mut().iter_mut().find(|i| i.number == number) {
             issue.body = new_body.to_string();
         }
         Ok(())
     }
 
-    fn create_issue(
-        &self,
-        title: &str,
-        body: &str,
-        labels: &[String],
-        _repo: Option<&str>,
-    ) -> Result<u64, ReconcileError> {
+    fn edit_issue_title(&self, number: u64, new_title: &str, _repo: Option<&str>) -> Result<(), ReconcileError> {
+        if let Some(issue) = self.issues.borrow_mut().iter_mut().find(|i| i.number == number) {
+            issue.title = new_title.to_string();
+        }
+        Ok(())
+    }
+
+    fn create_issue(&self, title: &str, body: &str, labels: &[String], _repo: Option<&str>) -> Result<u64, ReconcileError> {
         let mut next_id = self.next_id.borrow_mut();
         let id = *next_id;
         *next_id += 1;
         self.issues.borrow_mut().push(Issue {
-            number: id,
-            title: title.to_string(),
-            state: "OPEN".to_string(),
-            labels: labels.to_vec(),
-            body: body.to_string(),
+            number: id, title: title.to_string(), state: "OPEN".to_string(), labels: labels.to_vec(), body: body.to_string(),
         });
         Ok(id)
     }
 
-    fn reopen_issue(
-        &self,
-        number: u64,
-        comment: &str,
-        _repo: Option<&str>,
-    ) -> Result<(), ReconcileError> {
+    fn reopen_issue(&self, number: u64, comment: &str, _repo: Option<&str>) -> Result<(), ReconcileError> {
         if let Some(issue) = self.issues.borrow_mut().iter_mut().find(|i| i.number == number) {
             issue.state = "OPEN".to_string();
             issue.body.push_str(&format!("\n{}", comment));

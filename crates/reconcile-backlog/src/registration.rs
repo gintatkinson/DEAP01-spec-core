@@ -23,11 +23,7 @@ use std::path::Path;
 /// Safety & Traceability: Realises: [REQ-RECONCILE-BACKLOG-LIB-RESOLVE-CANONICAL-SPEC-TIER]
 /// Contract: Maps Use Case -> 0, User Story -> 1, Feature -> 2, Epic -> 3 from path, frontmatter, or title.
 /// Bounds & Faults: Time O(P + T), Space O(P + T) over path and title lengths.
-pub fn resolve_canonical_spec_tier(
-    rel_path: &str,
-    frontmatter_type: Option<&str>,
-    title: &str,
-) -> (usize, &'static str, &'static str) {
+pub fn resolve_canonical_spec_tier(rel_path: &str, frontmatter_type: Option<&str>, title: &str) -> (usize, &'static str, &'static str) {
     let lower_path = rel_path.replace('\\', "/").to_lowercase();
     if lower_path.contains("use-cases/") || lower_path.contains("use_cases/") {
         return (0, "use_case", "type:use-case");
@@ -41,13 +37,11 @@ pub fn resolve_canonical_spec_tier(
     if lower_path.contains("epics/") {
         return (3, "epic", "type:epic");
     }
-
     let resolved_type = frontmatter_type
         .map(canonicalize_spec_type)
         .filter(|s| !s.is_empty())
         .or_else(|| infer_spec_type_from_title(title))
         .unwrap_or_else(|| "feature".to_string());
-
     match resolved_type.as_str() {
         "use_case" => (0, "use_case", "type:use-case"),
         "user_story" => (1, "user_story", "type:user-story"),
@@ -63,15 +57,8 @@ pub fn resolve_canonical_spec_tier(
 pub fn build_spec_path_to_issue_map(specs: &[DiscoveredSpec]) -> BTreeMap<String, u64> {
     let mut map = BTreeMap::new();
     for spec in specs {
-        if let Some(num) = spec.issue_number {
-            if num == 0 {
-                continue;
-            }
-            let clean_rel = spec
-                .rel_path
-                .strip_prefix("./")
-                .unwrap_or(&spec.rel_path)
-                .replace('\\', "/");
+        if let Some(num) = spec.issue_number.filter(|&n| n > 0) {
+            let clean_rel = spec.rel_path.strip_prefix("./").unwrap_or(&spec.rel_path).replace('\\', "/");
             if !clean_rel.is_empty() {
                 map.insert(clean_rel.clone(), num);
                 map.insert(clean_rel.to_lowercase(), num);
@@ -81,12 +68,9 @@ pub fn build_spec_path_to_issue_map(specs: &[DiscoveredSpec]) -> BTreeMap<String
                     map.insert(fname.to_lowercase(), num);
                 }
             }
-            if let Some(ref doc_id) = spec.document_id {
-                let id_trim = doc_id.trim();
-                if !id_trim.is_empty() {
-                    map.insert(id_trim.to_string(), num);
-                    map.insert(id_trim.to_lowercase(), num);
-                }
+            if let Some(id_trim) = spec.document_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                map.insert(id_trim.to_string(), num);
+                map.insert(id_trim.to_lowercase(), num);
             }
             let title_trim = spec.title.trim();
             if !title_trim.is_empty() {
@@ -159,6 +143,10 @@ fn try_backpatch_checklist_line(
     let trimmed_start = line.trim_start();
     let indent = line.get(..line.len().saturating_sub(trimmed_start.len())).unwrap_or("");
     let prefix = trimmed_start.get(..6).unwrap_or("- [ ] ");
+    if line.contains("](../") || line.contains("](./") {
+        let rest = trimmed_start.get(6..).unwrap_or("").trim_start();
+        return Some(format!("{}{}#{} - {}", indent, prefix, matched_num, rest));
+    }
     let issue_target = match repo.map(str::trim).filter(|r| !r.is_empty()) {
         Some(r) => format!("https://github.com/{}/issues/{}", r, matched_num),
         None => format!("#{}", matched_num),
@@ -240,10 +228,11 @@ fn register_single_spec(
     ctx: &mut RegistrationContext<'_>,
 ) -> Result<bool, ReconcileError> {
     let repo_opt = Some(ctx.repo.trim()).filter(|r| !r.is_empty());
+    let local_repo = if ctx.upstream_prefix.is_some() { None } else { repo_opt };
     let raw_content = fs::read_to_string(&spec.path)?;
     let (cleaned, purged) = clean_unpopulated_placeholders_counted(&raw_content);
     let (mut current_content, bp_changes) =
-        backpatch_spec_references_in_content(&cleaned, path_to_issue, repo_opt);
+        backpatch_spec_references_in_content(&cleaned, path_to_issue, local_repo);
     let mut modified_on_disk = purged > 0 || bp_changes > 0;
 
     if spec.issue_number.is_none() {
@@ -251,7 +240,7 @@ fn register_single_spec(
         {
             spec.issue_number = Some(existing_num);
             spec.is_resolved = ctx.index.is_issue_resolved(existing_num).unwrap_or(false);
-            let issue_val = format_issue_link(existing_num, repo_opt);
+            let issue_val = format_issue_link(existing_num, local_repo);
             current_content = update_frontmatter_field(&current_content, "GitHub Issue", &issue_val)?;
             modified_on_disk = true;
         } else {
@@ -270,15 +259,12 @@ fn register_single_spec(
             if created_num > 0 {
                 spec.issue_number = Some(created_num);
                 spec.is_resolved = false;
-                let issue_val = format_issue_link(created_num, repo_opt);
+                let issue_val = format_issue_link(created_num, local_repo);
                 current_content = update_frontmatter_field(&current_content, "GitHub Issue", &issue_val)?;
                 write_atomic(&spec.path, &current_content)?;
                 ctx.index.insert_issue(Issue {
-                    number: created_num,
-                    title: spec.title.clone(),
-                    state: "OPEN".to_string(),
-                    labels: vec![label.to_string()],
-                    body: projected_body,
+                    number: created_num, title: spec.title.clone(), state: "OPEN".to_string(),
+                    labels: vec![label.to_string()], body: projected_body,
                 });
                 return Ok(true);
             }
@@ -299,11 +285,12 @@ pub(crate) fn register_specs_bottom_up(
     ctx: &mut RegistrationContext<'_>,
 ) -> Result<usize, ReconcileError> {
     let repo_opt = Some(ctx.repo.trim()).filter(|r| !r.is_empty());
+    let local_repo = if ctx.upstream_prefix.is_some() { None } else { repo_opt };
     let mut created_count = 0usize;
 
     for tier in 0..4 {
         if tier >= 2 {
-            synthesize_and_reconcile_hierarchy(discovered, repo_opt, ctx.branch, false)?;
+            synthesize_and_reconcile_hierarchy(discovered, local_repo, ctx.branch, false)?;
         }
         let path_to_issue = build_spec_path_to_issue_map(discovered);
 
@@ -319,7 +306,7 @@ pub(crate) fn register_specs_bottom_up(
         }
     }
 
-    synthesize_and_reconcile_hierarchy(discovered, repo_opt, ctx.branch, false)?;
+    synthesize_and_reconcile_hierarchy(discovered, local_repo, ctx.branch, false)?;
     validate_checklist_publish_integrity(discovered)?;
     Ok(created_count)
 }
@@ -330,9 +317,9 @@ pub(crate) fn register_specs_bottom_up(
 /// Bounds & Faults: Time O(S * L), Space O(L) over parent specs S and document lines L.
 pub fn validate_checklist_publish_integrity(specs: &[DiscoveredSpec]) -> Result<(), ReconcileError> {
     let child_headers = [
-        "features", "child features", "feature breakdown", "linked features",
-        "use cases", "system use cases", "linked use cases",
-        "user stories", "child user stories", "stories", "linked user stories",
+        "features", "child features", "feature breakdown", "linked features", "requirements & checklist",
+        "use cases", "system use cases", "linked use cases", "associated use cases",
+        "user stories", "child user stories", "stories", "linked user stories", "associated user stories",
     ];
 
     for spec in specs {
@@ -348,8 +335,10 @@ pub fn validate_checklist_publish_integrity(specs: &[DiscoveredSpec]) -> Result<
         for (line_idx, raw_line) in content.split('\n').enumerate() {
             let trimmed = raw_line.trim();
             let in_code = is_offset_in_ranges(byte_offset, &code_ranges);
+            let hash_count = trimmed.bytes().take_while(|&b| b == b'#').count();
+            let is_h2_to_h4 = (2..=4).contains(&hash_count) && trimmed.as_bytes().get(hash_count) == Some(&b' ');
 
-            if !in_code && trimmed.starts_with("## ") {
+            if !in_code && is_h2_to_h4 {
                 let h = trimmed.trim_start_matches('#').trim().to_lowercase();
                 in_child_section = child_headers.iter().any(|ch| h.contains(ch));
             } else if !in_code && in_child_section && (trimmed.starts_with("- [") || trimmed.starts_with("* [")) {

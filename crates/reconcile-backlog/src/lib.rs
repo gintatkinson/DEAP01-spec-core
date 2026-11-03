@@ -152,7 +152,12 @@ fn discover_and_reconcile_frontmatters(
 fn reconcile_checklists_and_sync_remote(
     discovered_specs: &[DiscoveredSpec],
     options: &ReconcileOptions,
-    (effective_repo, effective_branch, upstream_prefix): (Option<&str>, &str, Option<&str>),
+    (effective_repo, local_repo, effective_branch, upstream_prefix): (
+        Option<&str>,
+        Option<&str>,
+        &str,
+        Option<&str>,
+    ),
     (index, tracker): (&IssueIndex, &dyn IssueTracker),
     summary: &mut ReconcileSummary,
 ) -> Result<(), ReconcileError> {
@@ -163,7 +168,7 @@ fn reconcile_checklists_and_sync_remote(
         let (reconciled, chk_changes) =
             reconcile_checklists_in_content(&raw_content, index, Some(&spec.spec_type))?;
         let (backpatched, bp_changes) =
-            backpatch_spec_references_in_content(&reconciled, &path_to_issue, effective_repo);
+            backpatch_spec_references_in_content(&reconciled, &path_to_issue, local_repo);
 
         if chk_changes > 0 || bp_changes > 0 {
             summary.checklists_updated += chk_changes + bp_changes;
@@ -184,13 +189,18 @@ fn reconcile_checklists_and_sync_remote(
                         effective_branch,
                         upstream_prefix,
                     );
-                    let needs_sync = index
-                        .get_issue(issue_num)
-                        .is_none_or(|remote| remote.body.trim() != projected.trim());
-                    if needs_sync {
-                        if !options.dry_run {
-                            tracker.edit_issue_body(issue_num, &projected, effective_repo)?;
-                        }
+                    let remote_issue = index.get_issue(issue_num);
+                    let needs_body_sync =
+                        remote_issue.is_none_or(|r| r.body.trim() != projected.trim());
+                    let needs_title_sync =
+                        remote_issue.is_some_and(|r| r.title.trim() != spec.title.trim());
+                    if needs_body_sync && !options.dry_run {
+                        tracker.edit_issue_body(issue_num, &projected, effective_repo)?;
+                    }
+                    if needs_title_sync && !options.dry_run {
+                        tracker.edit_issue_title(issue_num, spec.title.trim(), effective_repo)?;
+                    }
+                    if needs_body_sync || needs_title_sync {
                         summary.remote_issues_synced += 1;
                     }
                 }
@@ -210,18 +220,14 @@ pub fn run_reconciliation(
     options: &ReconcileOptions,
 ) -> Result<ReconcileSummary, ReconcileError> {
     let mut summary = ReconcileSummary::default();
-
-    let effective_repo = options
-        .repo
-        .as_deref()
-        .and_then(clean_repo_name)
+    let effective_repo = options.repo.as_deref().and_then(clean_repo_name)
         .or_else(|| detect_git_repo(&options.workspace_root));
-    let effective_branch = options
-        .default_branch
-        .clone()
-        .filter(|b| !b.trim().is_empty())
+    let effective_branch = options.default_branch.clone().filter(|b| !b.trim().is_empty())
         .unwrap_or_else(|| detect_git_branch(&options.workspace_root));
     let upstream_prefix = detect_upstream_prefix(&options.workspace_root);
+    let is_upstream = upstream_prefix.is_some()
+        || options.workspace_root.to_string_lossy().replace('\\', "/").contains(".pipeline/upstream");
+    let local_repo = if is_upstream { None } else { effective_repo.as_deref() };
 
     let issues = if options.offline {
         Vec::new()
@@ -229,23 +235,15 @@ pub fn run_reconciliation(
         tracker.fetch_all_issues(effective_repo.as_deref())?
     };
     let mut index = IssueIndex::from_issues(issues);
-
     let spec_files = collect_spec_files(&options.workspace_root)?;
     let mut discovered_specs = discover_and_reconcile_frontmatters(
-        &spec_files,
-        options,
-        effective_repo.as_deref(),
-        &index,
-        &mut summary,
+        &spec_files, options, local_repo, &index, &mut summary,
     )?;
 
     if !options.offline && !options.dry_run {
         let repo_str = effective_repo.as_deref().unwrap_or("");
         let registered = register_unallocated_specs_bottom_up(
-            &options.workspace_root,
-            &mut discovered_specs,
-            &mut index,
-            tracker,
+            &options.workspace_root, &mut discovered_specs, &mut index, tracker,
             (repo_str, &effective_branch, upstream_prefix.as_deref()),
         )?;
         summary.issues_registered += registered;
@@ -253,21 +251,15 @@ pub fn run_reconciliation(
     }
 
     let hier_changes = synthesize_and_reconcile_hierarchy(
-        &discovered_specs,
-        effective_repo.as_deref(),
-        &effective_branch,
-        options.dry_run,
+        &discovered_specs, local_repo, &effective_branch, options.dry_run,
     )?;
     summary.checklists_updated += hier_changes;
 
     reconcile_checklists_and_sync_remote(
-        &discovered_specs,
-        options,
-        (effective_repo.as_deref(), &effective_branch, upstream_prefix.as_deref()),
-        (&index, tracker),
-        &mut summary,
+        &discovered_specs, options,
+        (effective_repo.as_deref(), local_repo, &effective_branch, upstream_prefix.as_deref()),
+        (&index, tracker), &mut summary,
     )?;
-
     Ok(summary)
 }
 

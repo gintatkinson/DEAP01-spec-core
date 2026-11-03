@@ -164,6 +164,42 @@ impl IssueTracker for GitHubTracker {
         Ok(())
     }
 
+    /// Updates a remote GitHub issue title via `gh issue edit --title`.
+    /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-EDIT-ISSUE-BODY-1]
+    fn edit_issue_title(
+        &self,
+        number: u64,
+        new_title: &str,
+        repo: Option<&str>,
+    ) -> Result<(), ReconcileError> {
+        Self::check_gh_available()?;
+
+        let mut cmd = Command::new("gh");
+        cmd.args(["issue", "edit", &number.to_string(), "--title", new_title]);
+        if let Some(r) = repo {
+            if !r.trim().is_empty() {
+                cmd.args(["--repo", r.trim()]);
+            }
+        }
+
+        let output = cmd.output().map_err(|e| {
+            ReconcileError::TrackerError(format!(
+                "Failed to execute 'gh issue edit {} --title': {}",
+                number, e
+            ))
+        })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(ReconcileError::TrackerError(format!(
+                "'gh issue edit {} --title' failed: {}",
+                number,
+                stderr.trim()
+            )));
+        }
+        Ok(())
+    }
+
     /// Creates a new GitHub issue via `gh issue create` and parses the returned issue number.
     /// Realises: [REQ-RECONCILE-BACKLOG-TRACKER-CREATE-ISSUE-1]
     fn create_issue(

@@ -5,7 +5,10 @@
 //!
 //! Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST, Automated Spec Reconciliation]
 
-use crate::checklist::extract_checklist_title_and_issue;
+use crate::checklist::{
+    extract_checklist_title_and_issue, format_section_checklist_item,
+    reconcile_relative_checklist_line,
+};
 use crate::frontmatter::{collect_code_block_ranges, extract_issue_number, is_offset_in_ranges};
 use crate::tracker::{canonicalize_spec_type, normalize_title};
 use crate::ReconcileError;
@@ -115,51 +118,42 @@ struct HierarchySectionSpec<'a> {
     branch: &'a str,
 }
 
-/// Finds the `(start_line_idx, end_line_idx)` of the target H2 section outside code blocks.
+/// Finds the `(start_line_idx, end_line_idx)` of the target H2..H4 section outside code blocks.
 /// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-RECONCILE-OR-INJECT-SECTION]
-fn find_target_section_bounds(
-    content: &str,
-    lines: &[&str],
-    section_headers: &[&str],
-) -> Option<(usize, usize)> {
+fn find_target_section_bounds(content: &str, lines: &[&str], section_headers: &[&str]) -> Option<(usize, usize)> {
     let ast = parse_markdown_ast(content);
-    if !ast.sections.iter().any(|s| s.level == 2) {
+    if !ast.sections.iter().any(|s| s.level >= 2) {
         return None;
     }
     let code_ranges = collect_code_block_ranges(content);
-    let mut section_start: Option<usize> = None;
-    let mut section_end: usize = lines.len();
-    let mut byte_offset = 0usize;
+    let (mut section_start, mut section_end, mut byte_offset) = (None, lines.len(), 0usize);
 
     for (idx, &line) in lines.iter().enumerate() {
         let trimmed = line.trim();
         let in_code = is_offset_in_ranges(byte_offset, &code_ranges);
-        if !in_code && trimmed.starts_with("## ") {
-            let heading_text = trimmed.trim_start_matches('#').trim().to_lowercase();
+        let hashes = trimmed.bytes().take_while(|&b| b == b'#').count();
+        if !in_code && (2..=4).contains(&hashes) && trimmed.as_bytes().get(hashes) == Some(&b' ') {
             if section_start.is_some() {
                 section_end = idx;
                 break;
             }
-            let matches_header = section_headers
-                .iter()
-                .any(|h| heading_text.contains(&h.to_lowercase()));
-            if matches_header {
+            let raw = trimmed.get(hashes..).unwrap_or("").trim().trim_end_matches(':').trim().to_lowercase();
+            let heading = raw.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ')').trim();
+            if section_headers.iter().any(|h| {
+                let h_low = h.to_lowercase();
+                (h_low.contains('&') || !heading.contains('&')) && heading.contains(&h_low)
+            }) {
                 section_start = Some(idx);
             }
         }
         byte_offset = byte_offset.saturating_add(line.len()).saturating_add(1);
     }
-
     section_start.map(|start| (start, section_end))
 }
 
 /// Matches a checklist line `(item_title, item_issue)` to the index of a child in `children`.
 /// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-RECONCILE-OR-INJECT-SECTION]
-fn find_matching_child_idx(
-    item_title: &str,
-    item_issue: Option<u64>,
-    children: &[&DiscoveredSpec],
-) -> Option<usize> {
+fn find_matching_child_idx(item_title: &str, item_issue: Option<u64>, children: &[&DiscoveredSpec]) -> Option<usize> {
     let norm_item = normalize_title(item_title);
     for (c_idx, child) in children.iter().enumerate() {
         if let (Some(i_num), Some(c_num)) = (item_issue, child.issue_number) {
@@ -172,9 +166,7 @@ fn find_matching_child_idx(
         }
         if let Some(ref doc_id) = child.document_id {
             let norm_id = normalize_title(doc_id);
-            if !norm_id.is_empty()
-                && (norm_item == norm_id || norm_item.starts_with(&format!("{} ", norm_id)))
-            {
+            if !norm_id.is_empty() && (norm_item == norm_id || norm_item.starts_with(&format!("{} ", norm_id))) {
                 return Some(c_idx);
             }
         }
@@ -186,15 +178,13 @@ fn find_matching_child_idx(
 /// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-RECONCILE-OR-INJECT-SECTION]
 fn reconcile_existing_section_lines(
     lines: &[&str],
-    bounds: (usize, usize),
+    (sec_start, sec_end): (usize, usize),
     spec: &HierarchySectionSpec<'_>,
     children: &[&DiscoveredSpec],
 ) -> (Vec<String>, usize) {
-    let (sec_start, sec_end) = bounds;
     let mut matched_children = vec![false; children.len()];
     let mut section_lines: Vec<String> = Vec::new();
-    let mut last_checklist_rel_idx: Option<usize> = None;
-    let mut changes = 0usize;
+    let (mut last_checklist_rel_idx, mut changes) = (None, 0usize);
 
     for &line in lines.get(sec_start + 1..sec_end).unwrap_or_default() {
         if let Some((item_title, item_issue)) = extract_checklist_title_and_issue(line) {
@@ -204,12 +194,13 @@ fn reconcile_existing_section_lines(
                 if let Some(m) = matched_children.get_mut(c_idx) {
                     *m = true;
                 }
-                let canonical = format_canonical_checklist_item(child, spec.repo, spec.branch);
-                if line.trim() != canonical {
+                let updated = reconcile_relative_checklist_line(line, item_issue, child.issue_number, child.is_resolved)
+                    .unwrap_or_else(|| format_canonical_checklist_item(child, spec.repo, spec.branch));
+                if line.trim() != updated.trim() {
                     changes += 1;
                 }
                 last_checklist_rel_idx = Some(section_lines.len());
-                section_lines.push(canonical);
+                section_lines.push(updated);
                 continue;
             }
             last_checklist_rel_idx = Some(section_lines.len());
@@ -217,25 +208,21 @@ fn reconcile_existing_section_lines(
         section_lines.push(line.to_string());
     }
 
-    let missing: Vec<String> = children
-        .iter()
-        .zip(&matched_children)
+    let heading_line = lines.get(sec_start).copied().unwrap_or("");
+    let missing: Vec<String> = children.iter().zip(&matched_children)
         .filter(|(_, matched)| !**matched)
-        .map(|(c, _)| format_canonical_checklist_item(c, spec.repo, spec.branch))
+        .map(|(c, _)| format_section_checklist_item(c, spec.repo, spec.branch, heading_line))
         .collect();
 
     if !missing.is_empty() {
         changes += missing.len();
-        let mut insert_pos = match last_checklist_rel_idx {
-            Some(idx) => idx + 1,
-            None => {
-                let mut pos = section_lines.len();
-                while pos > 0 && section_lines.get(pos - 1).is_some_and(|l| l.trim().is_empty()) {
-                    pos -= 1;
-                }
-                pos
+        let mut insert_pos = last_checklist_rel_idx.map(|idx| idx + 1).unwrap_or_else(|| {
+            let mut pos = section_lines.len();
+            while pos > 0 && section_lines.get(pos - 1).is_some_and(|l| l.trim().is_empty()) {
+                pos -= 1;
             }
-        };
+            pos
+        });
         for item in missing {
             section_lines.insert(insert_pos, item);
             insert_pos += 1;
@@ -274,7 +261,7 @@ fn reconcile_or_inject_section(
         out_lines.extend(section_lines);
         out_lines.extend(tail.iter().map(|s| (*s).to_string()));
         (out_lines.join(line_ending), changes)
-    } else {
+    } else if !spec.inject_header.is_empty() {
         let mut out_lines: Vec<String> = lines.iter().map(|s| (*s).to_string()).collect();
         while out_lines.last().is_some_and(|l| l.trim().is_empty()) {
             out_lines.pop();
@@ -287,6 +274,8 @@ fn reconcile_or_inject_section(
         }
         out_lines.push(String::new());
         (out_lines.join(line_ending), children.len())
+    } else {
+        (content.to_string(), 0)
     }
 }
 
@@ -339,29 +328,32 @@ pub fn synthesize_and_reconcile_hierarchy(
     let use_cases = by_type("use_case");
 
     let feat_sec = HierarchySectionSpec {
-        section_headers: &["features", "child features", "feature breakdown", "linked features"],
-        inject_header: "## Features",
-        repo,
-        branch,
+        section_headers: &["features", "child features", "feature breakdown", "linked features", "requirements & checklist"],
+        inject_header: "## Features", repo, branch,
     };
     let uc_sec = HierarchySectionSpec {
-        section_headers: &["use cases", "system use cases", "linked use cases"],
-        inject_header: "## Use Cases",
-        repo,
-        branch,
+        section_headers: &["use cases", "system use cases", "linked use cases", "associated use cases"],
+        inject_header: "## Use Cases", repo, branch,
     };
     let story_sec = HierarchySectionSpec {
-        section_headers: &["user stories", "child user stories", "stories", "linked user stories"],
-        inject_header: "## User Stories",
-        repo,
-        branch,
+        section_headers: &["user stories", "child user stories", "stories", "linked user stories", "associated user stories"],
+        inject_header: "## User Stories", repo, branch,
+    };
+    let epic_story_sec = HierarchySectionSpec {
+        section_headers: &["associated user stories"],
+        inject_header: "", repo, branch,
     };
 
     let mut total_changes = 0usize;
     for epic in &epics {
         let child_feats: Vec<&DiscoveredSpec> = features.iter().copied().filter(|f| spec_matches_epic(f, epic)).collect();
         let child_ucs: Vec<&DiscoveredSpec> = use_cases.iter().copied().filter(|u| spec_matches_epic(u, epic)).collect();
-        total_changes += reconcile_parent_spec_sections(epic, &[(&feat_sec, child_feats), (&uc_sec, child_ucs)], dry_run)?;
+        let child_stories: Vec<&DiscoveredSpec> = stories.iter().copied().filter(|s| {
+            spec_matches_epic(s, epic) || child_feats.iter().any(|f| spec_matches_feature(s, f))
+        }).collect();
+        total_changes += reconcile_parent_spec_sections(
+            epic, &[(&feat_sec, child_feats), (&uc_sec, child_ucs), (&epic_story_sec, child_stories)], dry_run,
+        )?;
     }
 
     for feat in &features {

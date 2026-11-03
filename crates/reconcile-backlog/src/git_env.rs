@@ -101,25 +101,28 @@ pub fn detect_git_branch(workspace_root: &Path) -> String {
 /// Contract: Uses `git rev-parse --show-prefix` so nested workspaces generate accurate GitHub blob URLs.
 /// Bounds & Faults: Time O(1) subprocess call, Space O(P).
 pub fn detect_upstream_prefix(workspace_root: &Path) -> Option<String> {
-    let output = Command::new("git")
+    if let Ok(output) = Command::new("git")
         .arg("-C")
         .arg(workspace_root)
         .args(["rev-parse", "--show-prefix"])
         .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
+    {
+        if output.status.success() {
+            let prefix = String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .trim_matches('/')
+                .to_string();
+            if !prefix.is_empty() {
+                return Some(prefix);
+            }
+        }
     }
 
-    let prefix = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .trim_matches('/')
-        .to_string();
-
-    if prefix.is_empty() {
-        None
+    let norm = workspace_root.to_string_lossy().replace('\\', "/");
+    let clean = norm.trim_end_matches('/');
+    if clean.ends_with(".pipeline/upstream") || clean.contains(".pipeline/upstream/") {
+        Some(".pipeline/upstream".to_string())
     } else {
-        Some(prefix)
+        None
     }
 }
