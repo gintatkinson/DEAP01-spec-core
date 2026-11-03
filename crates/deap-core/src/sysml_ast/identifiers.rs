@@ -256,18 +256,22 @@ pub fn mask_string_literals(s: &str) -> String {
             Ok(SysmlToken::StringLit) => span.start.saturating_add(1)..span.end.saturating_sub(1),
             Ok(SysmlToken::LineComment | SysmlToken::BlockComment) => span,
             Err(()) if s.get(span.clone()).is_some_and(|t| t.starts_with('"')) => {
-                for b in out.get_mut(span.start.saturating_add(1)..).into_iter().flatten() {
-                    if *b != b'\n' {
-                        *b = b' ';
+                if let Some(tail) = out.get_mut(span.start.saturating_add(1)..) {
+                    for b in tail {
+                        if *b != b'\n' {
+                            *b = b' ';
+                        }
                     }
                 }
                 break;
             }
             _ => continue,
         };
-        for b in out.get_mut(mask_range).into_iter().flatten() {
-            if *b != b'\n' {
-                *b = b' ';
+        if let Some(slice) = out.get_mut(mask_range) {
+            for b in slice {
+                if *b != b'\n' {
+                    *b = b' ';
+                }
             }
         }
     }

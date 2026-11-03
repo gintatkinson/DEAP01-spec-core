@@ -14,10 +14,26 @@ pub const MAX_LEGACY_RATCHET_ENTRIES: usize = 0;
 /// Compile-time invariant enforcing that `LEGACY_RATCHET_MAX_LINES` never increases in length.
 const _: () = assert!(LEGACY_RATCHET_MAX_LINES.len() == MAX_LEGACY_RATCHET_ENTRIES);
 
-/// Forbidden sharded paths that must never exist on disk (`[REQ-0601]`, `[REQ-0608]`).
+/// Forbidden sharded paths that must never exist on disk (`[REQ-0601]`, `[REQ-0602]`, `[REQ-0608]`).
 pub const FORBIDDEN_SHARD_PATHS: &[&str] = &[
     "crates/deap-core/src/source_ast",
     "crates/deap-core/src/sysml_ast/brace_and_masking.rs",
+    "crates/verify-baseline/src/checks/structural.rs",
+    "crates/verify-baseline/src/checks/struct_check_audit.rs",
+    "crates/verify-baseline/src/checks/struct_check_clippy.rs",
+    "crates/verify-baseline/src/checks/struct_check_feat42.rs",
+    "crates/verify-baseline/src/checks/struct_check_grounding.rs",
+    "crates/verify-baseline/src/checks/struct_check_handoff.rs",
+    "crates/verify-baseline/src/checks/struct_check_mask.rs",
+    "crates/verify-baseline/src/checks/struct_check_purity.rs",
+    "crates/verify-baseline/src/checks/struct_check_scripts.rs",
+    "crates/verify-baseline/src/checks/struct_check_upstream.rs",
+    "crates/verify-baseline/src/checks/struct_check_a_tests.rs",
+    "crates/verify-baseline/src/checks/struct_check_b_tests.rs",
+    "crates/verify-baseline/src/checks/struct_check_c_tests.rs",
+    "crates/verify-baseline/src/checks/struct_check_d_tests.rs",
+    "crates/verify-baseline/src/checks/struct_check_e_tests.rs",
+    "crates/verify-baseline/src/checks/struct_check_f_tests.rs",
 ];
 
 /// Forbidden dummy CST discard substrings in production/test Rust code (`[REQ-0601]`, `[REQ-0608]`).
@@ -63,7 +79,8 @@ pub fn verify_anti_cheat_and_anti_sharding(workspace_root: &std::path::Path) -> 
     if !crates_dir.exists() {
         return Ok(());
     }
-    for entry in walkdir::WalkDir::new(&crates_dir).into_iter().flatten() {
+    for entry_res in walkdir::WalkDir::new(&crates_dir) {
+        let entry = entry_res.map_err(|e| format!("crates walk I/O error: {e}"))?;
         if !entry.file_type().is_file() || entry.path().extension().and_then(|s| s.to_str()) != Some("rs") {
             continue;
         }
@@ -126,7 +143,8 @@ mod tests {
         if !LEGACY_RATCHET_MAX_LINES.is_empty() {
             return Err(format!("expected empty ratchet table, found {} entries", LEGACY_RATCHET_MAX_LINES.len()));
         }
-        for entry in WalkDir::new(root.join("crates")).into_iter().flatten() {
+        for entry_res in WalkDir::new(root.join("crates")) {
+            let entry = entry_res.map_err(|e| e.to_string())?;
             if !entry.file_type().is_file() || entry.path().extension().and_then(|s| s.to_str()) != Some("rs") {
                 continue;
             }

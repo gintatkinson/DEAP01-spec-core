@@ -2,7 +2,7 @@
 //! `BP-01` workspace manifest `"forbid"` gate and `cargo_metadata::Message` NDJSON diagnostic parser.
 //! Realises: [REQ-0601], [REQ-0608]
 
-use super::struct_check_purity::{has_split_token, FORBIDDEN_CARGO_DEP_TOKEN};
+pub(crate) use super::cargo_policy_gate::scan_cargo_toml_file;
 use cargo_metadata::diagnostic::DiagnosticLevel;
 use cargo_metadata::Message;
 use std::fs;
@@ -174,7 +174,14 @@ fn verify_crate_manifests(crates_dir: &Path, workspace_root: &Path, errors: &mut
         errors.push(String::from("crates/: failed to read directory"));
         return;
     };
-    let mut dirs: Vec<_> = entries.filter_map(Result::ok).map(|e| e.path()).collect();
+    let mut dirs = Vec::new();
+    for entry_res in entries {
+        let Ok(entry) = entry_res else {
+            errors.push(String::from("crates/: failed to read directory entry"));
+            return;
+        };
+        dirs.push(entry.path());
+    }
     dirs.sort();
     for dir in dirs {
         let manifest = dir.join("Cargo.toml");
@@ -202,50 +209,6 @@ fn is_forbid_lint_entry(item: Option<&Item>) -> bool {
     let Some(item) = item else { return false };
     item.as_str() == Some("forbid")
         || item.as_table_like().and_then(|t| t.get("level")).and_then(Item::as_str) == Some("forbid")
-}
-
-/// Scans a single `Cargo.toml` manifest for forbidden crate dependencies (`[REQ-0601]`).
-pub(crate) fn scan_cargo_toml_file(path: &Path, root: &Path, violations: &mut Vec<String>) {
-    let rel = path.strip_prefix(root).unwrap_or(path).display().to_string();
-    let Ok(content) = fs::read_to_string(path) else {
-        violations.push(format!("{rel}: failed to read Cargo.toml"));
-        return;
-    };
-    let Ok(doc) = content.parse::<DocumentMut>() else {
-        violations.push(format!("{rel}: failed to parse Cargo.toml"));
-        return;
-    };
-    for section in ["dependencies", "dev-dependencies", "build-dependencies"] {
-        check_dep_table(doc.get(section), &content, &rel, section, violations);
-    }
-    if let Some(ws) = doc.get("workspace").and_then(Item::as_table_like) {
-        check_dep_table(ws.get("dependencies"), &content, &rel, "workspace.dependencies", violations);
-    }
-}
-
-/// Checks a TOML dependency table for forbidden crate keys (`[REQ-0601]`).
-fn check_dep_table(
-    table_item: Option<&Item>,
-    raw: &str,
-    rel: &str,
-    section: &str,
-    violations: &mut Vec<String>,
-) {
-    let Some(table) = table_item.and_then(Item::as_table_like) else { return };
-    let tok = FORBIDDEN_CARGO_DEP_TOKEN;
-    for (dep_key, _) in table.iter() {
-        let lower = dep_key.to_ascii_lowercase();
-        let exact = lower.len() == tok.0.len().saturating_add(tok.1.len())
-            && has_split_token(&lower, tok.0, tok.1);
-        let lite = lower.ends_with("-lite") && has_split_token(&lower, tok.0, tok.1);
-        if exact || lite {
-            let line_no = raw
-                .lines()
-                .position(|l| l.trim_start().starts_with(dep_key))
-                .map_or(1, |idx| idx.saturating_add(1));
-            violations.push(format!("{rel}:{line_no}: forbidden dependency `{dep_key}` in [{section}]"));
-        }
-    }
 }
 
 /// Parses a `cargo clippy --message-format=json` NDJSON stream via `cargo_metadata::Message` (`[REQ-0601]`).

@@ -34,6 +34,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-DEAP-CORE-LIB], [DO-330-TQL-4-CORE-LIB]
 
+pub mod cargo_manifest_ast;
 pub mod dart_cst;
 pub mod diagnostics;
 pub mod digest;
@@ -47,6 +48,13 @@ pub mod source_ast;
 pub mod sysml_ast;
 pub mod sysml_cst;
 pub mod workspace;
+
+pub use cargo_manifest_ast::{
+    check_zero_shell_scripts, discover_cargo_manifests_with_metadata,
+    is_forbidden_regex_crate_name, is_governed_python_scan_extension, is_negated_script_mention,
+    load_workspace_rust_vfs, parse_cargo_lock_ast, parse_cargo_toml_ast, Check34Violation,
+    ForbiddenAstPattern, LockfileAstSummary, ManifestDependencyEntry, WorkspaceManifestAst,
+};
 
 pub use diagnostics::{
     emit_cli_ndjson_stream, format_ndjson_line, resolve_utf8_span, Applicability, DefectDossier,
