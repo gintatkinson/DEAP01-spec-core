@@ -283,6 +283,15 @@ pub fn check_dual_schema_ssot_parity(repo_root: &Path) -> Result<ParityOutcome, 
         &pipe_defs.use_cases,
         &mut mismatches,
     );
+    if schema_sysml_files.len() > 1 {
+        if let Ok(m_text) = fs::read_to_string(repo_root.join("schema/model.sysml")) {
+            crate::spec_audit::contract_and_schema_parity::compare_model_sysml_against_combined(
+                &m_text,
+                &schema_dir_content,
+                &mut mismatches,
+            );
+        }
+    }
 
     if mismatches.is_empty() {
         Ok(ParityOutcome::DualSchemaIdentical)

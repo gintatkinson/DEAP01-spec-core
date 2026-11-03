@@ -2,15 +2,16 @@
 //!
 //! Evaluates sections, metadata, UML, LUMI, provenance, ConOps, and behavioral trigger gates.
 
+use crate::spec_audit::contract_and_schema_parity::run_extended_cross_doc_gates;
 use crate::spec_audit::{
     infer_spec_type, parse_markdown, validate_behavioral_triggers, validate_conops,
-    validate_conops_workspace, validate_document_uml, validate_epic_statechart_heterogeneity,
-    validate_feature_operation_coverage, validate_filenames, validate_logical_ui,
-    validate_metadata, validate_parent_epic_alignment, validate_provenance, validate_sections,
-    validate_title_uniqueness, validate_use_case_anti_boilerplate,
-    validate_use_case_diagram_compliance, validate_user_story_test_cases, ActiveGates, AuditedSpec,
-    BehavioralTrigger, MarkdownDoc, SpecAuditError, SpecAuditFinding, SpecAuditOptions,
-    SysmlSymbolIndex,
+    validate_conops_workspace, validate_contract_ab_and_dod, validate_document_uml,
+    validate_epic_statechart_heterogeneity, validate_feature_operation_coverage,
+    validate_filenames, validate_logical_ui, validate_metadata, validate_parent_epic_alignment,
+    validate_provenance, validate_sections, validate_title_uniqueness,
+    validate_use_case_anti_boilerplate, validate_use_case_diagram_compliance,
+    validate_user_story_test_cases, ActiveGates, AuditedSpec, BehavioralTrigger, MarkdownDoc,
+    SpecAuditError, SpecAuditFinding, SpecAuditOptions, SysmlSymbolIndex,
 };
 use std::collections::BTreeMap;
 use std::fs;
@@ -78,6 +79,14 @@ pub(crate) fn audit_single_spec_file(
     if active_gates.sections {
         for err in validate_sections(&spec_type, &doc, &rel_path) {
             findings.push(SpecAuditFinding::new("mandatory-sections-missing", err, &rel_path, None));
+        }
+        for err in validate_contract_ab_and_dod(&spec_type, &doc, &content, &rel_path) {
+            findings.push(SpecAuditFinding::new(
+                "contract-ab-and-3layer-dod",
+                err,
+                &rel_path,
+                None,
+            ));
         }
         if spec_type == "use_case" {
             for err in validate_use_case_anti_boilerplate(&doc, &content, &rel_path) {
@@ -243,6 +252,11 @@ pub(crate) fn run_cross_document_spec_gates(
 
     if active_gates.conops {
         findings.extend(validate_conops_workspace(&options.repo_root)?);
+    }
+    if options.only_file.is_none()
+        && (active_gates.sections || active_gates.metadata || active_gates.uml)
+    {
+        run_extended_cross_doc_gates(&options.repo_root, &mut findings);
     }
 
     Ok(findings)

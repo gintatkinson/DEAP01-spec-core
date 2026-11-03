@@ -173,6 +173,14 @@ pub fn check_coverage_digest(repo_root: &Path) -> Result<ParityOutcome, Vec<Stri
     if !active_uc_files.is_empty() {
         audit_schema_use_case_realizations(repo_root, &active_uc_files, &mut errors);
     }
+    crate::spec_audit::contract_and_schema_parity::audit_ast_node_spec_realizations(
+        repo_root,
+        &[],
+        &repo_root.join(".pipeline/schema.sysml"),
+        &mut errors,
+    );
+    errors.sort();
+    errors.dedup();
 
     if errors.is_empty() {
         Ok(ParityOutcome::Verified)

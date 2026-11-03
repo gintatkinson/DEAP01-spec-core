@@ -12,6 +12,7 @@ pub mod conops_architecture;
 pub mod conops_audit;
 pub mod conops_matrices;
 pub mod conops_schema;
+pub mod contract_and_schema_parity;
 pub mod diagram_ast;
 pub(crate) mod diagram_class_parser;
 pub(crate) mod diagram_invariants;
@@ -28,6 +29,7 @@ pub mod provenance_refs;
 pub mod provenance_temporal;
 pub mod sections;
 pub mod sections_boilerplate;
+pub mod tracker_projection;
 pub(crate) mod uml_compliance_gates;
 pub(crate) mod uml_coverage_gates;
 pub(crate) mod uml_diagram_gates;
@@ -84,6 +86,14 @@ pub use provenance::{
 };
 pub use sections::{
     validate_sections, validate_use_case_anti_boilerplate, SectionRule, SectionRules,
+};
+pub use contract_and_schema_parity::{
+    validate_contract_ab_and_dod, validate_multi_file_schema_and_spec_realization_parity,
+};
+pub use tracker_projection::{
+    has_unchecked_markdown_task_items, parse_spec_issue_number,
+    project_body_for_tracker_with_prefix, validate_spec_remote_tracker_projection,
+    validate_workspace_remote_tracker_projection, RemoteTrackerIssue,
 };
 pub use uml_validator::{
     validate_class_diagram, validate_document_uml, validate_epic_statechart_heterogeneity,
@@ -310,3 +320,7 @@ pub fn infer_spec_type(rel_path: &str) -> &'static str {
 #[cfg(test)]
 #[path = "spec_audit_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "contract_projection_tests.rs"]
+mod contract_projection_tests;
