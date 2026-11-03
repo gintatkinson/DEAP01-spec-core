@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | TBD |
+| **Issue ID** | #685..#690, #852..#856 |
 | **Title** | WBS_03: Enterprise Export Schema & Multi-Platform Realization Contract |
 | **Type** | management |
 | **Management Level** | Level 4 Enterprise Realization & PM Toolchain Integration |

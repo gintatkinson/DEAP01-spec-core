@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #811 |
+| **Issue ID** | #812 |
 | **Title** | User Story 62: verify in process cst syntax |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
@@ -88,9 +88,9 @@ test case def Test_verify_in_process_cst_syntax {
 - [ ] AC-US-62-08: Given violated formal constraint `C_VER_07 (max_module_exec_sloc <= 380)` or an `ra_ap_syntax` CST syntax error, When `MultiStageVerificationOrchestrator` invokes `verify_in_process_cst_syntax`, Then the gate rejects the request without partial state mutation, transitions to `FailedClosedJsonDiagnostic`, and emits single-line NDJSON diagnostic `DEAP-E0905`.
 
 ## Required Features
-- [ ] #748 - [Feature 42: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] IsolatedDylintMirAllocationGate](../features/FEAT-42-IsolatedDylintMirAllocationGate.md) (Executes `verify_in_process_cst_syntax` across `./crates/verify-baseline/src/formal_gates/` and excluded `./lints/deap-dylint-mir/`)
-- [ ] #750 - [Feature 44: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] MultiStageVerificationOrchestrator](../features/FEAT-44-MultiStageVerificationOrchestrator.md) (Coordinates submodule CST and `< 380`-SLOC verification across all formal verification gates)
-- [ ] #751 - [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) (Enforces Stage 1 CST and `clippy.toml` structural complexity alignment)
+- [ ] #840 - [Feature 42: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] IsolatedDylintMirAllocationGate](../features/FEAT-42-IsolatedDylintMirAllocationGate.md) (Executes `verify_in_process_cst_syntax` across `./crates/verify-baseline/src/formal_gates/` and excluded `./lints/deap-dylint-mir/`)
+- [ ] #842 - [Feature 44: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] MultiStageVerificationOrchestrator](../features/FEAT-44-MultiStageVerificationOrchestrator.md) (Coordinates submodule CST and `< 380`-SLOC verification across all formal verification gates)
+- [ ] #843 - [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) (Enforces Stage 1 CST and `clippy.toml` structural complexity alignment)
 
 ## Source References
 Operational concept definitions and system sequence interaction models:

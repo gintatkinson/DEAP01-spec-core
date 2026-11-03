@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #796 |
+| **Issue ID** | #797 |
 | **Title** | User Story 47: synthesize module tokens |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-07-BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint](../epics/EPIC-07-BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint.md) |

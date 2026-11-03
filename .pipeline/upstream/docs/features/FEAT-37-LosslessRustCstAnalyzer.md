@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #743 |
+| **Issue ID** | #835 |
 | **Title** | Feature 37: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] LosslessRustCstAnalyzer |
 | **Type** | feature |
 | **Parent Epic** | [EPIC-08-BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics](../epics/EPIC-08-BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics.md) |
@@ -156,18 +156,18 @@ Classifier `LosslessRustCstAnalyzer` binds external and behavioral interfaces ac
 ### Associated Use Cases & User Stories
 
 #### Associated Use Cases
-- [ ] #766 - [Use Case 38: Lossless Red Green CST Roundtrip and Exact DEAP v2 0 AST Metrics Extraction](../use-cases/UC-38-Lossless_Red_Green_CST_Roundtrip_and_Exact_DEAP_v2_0_AST_Metrics_Extraction.md) (directly exercises `LosslessRustCstAnalyzer` `ra_ap_syntax` + `rowan` roundtrip verification, `DocTier` classification, and `DeapV2AstMetrics` extraction)
-- [ ] #767 - [Use Case 39: Deterministic B Tree Map Item Inventory and Atomic Module Extraction with Check 37 Path Rewriting](../use-cases/UC-39-Deterministic_BTreeMap_Item_Inventory_and_Atomic_Module_Extraction_with_Check_37_Path_Rewriting.md) (invokes `list_rust_items` on `LosslessRustCstAnalyzer` to produce deterministic `BTreeMap` item spans for module extraction)
-- [ ] #768 - [Use Case 40: Fail Closed Rejection on Span Collisions Missing Symbols or Post Splice Syntax Errors](../use-cases/UC-40-Fail_Closed_Rejection_on_Span_Collisions_Missing_Symbols_or_Post_Splice_Syntax_Errors.md) (verifies post-splice CST syntax errors via `LosslessRustCstAnalyzer`)
-- [ ] #769 - [Use Case 41: Lossless Tier B C Docblock Compaction Skipping Self Hosted Generated Modules](../use-cases/UC-41-Lossless_Tier_B_C_Docblock_Compaction_Skipping_Self_Hosted_Generated_Modules.md) (classifies `DocTier::RustTierA` vs `DocTier::RustTierBC` items via `LosslessRustCstAnalyzer`)
+- [ ] #767 - [Use Case 38: Lossless Red Green CST Roundtrip and Exact DEAP v2 0 AST Metrics Extraction](../use-cases/UC-38-Lossless_Red_Green_CST_Roundtrip_and_Exact_DEAP_v2_0_AST_Metrics_Extraction.md) (directly exercises `LosslessRustCstAnalyzer` `ra_ap_syntax` + `rowan` roundtrip verification, `DocTier` classification, and `DeapV2AstMetrics` extraction)
+- [ ] #768 - [Use Case 39: Deterministic B Tree Map Item Inventory and Atomic Module Extraction with Check 37 Path Rewriting](../use-cases/UC-39-Deterministic_BTreeMap_Item_Inventory_and_Atomic_Module_Extraction_with_Check_37_Path_Rewriting.md) (invokes `list_rust_items` on `LosslessRustCstAnalyzer` to produce deterministic `BTreeMap` item spans for module extraction)
+- [ ] #769 - [Use Case 40: Fail Closed Rejection on Span Collisions Missing Symbols or Post Splice Syntax Errors](../use-cases/UC-40-Fail_Closed_Rejection_on_Span_Collisions_Missing_Symbols_or_Post_Splice_Syntax_Errors.md) (verifies post-splice CST syntax errors via `LosslessRustCstAnalyzer`)
+- [ ] #770 - [Use Case 41: Lossless Tier B C Docblock Compaction Skipping Self Hosted Generated Modules](../use-cases/UC-41-Lossless_Tier_B_C_Docblock_Compaction_Skipping_Self_Hosted_Generated_Modules.md) (classifies `DocTier::RustTierA` vs `DocTier::RustTierBC` items via `LosslessRustCstAnalyzer`)
 
 #### Associated User Stories
-- [ ] #802 - [User Story 53: verify offline locked build](../user-stories/US-53-verify_offline_locked_build.md) (coordinates workspace verification with `LosslessRustCstAnalyzer` invariant gates)
-- [ ] #803 - [User Story 54: list rust items](../user-stories/US-54-list_rust_items.md) (directly invokes `list_rust_items(path)` on `LosslessRustCstAnalyzer`)
-- [ ] #804 - [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) (queries `LosslessRustCstAnalyzer` item spans and post-splice CST parse validation)
-- [ ] #805 - [User Story 56: verify stage fixed point](../user-stories/US-56-verify_stage_fixed_point.md) (verifies CST structural invariants alongside Stage-1/Stage-2 fixed-point digests)
-- [ ] #806 - [User Story 57: format ndjson line](../user-stories/US-57-format_ndjson_line.md) (projects `ra_ap_line_index::LineIndex` byte/line/col spans from `LosslessRustCstAnalyzer` into single-line NDJSON diagnostics)
-- [ ] #807 - [User Story 58: analyze metrics](../user-stories/US-58-analyze_metrics.md) (directly invokes `analyze_metrics(source)` on `LosslessRustCstAnalyzer` enforcing `C_CST_01..C_CST_03`)
+- [ ] #803 - [User Story 53: verify offline locked build](../user-stories/US-53-verify_offline_locked_build.md) (coordinates workspace verification with `LosslessRustCstAnalyzer` invariant gates)
+- [ ] #804 - [User Story 54: list rust items](../user-stories/US-54-list_rust_items.md) (directly invokes `list_rust_items(path)` on `LosslessRustCstAnalyzer`)
+- [ ] #805 - [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) (queries `LosslessRustCstAnalyzer` item spans and post-splice CST parse validation)
+- [ ] #806 - [User Story 56: verify stage fixed point](../user-stories/US-56-verify_stage_fixed_point.md) (verifies CST structural invariants alongside Stage-1/Stage-2 fixed-point digests)
+- [ ] #807 - [User Story 57: format ndjson line](../user-stories/US-57-format_ndjson_line.md) (projects `ra_ap_line_index::LineIndex` byte/line/col spans from `LosslessRustCstAnalyzer` into single-line NDJSON diagnostics)
+- [ ] #808 - [User Story 58: analyze metrics](../user-stories/US-58-analyze_metrics.md) (directly invokes `analyze_metrics(source)` on `LosslessRustCstAnalyzer` enforcing `C_CST_01..C_CST_03`)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `LosslessRustCstAnalyzer` initialization inputs for `max_fn_exec_sloc` (`Integer`), `max_fn_param_count` (`Integer`), `max_mut_bool_flags` (`Integer`), `max_predicate_arity` (`Integer`), `lossless_roundtrip_required` (`Boolean`), `deterministic_uuid` (`String`) (no additional constraints specified in schema), When `LosslessRustCstAnalyzer` commits typed domain state, Then declared state attributes hold verified values.

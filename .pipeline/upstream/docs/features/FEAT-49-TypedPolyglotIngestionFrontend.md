@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #755 |
+| **Issue ID** | #847 |
 | **Title** | Feature 49: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] TypedPolyglotIngestionFrontend |
 | **Type** | feature |
 | **Parent Epic** | [EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine](../epics/EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine.md) |
@@ -142,16 +142,16 @@ Classifier `TypedPolyglotIngestionFrontend` binds external and behavioral interf
 ### Associated Use Cases & User Stories
 
 #### Associated Use Cases
-- [ ] #785 - [Use Case 57: Cohesive Typed Polyglot CST AST Lowering with Zero rustc private and Exact Byte Span Diagnostics](../use-cases/UC-57-Cohesive_Typed_Polyglot_CST_AST_Lowering_with_Zero_rustc_private_and_Exact_Byte_Span_Diagnostics.md) (verifies 6-frontend polyglot CST/AST lowering via `ra_ap_syntax`, `deap_core::dart_cst`, `serde_json`, `ingest_sysml::cst::{idl_cst, yang_cst}`, and `pulldown-cmark` with `rustc_private_feature_count == 0`)
+- [ ] #786 - [Use Case 57: Cohesive Typed Polyglot CST AST Lowering with Zero rustc private and Exact Byte Span Diagnostics](../use-cases/UC-57-Cohesive_Typed_Polyglot_CST_AST_Lowering_with_Zero_rustc_private_and_Exact_Byte_Span_Diagnostics.md) (verifies 6-frontend polyglot CST/AST lowering via `ra_ap_syntax`, `deap_core::dart_cst`, `serde_json`, `ingest_sysml::cst::{idl_cst, yang_cst}`, and `pulldown-cmark` with `rustc_private_feature_count == 0`)
 
 #### Associated User Stories
-- [ ] #815 - [User Story 66: resolve polyglot backend](../user-stories/US-66-resolve_polyglot_backend.md) (binds deterministic `resolve_polyglot_backend` dispatch across all 6 polyglot CST/AST frontends)
-- [ ] #816 - [User Story 67: normalize line endings](../user-stories/US-67-normalize_line_endings.md) (binds cross-platform CRLF-to-LF normalization prior to CST lexing)
-- [ ] #817 - [User Story 68: parse lossless sysml cst](../user-stories/US-68-parse_lossless_sysml_cst.md) (binds lossless `logos` + `rowan` CST parsing)
-- [ ] #818 - [User Story 69: verify lossless cst invariants](../user-stories/US-69-verify_lossless_cst_invariants.md) (binds lossless CST roundtrip and depth invariant verification)
-- [ ] #819 - [User Story 70: evaluate hir early cutoff](../user-stories/US-70-evaluate_hir_early_cutoff.md) (binds trivia-erased `HirPackageSummary` early-cutoff comparison)
-- [ ] #820 - [User Story 71: apply formatting preserving splices](../user-stories/US-71-apply_formatting_preserving_splices.md) (binds disjoint `Utf8TextRange` CST splicing)
-- [ ] #821 - [User Story 72: render ariadne diagnostic](../user-stories/US-72-render_ariadne_diagnostic.md) (binds deterministic `ariadne` and NDJSON diagnostic rendering)
+- [ ] #816 - [User Story 66: resolve polyglot backend](../user-stories/US-66-resolve_polyglot_backend.md) (binds deterministic `resolve_polyglot_backend` dispatch across all 6 polyglot CST/AST frontends)
+- [ ] #817 - [User Story 67: normalize line endings](../user-stories/US-67-normalize_line_endings.md) (binds cross-platform CRLF-to-LF normalization prior to CST lexing)
+- [ ] #818 - [User Story 68: parse lossless sysml cst](../user-stories/US-68-parse_lossless_sysml_cst.md) (binds lossless `logos` + `rowan` CST parsing)
+- [ ] #819 - [User Story 69: verify lossless cst invariants](../user-stories/US-69-verify_lossless_cst_invariants.md) (binds lossless CST roundtrip and depth invariant verification)
+- [ ] #820 - [User Story 70: evaluate hir early cutoff](../user-stories/US-70-evaluate_hir_early_cutoff.md) (binds trivia-erased `HirPackageSummary` early-cutoff comparison)
+- [ ] #821 - [User Story 71: apply formatting preserving splices](../user-stories/US-71-apply_formatting_preserving_splices.md) (binds disjoint `Utf8TextRange` CST splicing)
+- [ ] #822 - [User Story 72: render ariadne diagnostic](../user-stories/US-72-render_ariadne_diagnostic.md) (binds deterministic `ariadne` and NDJSON diagnostic rendering)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `TypedPolyglotIngestionFrontend` initialization inputs for `polyglot_frontend_count` (`Integer == 6`, `C_INC_06`), `rustc_private_feature_count` (`Integer == 0`, `C_INC_07`), `json_and_ariadne_span_diagnostics` (`Boolean == true`), `zero_backtracking_lexers` (`Boolean == true`) across `ra_ap_syntax`, `deap_core::dart_cst`, typed `serde_json`, `ingest_sysml::cst::{idl_cst, yang_cst}`, and `pulldown-cmark` (Contract B), When `TypedPolyglotIngestionFrontend` commits typed domain state inside `< 380`-SLOC submodules (`./crates/ingest-sysml/src/cst/`) and lowers into 100% normative OMG SysML v2.0 + KerML 1.0 HIR (Contract A: zero 16-construct caps), Then declared state attributes hold verified values and legacy `./crates/ingest-sysml/src/extractors.rs` (`-900+` SLOC) is retired.

@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #749 |
+| **Issue ID** | #841 |
 | **Title** | Feature 43: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] KaniCbmcProofSynthesizer |
 | **Type** | feature |
 | **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
@@ -137,12 +137,12 @@ Classifier `KaniCbmcProofSynthesizer` binds external and behavioral interfaces a
 ### Associated Use Cases & User Stories
 
 #### Associated Use Cases
-- [ ] #778 - [Use Case 50: Stage 4 Deterministic Kani CBMC Proof Synthesis and STPA Unsafe Control Action Falsification](../use-cases/UC-50-Stage_4_Deterministic_Kani_CBMC_Proof_Synthesis_and_STPA_Unsafe_Control_Action_Falsification.md) (Realizes Stage 4 `syn` + `proc-macro2` + `quote` + `prettyplease` `outer kani::proof` synthesis and CBMC STPA `UCA-*` falsification)
-- [ ] #779 - [Use Case 51: Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate](../use-cases/UC-51-Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate.md) (Enforces `< 380`-SLOC submodule modularity in `./crates/compile-sysml/src/kani_synth/` and cross-platform `cargo-kani` runtime `PATH` discovery)
+- [ ] #779 - [Use Case 50: Stage 4 Deterministic Kani CBMC Proof Synthesis and STPA Unsafe Control Action Falsification](../use-cases/UC-50-Stage_4_Deterministic_Kani_CBMC_Proof_Synthesis_and_STPA_Unsafe_Control_Action_Falsification.md) (Realizes Stage 4 `syn` + `proc-macro2` + `quote` + `prettyplease` `outer kani::proof` synthesis and CBMC STPA `UCA-*` falsification)
+- [ ] #780 - [Use Case 51: Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate](../use-cases/UC-51-Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate.md) (Enforces `< 380`-SLOC submodule modularity in `./crates/compile-sysml/src/kani_synth/` and cross-platform `cargo-kani` runtime `PATH` discovery)
 
 #### Associated User Stories
-- [ ] #813 - [User Story 64: validate kani harness spec](../user-stories/US-64-validate_kani_harness_spec.md) (Executes `validate_kani_harness_spec(spec)` and synthesizes `outer kani::proof` harnesses via `syn` + `proc-macro2` + `quote` + `prettyplease`)
-- [ ] #814 - [User Story 65: evaluate four stage gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Verifies Stage 4 CBMC `UNSAT` proof receipts in the consolidated gatekeeper evaluation)
+- [ ] #814 - [User Story 64: validate kani harness spec](../user-stories/US-64-validate_kani_harness_spec.md) (Executes `validate_kani_harness_spec(spec)` and synthesizes `outer kani::proof` harnesses via `syn` + `proc-macro2` + `quote` + `prettyplease`)
+- [ ] #815 - [User Story 65: evaluate four stage gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Verifies Stage 4 CBMC `UNSAT` proof receipts in the consolidated gatekeeper evaluation)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `KaniCbmcProofSynthesizer` initialization inputs for `max_kani_counterexamples` (`Integer`), `default_kani_unwind_bound` (`Integer`), `structured_prettyplease_codegen` (`Boolean`) satisfying `C_VER_05`, `C_VER_06`, and `C_VER_07`, When `KaniCbmcProofSynthesizer` commits typed domain state, Then declared state attributes hold verified values and `outer cfg(kani)` `outer kani::proof` modules are formatted via `syn` + `proc-macro2` + `quote` + `prettyplease`.

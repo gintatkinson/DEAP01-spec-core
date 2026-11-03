@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #767 |
+| **Issue ID** | #768 |
 | **Title** | Use Case 39: Deterministic B Tree Map Item Inventory and Atomic Module Extraction with Check 37 Path Rewriting |
 | **Type** | use-case |
 | **Primary Actor** | Operator |
@@ -76,18 +76,18 @@ stateDiagram-v2
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#803** | User Story | [User Story 54: list rust items](../user-stories/US-54-list_rust_items.md) |
-| **#804** | User Story | [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) |
-| **#746** | Feature | [Feature 40: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] ZeroTokenRustSpanCodemodEngine](../features/FEAT-40-ZeroTokenRustSpanCodemodEngine.md) |
-| **#743** | Feature | [Feature 37: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] LosslessRustCstAnalyzer](../features/FEAT-37-LosslessRustCstAnalyzer.md) |
+| **#804** | User Story | [User Story 54: list rust items](../user-stories/US-54-list_rust_items.md) |
+| **#805** | User Story | [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) |
+| **#838** | Feature | [Feature 40: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] ZeroTokenRustSpanCodemodEngine](../features/FEAT-40-ZeroTokenRustSpanCodemodEngine.md) |
+| **#835** | Feature | [Feature 37: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] LosslessRustCstAnalyzer](../features/FEAT-37-LosslessRustCstAnalyzer.md) |
 
 ### Required User Stories
-- [ ] #803 - [User Story 54: list rust items](../user-stories/US-54-list_rust_items.md) (generates the deterministic `BTreeMap`-ordered `RustItemInventory` with composite `TextRange` spans)
-- [ ] #804 - [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) (executes atomic reverse-byte-order submodule extraction and `pulldown-cmark` Check 37 citation rewriting)
+- [ ] #804 - [User Story 54: list rust items](../user-stories/US-54-list_rust_items.md) (generates the deterministic `BTreeMap`-ordered `RustItemInventory` with composite `TextRange` spans)
+- [ ] #805 - [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) (executes atomic reverse-byte-order submodule extraction and `pulldown-cmark` Check 37 citation rewriting)
 
 ### Required Features
-- [ ] #746 - [Feature 40: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] ZeroTokenRustSpanCodemodEngine](../features/FEAT-40-ZeroTokenRustSpanCodemodEngine.md) (realizes the zero-LLM-token span-splice codemod engine and Check 37 path rewriter)
-- [ ] #743 - [Feature 37: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] LosslessRustCstAnalyzer](../features/FEAT-37-LosslessRustCstAnalyzer.md) (provides `list_rust_items` inventory generation and post-splice CST verification)
+- [ ] #838 - [Feature 40: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] ZeroTokenRustSpanCodemodEngine](../features/FEAT-40-ZeroTokenRustSpanCodemodEngine.md) (realizes the zero-LLM-token span-splice codemod engine and Check 37 path rewriter)
+- [ ] #835 - [Feature 37: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] LosslessRustCstAnalyzer](../features/FEAT-37-LosslessRustCstAnalyzer.md) (provides `list_rust_items` inventory generation and post-splice CST verification)
 
 ## Source References
 Use case operational flows and lifecycle activity references:

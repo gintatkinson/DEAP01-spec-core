@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | TBD |
+| **Issue ID** | #685..#690, #852..#856 |
 | **Title** | WBS_02: Technical Realization Register |
 | **Type** | management |
 | **Management Level** | Level 4 Enterprise Realization & DO-178C / DO-330 Traceability |

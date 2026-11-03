@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #770 |
+| **Issue ID** | #771 |
 | **Title** | Use Case 42: Structured Codegen Boundary Preserving Stage 1 to Stage 2 Metacircular SHA 256 Fixed Point |
 | **Type** | use-case |
 | **Primary Actor** | Operator |
@@ -76,16 +76,16 @@ stateDiagram-v2
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#805** | User Story | [User Story 56: verify stage fixed point](../user-stories/US-56-verify_stage_fixed_point.md) |
-| **#744** | Feature | [Feature 38: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] StructuredModularCodegenSynthesizer](../features/FEAT-38-StructuredModularCodegenSynthesizer.md) |
-| **#746** | Feature | [Feature 40: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] ZeroTokenRustSpanCodemodEngine](../features/FEAT-40-ZeroTokenRustSpanCodemodEngine.md) |
+| **#806** | User Story | [User Story 56: verify stage fixed point](../user-stories/US-56-verify_stage_fixed_point.md) |
+| **#836** | Feature | [Feature 38: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] StructuredModularCodegenSynthesizer](../features/FEAT-38-StructuredModularCodegenSynthesizer.md) |
+| **#838** | Feature | [Feature 40: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] ZeroTokenRustSpanCodemodEngine](../features/FEAT-40-ZeroTokenRustSpanCodemodEngine.md) |
 
 ### Required User Stories
-- [ ] #805 - [User Story 56: verify stage fixed point](../user-stories/US-56-verify_stage_fixed_point.md) (verifies `SHA-256(Stage 1) == SHA-256(Stage 2)` fixed-point parity across generated Rust modules)
+- [ ] #806 - [User Story 56: verify stage fixed point](../user-stories/US-56-verify_stage_fixed_point.md) (verifies `SHA-256(Stage 1) == SHA-256(Stage 2)` fixed-point parity across generated Rust modules)
 
 ### Required Features
-- [ ] #744 - [Feature 38: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] StructuredModularCodegenSynthesizer](../features/FEAT-38-StructuredModularCodegenSynthesizer.md) (synthesizes Stage-1/Stage-2 modules via `syn`, `proc-macro2`, `quote`, and `prettyplease`)
-- [ ] #746 - [Feature 40: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] ZeroTokenRustSpanCodemodEngine](../features/FEAT-40-ZeroTokenRustSpanCodemodEngine.md) (enforces `skip_generated_tree = true` so codemods never mutate Stage-1 generated sources)
+- [ ] #836 - [Feature 38: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] StructuredModularCodegenSynthesizer](../features/FEAT-38-StructuredModularCodegenSynthesizer.md) (synthesizes Stage-1/Stage-2 modules via `syn`, `proc-macro2`, `quote`, and `prettyplease`)
+- [ ] #838 - [Feature 40: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] ZeroTokenRustSpanCodemodEngine](../features/FEAT-40-ZeroTokenRustSpanCodemodEngine.md) (enforces `skip_generated_tree = true` so codemods never mutate Stage-1 generated sources)
 
 ## Source References
 Use case operational flows and lifecycle activity references:

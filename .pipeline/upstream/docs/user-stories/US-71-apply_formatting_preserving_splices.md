@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #820 |
+| **Issue ID** | #821 |
 | **Title** | User Story 71: apply formatting preserving splices |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine](../epics/EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine.md) |
@@ -67,9 +67,9 @@ test case def Test_apply_formatting_preserving_splices {
 - [ ] AC-US-71-08: Given violated formal constraint `C_INC_01 (max_ast_depth >= 1 and max_ast_depth <= 64)` or overlapping `Utf8TextRange` splice intervals (`DEAP-E1003`), When `TypedPolyglotIngestionFrontend` invokes `apply_formatting_preserving_splices` on `SalsaIncrementalCompilerDatabase`, Then `SalsaIncrementalCompilerDatabase` rejects the request without partial state mutation, preserves prior verified state, and emits a deterministic `DEAP-E1003` fault diagnostic across the interface binding.
 
 ## Required Features
-- [ ] #752 - [Feature 46: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] FormattingPreservingSyncSplicer](../features/FEAT-46-FormattingPreservingSyncSplicer.md) (executes pairwise-disjoint `Utf8TextRange` CST splicing and post-splice re-parse verification)
-- [ ] #755 - [Feature 49: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] TypedPolyglotIngestionFrontend](../features/FEAT-49-TypedPolyglotIngestionFrontend.md) (supplies lowered HIR deltas and source map spans)
-- [ ] #754 - [Feature 48: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] SalsaIncrementalCompilerDatabase](../features/FEAT-48-SalsaIncrementalCompilerDatabase.md) (coordinates `HirSourceMap` spans and incremental verification receipts)
+- [ ] #844 - [Feature 46: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] FormattingPreservingSyncSplicer](../features/FEAT-46-FormattingPreservingSyncSplicer.md) (executes pairwise-disjoint `Utf8TextRange` CST splicing and post-splice re-parse verification)
+- [ ] #847 - [Feature 49: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] TypedPolyglotIngestionFrontend](../features/FEAT-49-TypedPolyglotIngestionFrontend.md) (supplies lowered HIR deltas and source map spans)
+- [ ] #846 - [Feature 48: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] SalsaIncrementalCompilerDatabase](../features/FEAT-48-SalsaIncrementalCompilerDatabase.md) (coordinates `HirSourceMap` spans and incremental verification receipts)
 
 ## Source References
 Operational concept definitions and system sequence interaction models:

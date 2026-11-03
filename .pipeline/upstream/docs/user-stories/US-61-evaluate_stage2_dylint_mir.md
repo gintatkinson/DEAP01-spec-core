@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #810 |
+| **Issue ID** | #811 |
 | **Title** | User Story 61: evaluate stage2 dylint mir |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
@@ -88,9 +88,9 @@ test case def Test_evaluate_stage2_dylint_mir {
 - [ ] AC-US-61-08: Given violated formal constraint `C_VER_03 (max_rt_heap_allocations == 0)` or a dangling `REQ-*` identifier absent from the compiled `.digest.json`, When `MultiStageVerificationOrchestrator` invokes `evaluate_stage2_dylint_mir` on `IsolatedDylintMirAllocationGate`, Then `IsolatedDylintMirAllocationGate` rejects the request without partial state mutation, transitions to `FailedClosedJsonDiagnostic`, and emits single-line NDJSON diagnostic `DEAP-E0901` or `DEAP-E0902` across `dylint_ndjson_out`.
 
 ## Required Features
-- [ ] #748 - [Feature 42: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] IsolatedDylintMirAllocationGate](../features/FEAT-42-IsolatedDylintMirAllocationGate.md) (Executes `evaluate_stage2_dylint_mir` over lowered `rustc_middle::mir::Body` call/drop graphs inside excluded `./lints/deap-dylint-mir/`)
-- [ ] #750 - [Feature 44: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] MultiStageVerificationOrchestrator](../features/FEAT-44-MultiStageVerificationOrchestrator.md) (Dispatches Stage 2 MIR verification and short-circuits Stage 3 promotion on `DEAP-E0901` or `DEAP-E0902`)
-- [ ] #751 - [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) (Supplies verified Stage 1 manifest and total-function preconditions)
+- [ ] #840 - [Feature 42: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] IsolatedDylintMirAllocationGate](../features/FEAT-42-IsolatedDylintMirAllocationGate.md) (Executes `evaluate_stage2_dylint_mir` over lowered `rustc_middle::mir::Body` call/drop graphs inside excluded `./lints/deap-dylint-mir/`)
+- [ ] #842 - [Feature 44: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] MultiStageVerificationOrchestrator](../features/FEAT-44-MultiStageVerificationOrchestrator.md) (Dispatches Stage 2 MIR verification and short-circuits Stage 3 promotion on `DEAP-E0901` or `DEAP-E0902`)
+- [ ] #843 - [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) (Supplies verified Stage 1 manifest and total-function preconditions)
 
 ## Source References
 Operational concept definitions and system sequence interaction models:

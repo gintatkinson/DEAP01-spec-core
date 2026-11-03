@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #741 |
+| **Issue ID** | #833 |
 | **Title** | Feature 35: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] TopologicalLayerDagVerifier |
 | **Type** | feature |
 | **Parent Epic** | [EPIC-07-BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint](../epics/EPIC-07-BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint.md) |
@@ -109,14 +109,14 @@ Classifier `TopologicalLayerDagVerifier` binds external and behavioral interface
 - None allocated (structural subsystem component)
 
 #### Associated User Stories
-- [ ] #794 - [User Story 45: verify dag and layers](../user-stories/US-45-verify_dag_and_layers.md)
-- [ ] #795 - [User Story 46: partition and hoist](../user-stories/US-46-partition_and_hoist.md)
-- [ ] #796 - [User Story 47: synthesize module tokens](../user-stories/US-47-synthesize_module_tokens.md)
-- [ ] #797 - [User Story 48: build syn file](../user-stories/US-48-build_syn_file.md)
-- [ ] #798 - [User Story 49: format pretty syn file](../user-stories/US-49-format_pretty_syn_file.md)
-- [ ] #799 - [User Story 50: emit modular rust tree](../user-stories/US-50-emit_modular_rust_tree.md)
-- [ ] #800 - [User Story 51: emit modular_flutter_tree](../user-stories/US-51-emit_modular_flutter_tree.md)
-- [ ] #801 - [User Story 52: verify fixed point digest](../user-stories/US-52-verify_fixed_point_digest.md)
+- [ ] #795 - [User Story 45: verify dag and layers](../user-stories/US-45-verify_dag_and_layers.md)
+- [ ] #796 - [User Story 46: partition and hoist](../user-stories/US-46-partition_and_hoist.md)
+- [ ] #797 - [User Story 47: synthesize module tokens](../user-stories/US-47-synthesize_module_tokens.md)
+- [ ] #798 - [User Story 48: build syn file](../user-stories/US-48-build_syn_file.md)
+- [ ] #799 - [User Story 49: format pretty syn file](../user-stories/US-49-format_pretty_syn_file.md)
+- [ ] #800 - [User Story 50: emit modular rust tree](../user-stories/US-50-emit_modular_rust_tree.md)
+- [ ] #801 - [User Story 51: emit modular_flutter_tree](../user-stories/US-51-emit_modular_flutter_tree.md)
+- [ ] #802 - [User Story 52: verify fixed point digest](../user-stories/US-52-verify_fixed_point_digest.md)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `TopologicalLayerDagVerifier` initialization inputs for `max_layer_tier` (`Integer`), `zero_recursion_kahn` (`Boolean`) (no additional constraints specified in schema), When `TopologicalLayerDagVerifier` commits typed domain state, Then declared state attributes hold verified values.

@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | TBD |
+| **Issue ID** | #685..#690, #852..#856 |
 | **Title** | WBS_01: MIL-STD-881E Work Breakdown Structure |
 | **Type** | management |
 | **Management Level** | Level 4 Enterprise Realization |

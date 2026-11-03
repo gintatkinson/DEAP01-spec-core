@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #746 |
+| **Issue ID** | #838 |
 | **Title** | Feature 40: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] ZeroTokenRustSpanCodemodEngine |
 | **Type** | feature |
 | **Parent Epic** | [EPIC-08-BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics](../epics/EPIC-08-BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics.md) |
@@ -138,12 +138,12 @@ Classifier `ZeroTokenRustSpanCodemodEngine` binds external and behavioral interf
 ### Associated Use Cases & User Stories
 
 #### Associated Use Cases
-- [ ] #767 - [Use Case 39: Deterministic B Tree Map Item Inventory and Atomic Module Extraction with Check 37 Path Rewriting](../use-cases/UC-39-Deterministic_BTreeMap_Item_Inventory_and_Atomic_Module_Extraction_with_Check_37_Path_Rewriting.md) (directly exercises `ZeroTokenRustSpanCodemodEngine` `--extract-rust-module` and `pulldown-cmark` Check 37 citation rewriting)
-- [ ] #768 - [Use Case 40: Fail Closed Rejection on Span Collisions Missing Symbols or Post Splice Syntax Errors](../use-cases/UC-40-Fail_Closed_Rejection_on_Span_Collisions_Missing_Symbols_or_Post_Splice_Syntax_Errors.md) (enforces fail-closed transaction rollback on `ZeroTokenRustSpanCodemodEngine` when spans collide or syntax fails)
-- [ ] #769 - [Use Case 41: Lossless Tier B C Docblock Compaction Skipping Self Hosted Generated Modules](../use-cases/UC-41-Lossless_Tier_B_C_Docblock_Compaction_Skipping_Self_Hosted_Generated_Modules.md) (directly exercises `ZeroTokenRustSpanCodemodEngine` `--compact-tier-bc` with `skip_generated_tree = true`)
+- [ ] #768 - [Use Case 39: Deterministic B Tree Map Item Inventory and Atomic Module Extraction with Check 37 Path Rewriting](../use-cases/UC-39-Deterministic_BTreeMap_Item_Inventory_and_Atomic_Module_Extraction_with_Check_37_Path_Rewriting.md) (directly exercises `ZeroTokenRustSpanCodemodEngine` `--extract-rust-module` and `pulldown-cmark` Check 37 citation rewriting)
+- [ ] #769 - [Use Case 40: Fail Closed Rejection on Span Collisions Missing Symbols or Post Splice Syntax Errors](../use-cases/UC-40-Fail_Closed_Rejection_on_Span_Collisions_Missing_Symbols_or_Post_Splice_Syntax_Errors.md) (enforces fail-closed transaction rollback on `ZeroTokenRustSpanCodemodEngine` when spans collide or syntax fails)
+- [ ] #770 - [Use Case 41: Lossless Tier B C Docblock Compaction Skipping Self Hosted Generated Modules](../use-cases/UC-41-Lossless_Tier_B_C_Docblock_Compaction_Skipping_Self_Hosted_Generated_Modules.md) (directly exercises `ZeroTokenRustSpanCodemodEngine` `--compact-tier-bc` with `skip_generated_tree = true`)
 
 #### Associated User Stories
-- [ ] #804 - [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) (directly invokes `extract_rust_module(from_path, to_path, items_csv)` on `ZeroTokenRustSpanCodemodEngine`)
+- [ ] #805 - [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) (directly invokes `extract_rust_module(from_path, to_path, items_csv)` on `ZeroTokenRustSpanCodemodEngine`)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `ZeroTokenRustSpanCodemodEngine` initialization inputs for `runtime_llm_token_count` (`Integer`), `tier_bc_max_doc_lines` (`Integer`), `skip_generated_tree` (`Boolean`), `rewrite_check37_citations` (`Boolean`) (no additional constraints specified in schema), When `ZeroTokenRustSpanCodemodEngine` commits typed domain state, Then declared state attributes hold verified values.

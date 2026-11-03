@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #762 |
+| **Issue ID** | #763 |
 | **Title** | Use Case 34: Metacircular Self Hosting Stage 1 to Stage 2 SHA 256 Fixed Point Identity |
 | **Type** | use-case |
 | **Primary Actor** | Operator |
@@ -58,11 +58,11 @@ graph TD
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#796** | User Story | [User Story 47: synthesize module tokens](../user-stories/US-47-synthesize_module_tokens.md) (synthesizes deterministic `proc-macro2::TokenStream` units) |
-| **#801** | User Story | [User Story 52: verify fixed point digest](../user-stories/US-52-verify_fixed_point_digest.md) (verifies Stage-1 == Stage-2 SHA-256 fixed-point equality) |
-| **#737** | Feature | [Feature 31: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] FourLevelAstPartitionerAndHoister](../features/FEAT-31-FourLevelAstPartitionerAndHoister.md) (enforces `Invariant_REQ_0607_SC_03` fixed-point lowering contract) |
-| **#739** | Feature | [Feature 33: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] ModularRustMultiFileEmitter](../features/FEAT-33-ModularRustMultiFileEmitter.md) (executes Stage-2 emission and `fixed_point_sha256_verification`) |
-| **#740** | Feature | [Feature 34: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] SelfHostingModularCodegenCompiler](../features/FEAT-34-SelfHostingModularCodegenCompiler.md) (enforces `stage_fixed_point_mismatch_files == 0` and `runtime_llm_subagent_count == 0`) |
+| **#797** | User Story | [User Story 47: synthesize module tokens](../user-stories/US-47-synthesize_module_tokens.md) (synthesizes deterministic `proc-macro2::TokenStream` units) |
+| **#802** | User Story | [User Story 52: verify fixed point digest](../user-stories/US-52-verify_fixed_point_digest.md) (verifies Stage-1 == Stage-2 SHA-256 fixed-point equality) |
+| **#829** | Feature | [Feature 31: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] FourLevelAstPartitionerAndHoister](../features/FEAT-31-FourLevelAstPartitionerAndHoister.md) (enforces `Invariant_REQ_0607_SC_03` fixed-point lowering contract) |
+| **#831** | Feature | [Feature 33: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] ModularRustMultiFileEmitter](../features/FEAT-33-ModularRustMultiFileEmitter.md) (executes Stage-2 emission and `fixed_point_sha256_verification`) |
+| **#832** | Feature | [Feature 34: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] SelfHostingModularCodegenCompiler](../features/FEAT-34-SelfHostingModularCodegenCompiler.md) (enforces `stage_fixed_point_mismatch_files == 0` and `runtime_llm_subagent_count == 0`) |
 
 ## Source References
 Use case operational flows and lifecycle activity references:

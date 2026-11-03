@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #814 |
+| **Issue ID** | #815 |
 | **Title** | User Story 65: evaluate four stage gatekeeper |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
@@ -103,11 +103,11 @@ test case def Test_evaluate_four_stage_gatekeeper {
 - [ ] AC-US-65-08: Given any stage receipt with `passed == false` or `exit_code != 0`, When `MultiStageVerificationOrchestrator` invokes `evaluate_four_stage_gatekeeper`, Then `MultiStageVerificationOrchestrator` short-circuits remaining stages (`fail_closed_short_circuit == true`), transitions to `FailedClosedJsonDiagnostic`, and emits the failing stage's single-line NDJSON diagnostic (`DEAP-E0900`..`DEAP-E0905`).
 
 ## Required Features
-- [ ] #747 - [Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate](../features/FEAT-41-FrbIcdBridgeAndMiriUbGate.md) (Supplies Stage 3 `flutter_rust_bridge` FFI, `dart analyze`, and Miri `-Zmiri-tree-borrows` verification receipts)
-- [ ] #748 - [Feature 42: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] IsolatedDylintMirAllocationGate](../features/FEAT-42-IsolatedDylintMirAllocationGate.md) (Supplies Stage 2 excluded `./lints/deap-dylint-mir/` zero-allocation and `REQ-*` digest verification receipts)
-- [ ] #749 - [Feature 43: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] KaniCbmcProofSynthesizer](../features/FEAT-43-KaniCbmcProofSynthesizer.md) (Supplies Stage 4 Kani `outer kani::proof` CBMC `UNSAT` verification receipts)
-- [ ] #750 - [Feature 44: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] MultiStageVerificationOrchestrator](../features/FEAT-44-MultiStageVerificationOrchestrator.md) (Executes `evaluate_four_stage_gatekeeper(receipts)` with fail-closed short-circuiting)
-- [ ] #751 - [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) (Supplies Stage 1 universal stable Clippy total-function and `clippy.toml` verification receipts)
+- [ ] #839 - [Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate](../features/FEAT-41-FrbIcdBridgeAndMiriUbGate.md) (Supplies Stage 3 `flutter_rust_bridge` FFI, `dart analyze`, and Miri `-Zmiri-tree-borrows` verification receipts)
+- [ ] #840 - [Feature 42: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] IsolatedDylintMirAllocationGate](../features/FEAT-42-IsolatedDylintMirAllocationGate.md) (Supplies Stage 2 excluded `./lints/deap-dylint-mir/` zero-allocation and `REQ-*` digest verification receipts)
+- [ ] #841 - [Feature 43: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] KaniCbmcProofSynthesizer](../features/FEAT-43-KaniCbmcProofSynthesizer.md) (Supplies Stage 4 Kani `outer kani::proof` CBMC `UNSAT` verification receipts)
+- [ ] #842 - [Feature 44: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] MultiStageVerificationOrchestrator](../features/FEAT-44-MultiStageVerificationOrchestrator.md) (Executes `evaluate_four_stage_gatekeeper(receipts)` with fail-closed short-circuiting)
+- [ ] #843 - [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) (Supplies Stage 1 universal stable Clippy total-function and `clippy.toml` verification receipts)
 
 ## Source References
 Operational concept definitions and system sequence interaction models:

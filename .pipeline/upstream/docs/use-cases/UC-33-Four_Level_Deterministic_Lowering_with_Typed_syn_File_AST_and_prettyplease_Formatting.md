@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #761 |
+| **Issue ID** | #762 |
 | **Title** | Use Case 33: Four Level Deterministic Lowering with Typed syn File AST and prettyplease Formatting |
 | **Type** | use-case |
 | **Primary Actor** | Operator |
@@ -58,13 +58,13 @@ graph TD
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#795** | User Story | [User Story 46: partition and hoist](../user-stories/US-46-partition_and_hoist.md) (lowers full SysML v2.0 + KerML 1.0 AST across Levels 1--4) |
-| **#796** | User Story | [User Story 47: synthesize module tokens](../user-stories/US-47-synthesize_module_tokens.md) (synthesizes `proc-macro2::TokenStream` via `quote::quote!`) |
-| **#797** | User Story | [User Story 48: build syn file](../user-stories/US-48-build_syn_file.md) (validates `syn::parse2::<syn::File>` grammar) |
-| **#798** | User Story | [User Story 49: format pretty syn file](../user-stories/US-49-format_pretty_syn_file.md) (formats canonical LF Rust source via `prettyplease::unparse`) |
-| **#799** | User Story | [User Story 50: emit modular rust tree](../user-stories/US-50-emit_modular_rust_tree.md) (atomically persists multi-file Rust module tree) |
-| **#737** | Feature | [Feature 31: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] FourLevelAstPartitionerAndHoister](../features/FEAT-31-FourLevelAstPartitionerAndHoister.md) (executes 4-level AST partitioning and ANF hoisting) |
-| **#739** | Feature | [Feature 33: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] ModularRustMultiFileEmitter](../features/FEAT-33-ModularRustMultiFileEmitter.md) (executes `proc-macro2` + `quote` + `syn::File` + `prettyplease` emission) |
+| **#796** | User Story | [User Story 46: partition and hoist](../user-stories/US-46-partition_and_hoist.md) (lowers full SysML v2.0 + KerML 1.0 AST across Levels 1--4) |
+| **#797** | User Story | [User Story 47: synthesize module tokens](../user-stories/US-47-synthesize_module_tokens.md) (synthesizes `proc-macro2::TokenStream` via `quote::quote!`) |
+| **#798** | User Story | [User Story 48: build syn file](../user-stories/US-48-build_syn_file.md) (validates `syn::parse2::<syn::File>` grammar) |
+| **#799** | User Story | [User Story 49: format pretty syn file](../user-stories/US-49-format_pretty_syn_file.md) (formats canonical LF Rust source via `prettyplease::unparse`) |
+| **#800** | User Story | [User Story 50: emit modular rust tree](../user-stories/US-50-emit_modular_rust_tree.md) (atomically persists multi-file Rust module tree) |
+| **#829** | Feature | [Feature 31: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] FourLevelAstPartitionerAndHoister](../features/FEAT-31-FourLevelAstPartitionerAndHoister.md) (executes 4-level AST partitioning and ANF hoisting) |
+| **#831** | Feature | [Feature 33: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] ModularRustMultiFileEmitter](../features/FEAT-33-ModularRustMultiFileEmitter.md) (executes `proc-macro2` + `quote` + `syn::File` + `prettyplease` emission) |
 
 ## Source References
 Use case operational flows and lifecycle activity references:

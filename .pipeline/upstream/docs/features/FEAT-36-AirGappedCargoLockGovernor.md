@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #742 |
+| **Issue ID** | #834 |
 | **Title** | Feature 36: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] AirGappedCargoLockGovernor |
 | **Type** | feature |
 | **Parent Epic** | [EPIC-08-BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics](../epics/EPIC-08-BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics.md) |
@@ -119,21 +119,21 @@ Classifier `AirGappedCargoLockGovernor` binds external and behavioral interfaces
 ### Associated Use Cases & User Stories
 
 #### Associated Use Cases
-- [ ] #766 - [Use Case 38: Lossless Red Green CST Roundtrip and Exact DEAP v2 0 AST Metrics Extraction](../use-cases/UC-38-Lossless_Red_Green_CST_Roundtrip_and_Exact_DEAP_v2_0_AST_Metrics_Extraction.md) (verifies lossless `ra_ap_syntax` + `rowan` CST roundtrip and DEAP v2.0 AST metrics under `Invariant_REQ_0608_SC_01`)
-- [ ] #767 - [Use Case 39: Deterministic B Tree Map Item Inventory and Atomic Module Extraction with Check 37 Path Rewriting](../use-cases/UC-39-Deterministic_BTreeMap_Item_Inventory_and_Atomic_Module_Extraction_with_Check_37_Path_Rewriting.md) (validates deterministic `BTreeMap` item inventory and atomic module extraction with `pulldown-cmark` Check 37 path rewriting)
-- [ ] #768 - [Use Case 40: Fail Closed Rejection on Span Collisions Missing Symbols or Post Splice Syntax Errors](../use-cases/UC-40-Fail_Closed_Rejection_on_Span_Collisions_Missing_Symbols_or_Post_Splice_Syntax_Errors.md) (enforces fail-closed rejection and `DEAP-E0801..E0803` NDJSON diagnostics under `Invariant_REQ_0608_SC_02`)
-- [ ] #769 - [Use Case 41: Lossless Tier B C Docblock Compaction Skipping Self Hosted Generated Modules](../use-cases/UC-41-Lossless_Tier_B_C_Docblock_Compaction_Skipping_Self_Hosted_Generated_Modules.md) (compacts `DocTier::RustTierBC` docblocks to 2 lines under `C_CST_06` while skipping `generated/`)
-- [ ] #770 - [Use Case 42: Structured Codegen Boundary Preserving Stage 1 to Stage 2 Metacircular SHA 256 Fixed Point](../use-cases/UC-42-Structured_Codegen_Boundary_Preserving_Stage_1_to_Stage_2_Metacircular_SHA_256_Fixed_Point.md) (verifies `SHA-256(Stage 1) == SHA-256(Stage 2)` fixed-point identity under `Invariant_REQ_0608_SC_03`)
-- [ ] #771 - [Use Case 43: Unified rustc Compatible Single Line JSON Diagnostics and Machine Applicable Auto Fix Across All Five CLIs](../use-cases/UC-43-Unified_rustc_Compatible_Single_Line_JSON_Diagnostics_and_MachineApplicable_Auto_Fix_Across_All_Five_CLIs.md) (enforces single-line NDJSON diagnostics and disjoint `MachineApplicable` auto-fixes under `Invariant_REQ_0608_SC_04_REQ_0608`)
-- [ ] #772 - [Use Case 44: Air Gapped Offline Cargo Lock Reproducibility and Twelve Gate Blueprint Conformance](../use-cases/UC-44-Air_Gapped_Offline_Cargo_Lock_Reproducibility_and_Twelve_Gate_Blueprint_Conformance.md) (directly realizes air-gapped `--offline --locked` `Cargo.lock` verification and 12-gate blueprint conformance on `AirGappedCargoLockGovernor`)
+- [ ] #767 - [Use Case 38: Lossless Red Green CST Roundtrip and Exact DEAP v2 0 AST Metrics Extraction](../use-cases/UC-38-Lossless_Red_Green_CST_Roundtrip_and_Exact_DEAP_v2_0_AST_Metrics_Extraction.md) (verifies lossless `ra_ap_syntax` + `rowan` CST roundtrip and DEAP v2.0 AST metrics under `Invariant_REQ_0608_SC_01`)
+- [ ] #768 - [Use Case 39: Deterministic B Tree Map Item Inventory and Atomic Module Extraction with Check 37 Path Rewriting](../use-cases/UC-39-Deterministic_BTreeMap_Item_Inventory_and_Atomic_Module_Extraction_with_Check_37_Path_Rewriting.md) (validates deterministic `BTreeMap` item inventory and atomic module extraction with `pulldown-cmark` Check 37 path rewriting)
+- [ ] #769 - [Use Case 40: Fail Closed Rejection on Span Collisions Missing Symbols or Post Splice Syntax Errors](../use-cases/UC-40-Fail_Closed_Rejection_on_Span_Collisions_Missing_Symbols_or_Post_Splice_Syntax_Errors.md) (enforces fail-closed rejection and `DEAP-E0801..E0803` NDJSON diagnostics under `Invariant_REQ_0608_SC_02`)
+- [ ] #770 - [Use Case 41: Lossless Tier B C Docblock Compaction Skipping Self Hosted Generated Modules](../use-cases/UC-41-Lossless_Tier_B_C_Docblock_Compaction_Skipping_Self_Hosted_Generated_Modules.md) (compacts `DocTier::RustTierBC` docblocks to 2 lines under `C_CST_06` while skipping `generated/`)
+- [ ] #771 - [Use Case 42: Structured Codegen Boundary Preserving Stage 1 to Stage 2 Metacircular SHA 256 Fixed Point](../use-cases/UC-42-Structured_Codegen_Boundary_Preserving_Stage_1_to_Stage_2_Metacircular_SHA_256_Fixed_Point.md) (verifies `SHA-256(Stage 1) == SHA-256(Stage 2)` fixed-point identity under `Invariant_REQ_0608_SC_03`)
+- [ ] #772 - [Use Case 43: Unified rustc Compatible Single Line JSON Diagnostics and Machine Applicable Auto Fix Across All Five CLIs](../use-cases/UC-43-Unified_rustc_Compatible_Single_Line_JSON_Diagnostics_and_MachineApplicable_Auto_Fix_Across_All_Five_CLIs.md) (enforces single-line NDJSON diagnostics and disjoint `MachineApplicable` auto-fixes under `Invariant_REQ_0608_SC_04_REQ_0608`)
+- [ ] #773 - [Use Case 44: Air Gapped Offline Cargo Lock Reproducibility and Twelve Gate Blueprint Conformance](../use-cases/UC-44-Air_Gapped_Offline_Cargo_Lock_Reproducibility_and_Twelve_Gate_Blueprint_Conformance.md) (directly realizes air-gapped `--offline --locked` `Cargo.lock` verification and 12-gate blueprint conformance on `AirGappedCargoLockGovernor`)
 
 #### Associated User Stories
-- [ ] #802 - [User Story 53: verify offline locked build](../user-stories/US-53-verify_offline_locked_build.md) (invokes `verify_offline_locked_build(lock_path)` on `AirGappedCargoLockGovernor` via `cargo-lock` and `cargo_metadata`)
-- [ ] #803 - [User Story 54: list rust items](../user-stories/US-54-list_rust_items.md) (enumerates `BTreeMap`-ordered `RustItemInventory` via `ra_ap_syntax` and `rowan`)
-- [ ] #804 - [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) (extracts submodules atomically via `ra_ap_text_edit` and rewrites Check 37 paths via `pulldown-cmark`)
-- [ ] #805 - [User Story 56: verify stage fixed point](../user-stories/US-56-verify_stage_fixed_point.md) (verifies Stage-1/Stage-2 SHA-256 fixed-point parity via `syn`, `quote`, and `prettyplease`)
-- [ ] #806 - [User Story 57: format ndjson line](../user-stories/US-57-format_ndjson_line.md) (serializes single-line `rustc`-compatible NDJSON diagnostics via `ra_ap_line_index`)
-- [ ] #807 - [User Story 58: analyze metrics](../user-stories/US-58-analyze_metrics.md) (evaluates DEAP v2.0 AST metrics `C_CST_01..C_CST_06` via `ra_ap_syntax`)
+- [ ] #803 - [User Story 53: verify offline locked build](../user-stories/US-53-verify_offline_locked_build.md) (invokes `verify_offline_locked_build(lock_path)` on `AirGappedCargoLockGovernor` via `cargo-lock` and `cargo_metadata`)
+- [ ] #804 - [User Story 54: list rust items](../user-stories/US-54-list_rust_items.md) (enumerates `BTreeMap`-ordered `RustItemInventory` via `ra_ap_syntax` and `rowan`)
+- [ ] #805 - [User Story 55: extract rust module](../user-stories/US-55-extract_rust_module.md) (extracts submodules atomically via `ra_ap_text_edit` and rewrites Check 37 paths via `pulldown-cmark`)
+- [ ] #806 - [User Story 56: verify stage fixed point](../user-stories/US-56-verify_stage_fixed_point.md) (verifies Stage-1/Stage-2 SHA-256 fixed-point parity via `syn`, `quote`, and `prettyplease`)
+- [ ] #807 - [User Story 57: format ndjson line](../user-stories/US-57-format_ndjson_line.md) (serializes single-line `rustc`-compatible NDJSON diagnostics via `ra_ap_line_index`)
+- [ ] #808 - [User Story 58: analyze metrics](../user-stories/US-58-analyze_metrics.md) (evaluates DEAP v2.0 AST metrics `C_CST_01..C_CST_06` via `ra_ap_syntax`)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `AirGappedCargoLockGovernor` inputs satisfying `Invariant_REQ_0608_SC_01` [Req `REQ-0608 (REQ_0608_BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics)`], When `AirGappedCargoLockGovernor` evaluates invariant `Invariant_REQ_0608_SC_01`, Then the invariant holds and verified state is committed.

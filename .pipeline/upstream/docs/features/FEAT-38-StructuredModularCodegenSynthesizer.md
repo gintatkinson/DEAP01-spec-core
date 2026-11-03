@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #744 |
+| **Issue ID** | #836 |
 | **Title** | Feature 38: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] StructuredModularCodegenSynthesizer |
 | **Type** | feature |
 | **Parent Epic** | [EPIC-08-BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics](../epics/EPIC-08-BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics.md) |
@@ -110,11 +110,11 @@ Classifier `StructuredModularCodegenSynthesizer` binds external and behavioral i
 ### Associated Use Cases & User Stories
 
 #### Associated Use Cases
-- [ ] #770 - [Use Case 42: Structured Codegen Boundary Preserving Stage 1 to Stage 2 Metacircular SHA 256 Fixed Point](../use-cases/UC-42-Structured_Codegen_Boundary_Preserving_Stage_1_to_Stage_2_Metacircular_SHA_256_Fixed_Point.md) (directly exercises `StructuredModularCodegenSynthesizer` `syn` + `quote` + `prettyplease` codegen and `SHA-256(Stage 1) == SHA-256(Stage 2)` verification)
-- [ ] #769 - [Use Case 41: Lossless Tier B C Docblock Compaction Skipping Self Hosted Generated Modules](../use-cases/UC-41-Lossless_Tier_B_C_Docblock_Compaction_Skipping_Self_Hosted_Generated_Modules.md) (preserves Stage-1 `generated/` fixed-point modules emitted by `StructuredModularCodegenSynthesizer`)
+- [ ] #771 - [Use Case 42: Structured Codegen Boundary Preserving Stage 1 to Stage 2 Metacircular SHA 256 Fixed Point](../use-cases/UC-42-Structured_Codegen_Boundary_Preserving_Stage_1_to_Stage_2_Metacircular_SHA_256_Fixed_Point.md) (directly exercises `StructuredModularCodegenSynthesizer` `syn` + `quote` + `prettyplease` codegen and `SHA-256(Stage 1) == SHA-256(Stage 2)` verification)
+- [ ] #770 - [Use Case 41: Lossless Tier B C Docblock Compaction Skipping Self Hosted Generated Modules](../use-cases/UC-41-Lossless_Tier_B_C_Docblock_Compaction_Skipping_Self_Hosted_Generated_Modules.md) (preserves Stage-1 `generated/` fixed-point modules emitted by `StructuredModularCodegenSynthesizer`)
 
 #### Associated User Stories
-- [ ] #805 - [User Story 56: verify stage fixed point](../user-stories/US-56-verify_stage_fixed_point.md) (directly invokes `verify_stage_fixed_point(stage1_digest)` on `StructuredModularCodegenSynthesizer`)
+- [ ] #806 - [User Story 56: verify stage fixed point](../user-stories/US-56-verify_stage_fixed_point.md) (directly invokes `verify_stage_fixed_point(stage1_digest)` on `StructuredModularCodegenSynthesizer`)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `StructuredModularCodegenSynthesizer` initialization inputs for `stage_fixed_point_mismatch_files` (`Integer`), `in_process_prettyplease` (`Boolean`) (no additional constraints specified in schema), When `StructuredModularCodegenSynthesizer` commits typed domain state, Then declared state attributes hold verified values.

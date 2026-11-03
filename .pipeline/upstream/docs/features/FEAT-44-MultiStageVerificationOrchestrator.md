@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #750 |
+| **Issue ID** | #842 |
 | **Title** | Feature 44: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] MultiStageVerificationOrchestrator |
 | **Type** | feature |
 | **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
@@ -127,22 +127,22 @@ Classifier `MultiStageVerificationOrchestrator` binds external and behavioral in
 ### Associated Use Cases & User Stories
 
 #### Associated Use Cases
-- [ ] #773 - [Use Case 45: Stage 1 Universal Stable Clippy Total Function and clippy toml Threshold Enforcement](../use-cases/UC-45-Stage_1_Universal_Stable_Clippy_Total_Function_and_clippy_toml_Threshold_Enforcement.md) (Orchestrates Stage 1 invocation and fail-closed short-circuiting on `DEAP-E0900`)
-- [ ] #774 - [Use Case 46: Stage 2 Isolated Nightly Dylint MIR Zero Allocation Proof on Real Time Control Loops](../use-cases/UC-46-Stage_2_Isolated_Nightly_Dylint_MIR_Zero_Allocation_Proof_on_Real_Time_Control_Loops.md) (Orchestrates Stage 2 excluded `./lints/deap-dylint-mir/` execution and fail-closed short-circuiting on `DEAP-E0901`)
-- [ ] #775 - [Use Case 47: Stage 2 Compile Time MIR Requirement Binding Verification Against Active SysML Digests](../use-cases/UC-47-Stage_2_Compile_Time_MIR_Requirement_Binding_Verification_Against_Active_SysML_Digests.md) (Orchestrates Stage 2 `REQ-*` SysML digest verification and fail-closed short-circuiting on `DEAP-E0902`)
-- [ ] #776 - [Use Case 48: Stage 3 Deterministic flutter_rust_bridge FFI Synthesis with Fail Closed ICD Boundary Guards](../use-cases/UC-48-Stage_3_Deterministic_flutter_rust_bridge_FFI_Synthesis_with_Fail_Closed_ICD_Boundary_Guards.md) (Orchestrates Stage 3 FFI boundary guard and `dart analyze --fatal-infos` evaluation)
-- [ ] #777 - [Use Case 49: Stage 3 Miri Tree Borrows Abstract Machine Undefined Behavior Rejection on FFI and Ring Buffer Bridges](../use-cases/UC-49-Stage_3_Miri_Tree_Borrows_Abstract_Machine_Undefined_Behavior_Rejection_on_FFI_and_Ring_Buffer_Bridges.md) (Orchestrates Stage 3 Miri `-Zmiri-tree-borrows` execution and fail-closed short-circuiting on `DEAP-E0903`)
-- [ ] #778 - [Use Case 50: Stage 4 Deterministic Kani CBMC Proof Synthesis and STPA Unsafe Control Action Falsification](../use-cases/UC-50-Stage_4_Deterministic_Kani_CBMC_Proof_Synthesis_and_STPA_Unsafe_Control_Action_Falsification.md) (Orchestrates Stage 4 Kani `outer kani::proof` synthesis and CBMC evaluation)
-- [ ] #779 - [Use Case 51: Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate](../use-cases/UC-51-Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate.md) (Directly realizes cross-platform runtime `PATH` driver discovery and `--require-formal-toolchains` fail-closed `DEAP-E0905` enforcement)
+- [ ] #774 - [Use Case 45: Stage 1 Universal Stable Clippy Total Function and clippy toml Threshold Enforcement](../use-cases/UC-45-Stage_1_Universal_Stable_Clippy_Total_Function_and_clippy_toml_Threshold_Enforcement.md) (Orchestrates Stage 1 invocation and fail-closed short-circuiting on `DEAP-E0900`)
+- [ ] #775 - [Use Case 46: Stage 2 Isolated Nightly Dylint MIR Zero Allocation Proof on Real Time Control Loops](../use-cases/UC-46-Stage_2_Isolated_Nightly_Dylint_MIR_Zero_Allocation_Proof_on_Real_Time_Control_Loops.md) (Orchestrates Stage 2 excluded `./lints/deap-dylint-mir/` execution and fail-closed short-circuiting on `DEAP-E0901`)
+- [ ] #776 - [Use Case 47: Stage 2 Compile Time MIR Requirement Binding Verification Against Active SysML Digests](../use-cases/UC-47-Stage_2_Compile_Time_MIR_Requirement_Binding_Verification_Against_Active_SysML_Digests.md) (Orchestrates Stage 2 `REQ-*` SysML digest verification and fail-closed short-circuiting on `DEAP-E0902`)
+- [ ] #777 - [Use Case 48: Stage 3 Deterministic flutter_rust_bridge FFI Synthesis with Fail Closed ICD Boundary Guards](../use-cases/UC-48-Stage_3_Deterministic_flutter_rust_bridge_FFI_Synthesis_with_Fail_Closed_ICD_Boundary_Guards.md) (Orchestrates Stage 3 FFI boundary guard and `dart analyze --fatal-infos` evaluation)
+- [ ] #778 - [Use Case 49: Stage 3 Miri Tree Borrows Abstract Machine Undefined Behavior Rejection on FFI and Ring Buffer Bridges](../use-cases/UC-49-Stage_3_Miri_Tree_Borrows_Abstract_Machine_Undefined_Behavior_Rejection_on_FFI_and_Ring_Buffer_Bridges.md) (Orchestrates Stage 3 Miri `-Zmiri-tree-borrows` execution and fail-closed short-circuiting on `DEAP-E0903`)
+- [ ] #779 - [Use Case 50: Stage 4 Deterministic Kani CBMC Proof Synthesis and STPA Unsafe Control Action Falsification](../use-cases/UC-50-Stage_4_Deterministic_Kani_CBMC_Proof_Synthesis_and_STPA_Unsafe_Control_Action_Falsification.md) (Orchestrates Stage 4 Kani `outer kani::proof` synthesis and CBMC evaluation)
+- [ ] #780 - [Use Case 51: Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate](../use-cases/UC-51-Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate.md) (Directly realizes cross-platform runtime `PATH` driver discovery and `--require-formal-toolchains` fail-closed `DEAP-E0905` enforcement)
 
 #### Associated User Stories
-- [ ] #808 - [User Story 59: probe formal toolchain](../user-stories/US-59-probe_formal_toolchain.md) (Invokes `probe_formal_toolchain(config)` for cross-platform runtime `PATH` discovery)
-- [ ] #809 - [User Story 60: verify clippy policy](../user-stories/US-60-verify_clippy_policy.md) (Dispatches Stage 1 Clippy policy verification)
-- [ ] #810 - [User Story 61: evaluate stage2 dylint mir](../user-stories/US-61-evaluate_stage2_dylint_mir.md) (Dispatches Stage 2 isolated Dylint MIR evaluation)
-- [ ] #811 - [User Story 62: verify in process cst syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) (Dispatches in-process `ra_ap_syntax` CST and `< 380`-SLOC verification)
-- [ ] #812 - [User Story 63: guard inbound frb f64](../user-stories/US-63-guard_inbound_frb_f64.md) (Dispatches Stage 3 `flutter_rust_bridge` inbound `f64` boundary guard verification)
-- [ ] #813 - [User Story 64: validate kani harness spec](../user-stories/US-64-validate_kani_harness_spec.md) (Dispatches Stage 4 Kani `outer kani::proof` harness validation and synthesis)
-- [ ] #814 - [User Story 65: evaluate four stage gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Executes `evaluate_four_stage_gatekeeper(receipts)` across all stages)
+- [ ] #809 - [User Story 59: probe formal toolchain](../user-stories/US-59-probe_formal_toolchain.md) (Invokes `probe_formal_toolchain(config)` for cross-platform runtime `PATH` discovery)
+- [ ] #810 - [User Story 60: verify clippy policy](../user-stories/US-60-verify_clippy_policy.md) (Dispatches Stage 1 Clippy policy verification)
+- [ ] #811 - [User Story 61: evaluate stage2 dylint mir](../user-stories/US-61-evaluate_stage2_dylint_mir.md) (Dispatches Stage 2 isolated Dylint MIR evaluation)
+- [ ] #812 - [User Story 62: verify in process cst syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) (Dispatches in-process `ra_ap_syntax` CST and `< 380`-SLOC verification)
+- [ ] #813 - [User Story 63: guard inbound frb f64](../user-stories/US-63-guard_inbound_frb_f64.md) (Dispatches Stage 3 `flutter_rust_bridge` inbound `f64` boundary guard verification)
+- [ ] #814 - [User Story 64: validate kani harness spec](../user-stories/US-64-validate_kani_harness_spec.md) (Dispatches Stage 4 Kani `outer kani::proof` harness validation and synthesis)
+- [ ] #815 - [User Story 65: evaluate four stage gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Executes `evaluate_four_stage_gatekeeper(receipts)` across all stages)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `MultiStageVerificationOrchestrator` initialization inputs for `verification_stage_count` (`Integer`), `fail_closed_short_circuit` (`Boolean`), `require_formal_toolchains` (`Boolean`) satisfying `C_VER_07` and `C_VER_08`, When `MultiStageVerificationOrchestrator` commits typed domain state, Then declared state attributes hold verified values and formal drivers are probed dynamically via runtime `PATH` without hardcoded host paths.

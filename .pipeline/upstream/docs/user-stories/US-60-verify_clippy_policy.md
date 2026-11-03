@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #809 |
+| **Issue ID** | #810 |
 | **Title** | User Story 60: verify clippy policy |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
@@ -85,8 +85,8 @@ test case def Test_verify_clippy_policy {
 - [ ] AC-US-60-08: Given violated formal constraint `C_VER_01 (too_many_lines_threshold >= 1 and too_many_lines_threshold <= 80)`, `C_VER_02`, or a missing total-function lint denial, When `MultiStageVerificationOrchestrator` invokes `verify_clippy_policy` on `StableClippyTotalFunctionGate`, Then `StableClippyTotalFunctionGate` rejects the request without partial state mutation, transitions to `FailedClosedJsonDiagnostic`, and emits single-line NDJSON diagnostic `DEAP-E0900` across `clippy_ndjson_out`.
 
 ## Required Features
-- [ ] #750 - [Feature 44: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] MultiStageVerificationOrchestrator](../features/FEAT-44-MultiStageVerificationOrchestrator.md) (Invokes Stage 1 Clippy verification and short-circuits Stage 2 promotion on `DEAP-E0900`)
-- [ ] #751 - [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) (Executes `verify_clippy_policy` over `Cargo.toml` and `clippy.toml` via `cargo_metadata` and `toml_edit`)
+- [ ] #842 - [Feature 44: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] MultiStageVerificationOrchestrator](../features/FEAT-44-MultiStageVerificationOrchestrator.md) (Invokes Stage 1 Clippy verification and short-circuits Stage 2 promotion on `DEAP-E0900`)
+- [ ] #843 - [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) (Executes `verify_clippy_policy` over `Cargo.toml` and `clippy.toml` via `cargo_metadata` and `toml_edit`)
 
 ## Source References
 Operational concept definitions and system sequence interaction models:

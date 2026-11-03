@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #751 |
+| **Issue ID** | #843 |
 | **Title** | Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate |
 | **Type** | feature |
 | **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
@@ -150,17 +150,17 @@ Classifier `StableClippyTotalFunctionGate` binds external and behavioral interfa
 ### Associated Use Cases & User Stories
 
 #### Associated Use Cases
-- [ ] #773 - [Use Case 45: Stage 1 Universal Stable Clippy Total Function and clippy toml Threshold Enforcement](../use-cases/UC-45-Stage_1_Universal_Stable_Clippy_Total_Function_and_clippy_toml_Threshold_Enforcement.md) (Directly realizes Stage 1 `Cargo.toml` and `clippy.toml` policy validation and `cargo clippy --workspace --all-targets --message-format=json` enforcement)
-- [ ] #779 - [Use Case 51: Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate](../use-cases/UC-51-Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate.md) (Enforces `< 380`-SLOC submodule modularity and cross-platform `cargo-clippy` runtime `PATH` discovery)
+- [ ] #774 - [Use Case 45: Stage 1 Universal Stable Clippy Total Function and clippy toml Threshold Enforcement](../use-cases/UC-45-Stage_1_Universal_Stable_Clippy_Total_Function_and_clippy_toml_Threshold_Enforcement.md) (Directly realizes Stage 1 `Cargo.toml` and `clippy.toml` policy validation and `cargo clippy --workspace --all-targets --message-format=json` enforcement)
+- [ ] #780 - [Use Case 51: Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate](../use-cases/UC-51-Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate.md) (Enforces `< 380`-SLOC submodule modularity and cross-platform `cargo-clippy` runtime `PATH` discovery)
 
 #### Associated User Stories
-- [ ] #808 - [User Story 59: probe formal toolchain](../user-stories/US-59-probe_formal_toolchain.md) (Probes `cargo-clippy` and formal verification drivers dynamically via runtime `PATH`)
-- [ ] #809 - [User Story 60: verify clippy policy](../user-stories/US-60-verify_clippy_policy.md) (Executes `verify_clippy_policy(policy, manifest_lints)` against `C_VER_01`, `C_VER_02`, and all 14 required Clippy denials)
-- [ ] #810 - [User Story 61: evaluate stage2 dylint mir](../user-stories/US-61-evaluate_stage2_dylint_mir.md) (Promotes verified Stage 1 Clippy receipts to Stage 2 Dylint MIR evaluation)
-- [ ] #811 - [User Story 62: verify in process cst syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) (Verifies lossless `ra_ap_syntax` CST parse integrity and `< 380`-SLOC submodule bounds)
-- [ ] #812 - [User Story 63: guard inbound frb f64](../user-stories/US-63-guard_inbound_frb_f64.md) (Enforces Stage 1 total-function and `undocumented_unsafe_blocks` prerequisites on Stage 3 FFI guards)
-- [ ] #813 - [User Story 64: validate kani harness spec](../user-stories/US-64-validate_kani_harness_spec.md) (Enforces Stage 1 total-function lint discipline across synthesized Stage 4 Kani harness modules)
-- [ ] #814 - [User Story 65: evaluate four stage gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Supplies the Stage 1 `StageGateReceipt` to the 4-stage gatekeeper evaluation)
+- [ ] #809 - [User Story 59: probe formal toolchain](../user-stories/US-59-probe_formal_toolchain.md) (Probes `cargo-clippy` and formal verification drivers dynamically via runtime `PATH`)
+- [ ] #810 - [User Story 60: verify clippy policy](../user-stories/US-60-verify_clippy_policy.md) (Executes `verify_clippy_policy(policy, manifest_lints)` against `C_VER_01`, `C_VER_02`, and all 14 required Clippy denials)
+- [ ] #811 - [User Story 61: evaluate stage2 dylint mir](../user-stories/US-61-evaluate_stage2_dylint_mir.md) (Promotes verified Stage 1 Clippy receipts to Stage 2 Dylint MIR evaluation)
+- [ ] #812 - [User Story 62: verify in process cst syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) (Verifies lossless `ra_ap_syntax` CST parse integrity and `< 380`-SLOC submodule bounds)
+- [ ] #813 - [User Story 63: guard inbound frb f64](../user-stories/US-63-guard_inbound_frb_f64.md) (Enforces Stage 1 total-function and `undocumented_unsafe_blocks` prerequisites on Stage 3 FFI guards)
+- [ ] #814 - [User Story 64: validate kani harness spec](../user-stories/US-64-validate_kani_harness_spec.md) (Enforces Stage 1 total-function lint discipline across synthesized Stage 4 Kani harness modules)
+- [ ] #815 - [User Story 65: evaluate four stage gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Supplies the Stage 1 `StageGateReceipt` to the 4-stage gatekeeper evaluation)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `StableClippyTotalFunctionGate` initialization inputs for `denied_clippy_lint_count` (`Integer`), `too_many_lines_threshold` (`Integer`), `too_many_arguments_threshold` (`Integer`), `disallowed_types_count` (`Integer`), `json_diagnostic_stream` (`Boolean`), `deterministic_uuid` (`String`) satisfying `C_VER_01`, `C_VER_02`, and `C_VER_07`, When `StableClippyTotalFunctionGate` commits typed domain state, Then declared state attributes hold verified values.

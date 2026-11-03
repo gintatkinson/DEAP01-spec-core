@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #780 |
+| **Issue ID** | #781 |
 | **Title** | Use Case 52: Lossless logos and rowan Concrete Syntax Tree Full Fidelity Roundtrip and Cross Platform CRLF Normalization |
 | **Type** | use-case |
 | **Primary Actor** | Operator |
@@ -62,11 +62,11 @@ graph TD
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#816** | User Story | [User Story 67: normalize line endings](../user-stories/US-67-normalize_line_endings.md) |
-| **#817** | User Story | [User Story 68: parse lossless sysml cst](../user-stories/US-68-parse_lossless_sysml_cst.md) |
-| **#818** | User Story | [User Story 69: verify lossless cst invariants](../user-stories/US-69-verify_lossless_cst_invariants.md) |
-| **#753** | Feature | [Feature 47: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] LogosRowanSysmlCstEngine](../features/FEAT-47-LogosRowanSysmlCstEngine.md) |
-| **#752** | Feature | [Feature 46: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] FormattingPreservingSyncSplicer](../features/FEAT-46-FormattingPreservingSyncSplicer.md) |
+| **#817** | User Story | [User Story 67: normalize line endings](../user-stories/US-67-normalize_line_endings.md) |
+| **#818** | User Story | [User Story 68: parse lossless sysml cst](../user-stories/US-68-parse_lossless_sysml_cst.md) |
+| **#819** | User Story | [User Story 69: verify lossless cst invariants](../user-stories/US-69-verify_lossless_cst_invariants.md) |
+| **#845** | Feature | [Feature 47: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] LogosRowanSysmlCstEngine](../features/FEAT-47-LogosRowanSysmlCstEngine.md) |
+| **#844** | Feature | [Feature 46: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] FormattingPreservingSyncSplicer](../features/FEAT-46-FormattingPreservingSyncSplicer.md) |
 
 ## Source References
 Use case operational flows and lifecycle activity references:

@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #819 |
+| **Issue ID** | #820 |
 | **Title** | User Story 70: evaluate hir early cutoff |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine](../epics/EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine.md) |
@@ -67,8 +67,8 @@ test case def Test_evaluate_hir_early_cutoff {
 - [ ] AC-US-70-08: Given violated formal constraint `C_INC_01 (max_ast_depth >= 1 and max_ast_depth <= 64)` or cyclic `salsa` query dependency (`DEAP-E1004`), When `TypedPolyglotIngestionFrontend` invokes `evaluate_hir_early_cutoff` on `SalsaIncrementalCompilerDatabase`, Then `SalsaIncrementalCompilerDatabase` rejects the request without partial state mutation, preserves prior verified state, and emits a deterministic `DEAP-E1004` fault diagnostic across the interface binding.
 
 ## Required Features
-- [ ] #755 - [Feature 49: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] TypedPolyglotIngestionFrontend](../features/FEAT-49-TypedPolyglotIngestionFrontend.md) (lowers polyglot CST/ASTs into trivia-erased `HirPackageSummary` inputs)
-- [ ] #754 - [Feature 48: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] SalsaIncrementalCompilerDatabase](../features/FEAT-48-SalsaIncrementalCompilerDatabase.md) (executes `evaluate_hir_early_cutoff` across `HirDatabase` and `SafetyVerificationDatabase`)
+- [ ] #847 - [Feature 49: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] TypedPolyglotIngestionFrontend](../features/FEAT-49-TypedPolyglotIngestionFrontend.md) (lowers polyglot CST/ASTs into trivia-erased `HirPackageSummary` inputs)
+- [ ] #846 - [Feature 48: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] SalsaIncrementalCompilerDatabase](../features/FEAT-48-SalsaIncrementalCompilerDatabase.md) (executes `evaluate_hir_early_cutoff` across `HirDatabase` and `SafetyVerificationDatabase`)
 
 ## Source References
 Operational concept definitions and system sequence interaction models:

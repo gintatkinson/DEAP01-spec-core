@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #748 |
+| **Issue ID** | #840 |
 | **Title** | Feature 42: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] IsolatedDylintMirAllocationGate |
 | **Type** | feature |
 | **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
@@ -135,13 +135,13 @@ Classifier `IsolatedDylintMirAllocationGate` binds external and behavioral inter
 ### Associated Use Cases & User Stories
 
 #### Associated Use Cases
-- [ ] #774 - [Use Case 46: Stage 2 Isolated Nightly Dylint MIR Zero Allocation Proof on Real Time Control Loops](../use-cases/UC-46-Stage_2_Isolated_Nightly_Dylint_MIR_Zero_Allocation_Proof_on_Real_Time_Control_Loops.md) (Realizes Stage 2 transitive `rustc_middle::mir::Body` zero-allocation proofs inside excluded `./lints/deap-dylint-mir/`)
-- [ ] #775 - [Use Case 47: Stage 2 Compile Time MIR Requirement Binding Verification Against Active SysML Digests](../use-cases/UC-47-Stage_2_Compile_Time_MIR_Requirement_Binding_Verification_Against_Active_SysML_Digests.md) (Realizes Stage 2 HIR/MIR `DefId` `REQ-*` binding checks against compiled SysML `.digest.json` inventories)
-- [ ] #779 - [Use Case 51: Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate](../use-cases/UC-51-Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate.md) (Enforces `< 380`-SLOC submodule modularity via `verify_in_process_cst_syntax` and cross-platform `dylint` discovery)
+- [ ] #775 - [Use Case 46: Stage 2 Isolated Nightly Dylint MIR Zero Allocation Proof on Real Time Control Loops](../use-cases/UC-46-Stage_2_Isolated_Nightly_Dylint_MIR_Zero_Allocation_Proof_on_Real_Time_Control_Loops.md) (Realizes Stage 2 transitive `rustc_middle::mir::Body` zero-allocation proofs inside excluded `./lints/deap-dylint-mir/`)
+- [ ] #776 - [Use Case 47: Stage 2 Compile Time MIR Requirement Binding Verification Against Active SysML Digests](../use-cases/UC-47-Stage_2_Compile_Time_MIR_Requirement_Binding_Verification_Against_Active_SysML_Digests.md) (Realizes Stage 2 HIR/MIR `DefId` `REQ-*` binding checks against compiled SysML `.digest.json` inventories)
+- [ ] #780 - [Use Case 51: Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate](../use-cases/UC-51-Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate.md) (Enforces `< 380`-SLOC submodule modularity via `verify_in_process_cst_syntax` and cross-platform `dylint` discovery)
 
 #### Associated User Stories
-- [ ] #810 - [User Story 61: evaluate stage2 dylint mir](../user-stories/US-61-evaluate_stage2_dylint_mir.md) (Executes `evaluate_stage2_dylint_mir(input)` over MIR call/drop graphs and `REQ-*` digest sets)
-- [ ] #811 - [User Story 62: verify in process cst syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) (Executes `verify_in_process_cst_syntax(module_path, max_exec_sloc)` via lossless `ra_ap_syntax`)
+- [ ] #811 - [User Story 61: evaluate stage2 dylint mir](../user-stories/US-61-evaluate_stage2_dylint_mir.md) (Executes `evaluate_stage2_dylint_mir(input)` over MIR call/drop graphs and `REQ-*` digest sets)
+- [ ] #812 - [User Story 62: verify in process cst syntax](../user-stories/US-62-verify_in_process_cst_syntax.md) (Executes `verify_in_process_cst_syntax(module_path, max_exec_sloc)` via lossless `ra_ap_syntax`)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `IsolatedDylintMirAllocationGate` initialization inputs for `max_rt_heap_allocations` (`Integer`), `max_unverified_req_links` (`Integer`), `isolated_nightly_workspace` (`Boolean`), `plugin_toolchain_channel` (`String`) satisfying `C_VER_03` and `C_VER_07`, When `IsolatedDylintMirAllocationGate` commits typed domain state, Then declared state attributes hold verified values and `./lints/deap-dylint-mir/` remains isolated from the root stable `Cargo.toml`.

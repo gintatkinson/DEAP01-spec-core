@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #763 |
+| **Issue ID** | #764 |
 | **Title** | Use Case 35: Modular Multi File Flutter_Contract Emission and Monolith Barrel Decomposition |
 | **Type** | use-case |
 | **Primary Actor** | Operator |
@@ -58,10 +58,10 @@ graph TD
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#797** | User Story | [User Story 48: build syn file](../user-stories/US-48-build_syn_file.md) (validates typed Rust codegen AST units) |
-| **#800** | User Story | [User Story 51: emit modular_flutter_tree](../user-stories/US-51-emit_modular_flutter_tree.md) (emits per-package `.g.dart` units and `<= 80`-LOC barrel facades) |
-| **#737** | Feature | [Feature 31: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] FourLevelAstPartitionerAndHoister](../features/FEAT-31-FourLevelAstPartitionerAndHoister.md) (partitions schema packages and classifiers for `Modular_Flutter` contract lowering) |
-| **#738** | Feature | [Feature 32: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] ModularFlutterMultiFileEmitter](../features/FEAT-32-ModularFlutterMultiFileEmitter.md) (synthesizes modular `.g.dart` tree and barrel re-exports) |
+| **#798** | User Story | [User Story 48: build syn file](../user-stories/US-48-build_syn_file.md) (validates typed Rust codegen AST units) |
+| **#801** | User Story | [User Story 51: emit modular_flutter_tree](../user-stories/US-51-emit_modular_flutter_tree.md) (emits per-package `.g.dart` units and `<= 80`-LOC barrel facades) |
+| **#829** | Feature | [Feature 31: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] FourLevelAstPartitionerAndHoister](../features/FEAT-31-FourLevelAstPartitionerAndHoister.md) (partitions schema packages and classifiers for `Modular_Flutter` contract lowering) |
+| **#830** | Feature | [Feature 32: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] ModularFlutterMultiFileEmitter](../features/FEAT-32-ModularFlutterMultiFileEmitter.md) (synthesizes modular `.g.dart` tree and barrel re-exports) |
 
 ## Source References
 Use case operational flows and lifecycle activity references:

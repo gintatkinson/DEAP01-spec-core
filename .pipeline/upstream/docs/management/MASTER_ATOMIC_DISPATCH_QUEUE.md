@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | TBD |
+| **Issue ID** | #685..#690, #852..#856 |
 | **Title** | Master Atomic Dispatch Queue -- Compiler Architecture, Caller Migration & Specification Realization (`BP-01..BP-11` & `TD-01..TD-24`) |
 | **Type** | management |
 | **Management Level** | Level 4 Enterprise Realization & Subagent Dispatch Schedule |

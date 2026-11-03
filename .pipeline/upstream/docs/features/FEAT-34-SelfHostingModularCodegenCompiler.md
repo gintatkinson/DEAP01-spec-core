@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #740 |
+| **Issue ID** | #832 |
 | **Title** | Feature 34: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] SelfHostingModularCodegenCompiler |
 | **Type** | feature |
 | **Parent Epic** | [EPIC-07-BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint](../epics/EPIC-07-BP_07_Self_Hosting_4_Level_Modular_Multi_File_Code_Generator_Blueprint.md) |
@@ -171,14 +171,14 @@ Classifier `SelfHostingModularCodegenCompiler` binds external and behavioral int
 - None allocated (structural subsystem component)
 
 #### Associated User Stories
-- [ ] #794 - [User Story 45: verify dag and layers](../user-stories/US-45-verify_dag_and_layers.md)
-- [ ] #795 - [User Story 46: partition and hoist](../user-stories/US-46-partition_and_hoist.md)
-- [ ] #796 - [User Story 47: synthesize module tokens](../user-stories/US-47-synthesize_module_tokens.md)
-- [ ] #797 - [User Story 48: build syn file](../user-stories/US-48-build_syn_file.md)
-- [ ] #798 - [User Story 49: format pretty syn file](../user-stories/US-49-format_pretty_syn_file.md)
-- [ ] #799 - [User Story 50: emit modular rust tree](../user-stories/US-50-emit_modular_rust_tree.md)
-- [ ] #800 - [User Story 51: emit modular_flutter_tree](../user-stories/US-51-emit_modular_flutter_tree.md)
-- [ ] #801 - [User Story 52: verify fixed point digest](../user-stories/US-52-verify_fixed_point_digest.md)
+- [ ] #795 - [User Story 45: verify dag and layers](../user-stories/US-45-verify_dag_and_layers.md)
+- [ ] #796 - [User Story 46: partition and hoist](../user-stories/US-46-partition_and_hoist.md)
+- [ ] #797 - [User Story 47: synthesize module tokens](../user-stories/US-47-synthesize_module_tokens.md)
+- [ ] #798 - [User Story 48: build syn file](../user-stories/US-48-build_syn_file.md)
+- [ ] #799 - [User Story 49: format pretty syn file](../user-stories/US-49-format_pretty_syn_file.md)
+- [ ] #800 - [User Story 50: emit modular rust tree](../user-stories/US-50-emit_modular_rust_tree.md)
+- [ ] #801 - [User Story 51: emit modular_flutter_tree](../user-stories/US-51-emit_modular_flutter_tree.md)
+- [ ] #802 - [User Story 52: verify fixed point digest](../user-stories/US-52-verify_fixed_point_digest.md)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `SelfHostingModularCodegenCompiler` initialization inputs for `max_file_lines` (`Integer`), `max_items_per_file` (`Integer`), `max_cyclomatic_complexity` (`Integer`), `stage_fixed_point_mismatch_files` (`Integer`), `runtime_llm_subagent_count` (`Integer`), `fail_closed_transactional` (`Boolean`), `deterministic_uuid` (`String`) (no additional constraints specified in schema), When `SelfHostingModularCodegenCompiler` commits typed domain state, Then declared state attributes hold verified values.

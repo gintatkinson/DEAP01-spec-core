@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #747 |
+| **Issue ID** | #839 |
 | **Title** | Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate |
 | **Type** | feature |
 | **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
@@ -156,17 +156,17 @@ Classifier `FrbIcdBridgeAndMiriUbGate` binds external and behavioral interfaces 
 ### Associated Use Cases & User Stories
 
 #### Associated Use Cases
-- [ ] #773 - [Use Case 45: Stage 1 Universal Stable Clippy Total Function and clippy toml Threshold Enforcement](../use-cases/UC-45-Stage_1_Universal_Stable_Clippy_Total_Function_and_clippy_toml_Threshold_Enforcement.md) (Coordinates Stage 1 total-function and `undocumented_unsafe_blocks` prerequisites before Stage 3 FFI promotion)
-- [ ] #774 - [Use Case 46: Stage 2 Isolated Nightly Dylint MIR Zero Allocation Proof on Real Time Control Loops](../use-cases/UC-46-Stage_2_Isolated_Nightly_Dylint_MIR_Zero_Allocation_Proof_on_Real_Time_Control_Loops.md) (Coordinates Stage 2 `#rt_loop` zero-allocation proofs preceding Stage 3 FFI and Miri evaluation)
-- [ ] #775 - [Use Case 47: Stage 2 Compile Time MIR Requirement Binding Verification Against Active SysML Digests](../use-cases/UC-47-Stage_2_Compile_Time_MIR_Requirement_Binding_Verification_Against_Active_SysML_Digests.md) (Coordinates Stage 2 `REQ-*` SysML digest verification preceding Stage 3 FFI synthesis)
-- [ ] #776 - [Use Case 48: Stage 3 Deterministic flutter_rust_bridge FFI Synthesis with Fail Closed ICD Boundary Guards](../use-cases/UC-48-Stage_3_Deterministic_flutter_rust_bridge_FFI_Synthesis_with_Fail_Closed_ICD_Boundary_Guards.md) (Directly realizes Stage 3 `#![forbid(unsafe_code)]` domain synthesis, `guard_inbound_frb_f64` FFI boundary checks, and `dart analyze --fatal-infos`)
-- [ ] #777 - [Use Case 49: Stage 3 Miri Tree Borrows Abstract Machine Undefined Behavior Rejection on FFI and Ring Buffer Bridges](../use-cases/UC-49-Stage_3_Miri_Tree_Borrows_Abstract_Machine_Undefined_Behavior_Rejection_on_FFI_and_Ring_Buffer_Bridges.md) (Directly realizes Stage 3 `cargo +nightly miri test` under `-Zmiri-tree-borrows` across FFI and SPSC ring-buffer bridges)
-- [ ] #778 - [Use Case 50: Stage 4 Deterministic Kani CBMC Proof Synthesis and STPA Unsafe Control Action Falsification](../use-cases/UC-50-Stage_4_Deterministic_Kani_CBMC_Proof_Synthesis_and_STPA_Unsafe_Control_Action_Falsification.md) (Promotes verified Stage 3 FFI/Miri artifacts to Stage 4 Kani CBMC proof synthesis)
-- [ ] #779 - [Use Case 51: Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate](../use-cases/UC-51-Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate.md) (Enforces `< 380`-SLOC submodule modularity and cross-platform `miri`/`dart` runtime `PATH` discovery)
+- [ ] #774 - [Use Case 45: Stage 1 Universal Stable Clippy Total Function and clippy toml Threshold Enforcement](../use-cases/UC-45-Stage_1_Universal_Stable_Clippy_Total_Function_and_clippy_toml_Threshold_Enforcement.md) (Coordinates Stage 1 total-function and `undocumented_unsafe_blocks` prerequisites before Stage 3 FFI promotion)
+- [ ] #775 - [Use Case 46: Stage 2 Isolated Nightly Dylint MIR Zero Allocation Proof on Real Time Control Loops](../use-cases/UC-46-Stage_2_Isolated_Nightly_Dylint_MIR_Zero_Allocation_Proof_on_Real_Time_Control_Loops.md) (Coordinates Stage 2 `#rt_loop` zero-allocation proofs preceding Stage 3 FFI and Miri evaluation)
+- [ ] #776 - [Use Case 47: Stage 2 Compile Time MIR Requirement Binding Verification Against Active SysML Digests](../use-cases/UC-47-Stage_2_Compile_Time_MIR_Requirement_Binding_Verification_Against_Active_SysML_Digests.md) (Coordinates Stage 2 `REQ-*` SysML digest verification preceding Stage 3 FFI synthesis)
+- [ ] #777 - [Use Case 48: Stage 3 Deterministic flutter_rust_bridge FFI Synthesis with Fail Closed ICD Boundary Guards](../use-cases/UC-48-Stage_3_Deterministic_flutter_rust_bridge_FFI_Synthesis_with_Fail_Closed_ICD_Boundary_Guards.md) (Directly realizes Stage 3 `#![forbid(unsafe_code)]` domain synthesis, `guard_inbound_frb_f64` FFI boundary checks, and `dart analyze --fatal-infos`)
+- [ ] #778 - [Use Case 49: Stage 3 Miri Tree Borrows Abstract Machine Undefined Behavior Rejection on FFI and Ring Buffer Bridges](../use-cases/UC-49-Stage_3_Miri_Tree_Borrows_Abstract_Machine_Undefined_Behavior_Rejection_on_FFI_and_Ring_Buffer_Bridges.md) (Directly realizes Stage 3 `cargo +nightly miri test` under `-Zmiri-tree-borrows` across FFI and SPSC ring-buffer bridges)
+- [ ] #779 - [Use Case 50: Stage 4 Deterministic Kani CBMC Proof Synthesis and STPA Unsafe Control Action Falsification](../use-cases/UC-50-Stage_4_Deterministic_Kani_CBMC_Proof_Synthesis_and_STPA_Unsafe_Control_Action_Falsification.md) (Promotes verified Stage 3 FFI/Miri artifacts to Stage 4 Kani CBMC proof synthesis)
+- [ ] #780 - [Use Case 51: Cross Platform Toolchain Discovery Modular Submodule Layout and Fail Closed Qualification Gate](../use-cases/UC-51-Cross_Platform_Toolchain_Discovery_Modular_Submodule_Layout_and_Fail_Closed_Qualification_Gate.md) (Enforces `< 380`-SLOC submodule modularity and cross-platform `miri`/`dart` runtime `PATH` discovery)
 
 #### Associated User Stories
-- [ ] #812 - [User Story 63: guard inbound frb f64](../user-stories/US-63-guard_inbound_frb_f64.md) (Executes `guard_inbound_frb_f64(spec, raw_value, active_fsm_state)` across inbound `flutter_rust_bridge` FFI entrypoints)
-- [ ] #814 - [User Story 65: evaluate four stage gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Consolidates Stage 3 Miri and `dart analyze` receipts into the 4-stage gatekeeper verdict)
+- [ ] #813 - [User Story 63: guard inbound frb f64](../user-stories/US-63-guard_inbound_frb_f64.md) (Executes `guard_inbound_frb_f64(spec, raw_value, active_fsm_state)` across inbound `flutter_rust_bridge` FFI entrypoints)
+- [ ] #815 - [User Story 65: evaluate four stage gatekeeper](../user-stories/US-65-evaluate_four_stage_gatekeeper.md) (Consolidates Stage 3 Miri and `dart analyze` receipts into the 4-stage gatekeeper verdict)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `FrbIcdBridgeAndMiriUbGate` inputs satisfying `Invariant_REQ_0609_SC_01` [Req `REQ-0609 (REQ_0609_BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper)`], When `FrbIcdBridgeAndMiriUbGate` evaluates invariant `Invariant_REQ_0609_SC_01`, Then the invariant holds and verified state is committed.

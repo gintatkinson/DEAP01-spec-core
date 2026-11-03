@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #754 |
+| **Issue ID** | #846 |
 | **Title** | Feature 48: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] SalsaIncrementalCompilerDatabase |
 | **Type** | feature |
 | **Parent Epic** | [EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine](../epics/EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine.md) |
@@ -136,17 +136,17 @@ Classifier `SalsaIncrementalCompilerDatabase` binds external and behavioral inte
 ### Associated Use Cases & User Stories
 
 #### Associated Use Cases
-- [ ] #783 - [Use Case 55: Salsa Early Cutoff Durability Preventing Downstream Recomputations on Trivia Edits](../use-cases/UC-55-Salsa_Early_Cutoff_Durability_Preventing_Downstream_Recomputations_on_Trivia_Edits.md) (verifies 4-layer `salsa` early-cutoff durability with `trivia_edit_downstream_recomputations == 0`)
-- [ ] #784 - [Use Case 56: Fail Closed Salsa Cycle Detection and Net Negative Legacy Cst Parser Retirement](../use-cases/UC-56-Fail_Closed_Salsa_Cycle_Detection_and_Net_Negative_Legacy_Cst_Parser_Retirement.md) (verifies fail-closed `salsa` cycle recovery `DEAP-E1004` and legacy hand-rolled parser retirement)
+- [ ] #784 - [Use Case 55: Salsa Early Cutoff Durability Preventing Downstream Recomputations on Trivia Edits](../use-cases/UC-55-Salsa_Early_Cutoff_Durability_Preventing_Downstream_Recomputations_on_Trivia_Edits.md) (verifies 4-layer `salsa` early-cutoff durability with `trivia_edit_downstream_recomputations == 0`)
+- [ ] #785 - [Use Case 56: Fail Closed Salsa Cycle Detection and Net Negative Legacy Cst Parser Retirement](../use-cases/UC-56-Fail_Closed_Salsa_Cycle_Detection_and_Net_Negative_Legacy_Cst_Parser_Retirement.md) (verifies fail-closed `salsa` cycle recovery `DEAP-E1004` and legacy hand-rolled parser retirement)
 
 #### Associated User Stories
-- [ ] #815 - [User Story 66: resolve polyglot backend](../user-stories/US-66-resolve_polyglot_backend.md) (binds polyglot CST/AST backend dispatch into `SalsaIncrementalCompilerDatabase`)
-- [ ] #816 - [User Story 67: normalize line endings](../user-stories/US-67-normalize_line_endings.md) (binds CRLF-to-LF normalization in `SourceDatabase`)
-- [ ] #817 - [User Story 68: parse lossless sysml cst](../user-stories/US-68-parse_lossless_sysml_cst.md) (binds `CstDatabase` lossless `logos` + `rowan` CST parsing)
-- [ ] #818 - [User Story 69: verify lossless cst invariants](../user-stories/US-69-verify_lossless_cst_invariants.md) (binds `CstDatabase` byte-for-byte roundtrip and depth verification)
-- [ ] #819 - [User Story 70: evaluate hir early cutoff](../user-stories/US-70-evaluate_hir_early_cutoff.md) (binds `HirDatabase` trivia-erased `HirPackageSummary` early-cutoff evaluation)
-- [ ] #820 - [User Story 71: apply formatting preserving splices](../user-stories/US-71-apply_formatting_preserving_splices.md) (binds formatting-preserving CST splicing across `HirSourceMap` spans)
-- [ ] #821 - [User Story 72: render ariadne diagnostic](../user-stories/US-72-render_ariadne_diagnostic.md) (binds deterministic `ariadne` and NDJSON diagnostic rendering)
+- [ ] #816 - [User Story 66: resolve polyglot backend](../user-stories/US-66-resolve_polyglot_backend.md) (binds polyglot CST/AST backend dispatch into `SalsaIncrementalCompilerDatabase`)
+- [ ] #817 - [User Story 67: normalize line endings](../user-stories/US-67-normalize_line_endings.md) (binds CRLF-to-LF normalization in `SourceDatabase`)
+- [ ] #818 - [User Story 68: parse lossless sysml cst](../user-stories/US-68-parse_lossless_sysml_cst.md) (binds `CstDatabase` lossless `logos` + `rowan` CST parsing)
+- [ ] #819 - [User Story 69: verify lossless cst invariants](../user-stories/US-69-verify_lossless_cst_invariants.md) (binds `CstDatabase` byte-for-byte roundtrip and depth verification)
+- [ ] #820 - [User Story 70: evaluate hir early cutoff](../user-stories/US-70-evaluate_hir_early_cutoff.md) (binds `HirDatabase` trivia-erased `HirPackageSummary` early-cutoff evaluation)
+- [ ] #821 - [User Story 71: apply formatting preserving splices](../user-stories/US-71-apply_formatting_preserving_splices.md) (binds formatting-preserving CST splicing across `HirSourceMap` spans)
+- [ ] #822 - [User Story 72: render ariadne diagnostic](../user-stories/US-72-render_ariadne_diagnostic.md) (binds deterministic `ariadne` and NDJSON diagnostic rendering)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `SalsaIncrementalCompilerDatabase` initialization inputs for `query_layer_count` (`Integer == 4`, `C_INC_04`), `trivia_edit_downstream_recomputations` (`Integer == 0`, `C_INC_05`), `pure_deterministic_btreemap` (`Boolean == true`), `cycle_recovery_fail_closed` (`Boolean == true`) across 100% of normative OMG SysML v2.0 + KerML 1.0 constructs (Contract A: zero 16-construct caps), When `SalsaIncrementalCompilerDatabase` commits typed domain state inside `< 380`-SLOC submodules (`./crates/compile-sysml/src/salsa_db/`), Then declared state attributes hold verified values and trivia-only edits trigger `0` downstream recomputations.

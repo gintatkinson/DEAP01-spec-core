@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #812 |
+| **Issue ID** | #813 |
 | **Title** | User Story 63: guard inbound frb f64 |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
@@ -88,9 +88,9 @@ test case def Test_guard_inbound_frb_f64 {
 - [ ] AC-US-63-08: Given `NaN`, infinite, out-of-range `raw_value`, disallowed `active_fsm_state`, or violated `C_VER_04`, When `MultiStageVerificationOrchestrator` invokes `guard_inbound_frb_f64` on `FrbIcdBridgeAndMiriUbGate`, Then `FrbIcdBridgeAndMiriUbGate` rejects the request without partial state mutation, transitions to `FailedClosedJsonDiagnostic`, and emits single-line NDJSON diagnostic `DEAP-E0903`.
 
 ## Required Features
-- [ ] #747 - [Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate](../features/FEAT-41-FrbIcdBridgeAndMiriUbGate.md) (Implements `guard_inbound_frb_f64`, `inner forbid(unsafe_code)` domain isolation, `dart analyze --fatal-infos`, and Miri `-Zmiri-tree-borrows` verification)
-- [ ] #750 - [Feature 44: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] MultiStageVerificationOrchestrator](../features/FEAT-44-MultiStageVerificationOrchestrator.md) (Orchestrates Stage 3 FFI and Miri evaluation and short-circuits Stage 4 promotion on `DEAP-E0903`)
-- [ ] #751 - [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) (Enforces Stage 1 total-function and `undocumented_unsafe_blocks = "deny"` prerequisites)
+- [ ] #839 - [Feature 41: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] FrbIcdBridgeAndMiriUbGate](../features/FEAT-41-FrbIcdBridgeAndMiriUbGate.md) (Implements `guard_inbound_frb_f64`, `inner forbid(unsafe_code)` domain isolation, `dart analyze --fatal-infos`, and Miri `-Zmiri-tree-borrows` verification)
+- [ ] #842 - [Feature 44: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] MultiStageVerificationOrchestrator](../features/FEAT-44-MultiStageVerificationOrchestrator.md) (Orchestrates Stage 3 FFI and Miri evaluation and short-circuits Stage 4 promotion on `DEAP-E0903`)
+- [ ] #843 - [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) (Enforces Stage 1 total-function and `undocumented_unsafe_blocks = "deny"` prerequisites)
 
 ## Source References
 Operational concept definitions and system sequence interaction models:

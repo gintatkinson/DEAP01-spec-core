@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #764 |
+| **Issue ID** | #765 |
 | **Title** | Use Case 36: Zero String Concatenation Codegen DO 178 C Seven Section Docstring and Clippy Forbid Compliance |
 | **Type** | use-case |
 | **Primary Actor** | Operator |
@@ -58,9 +58,9 @@ graph TD
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#798** | User Story | [User Story 49: format pretty syn file](../user-stories/US-49-format_pretty_syn_file.md) (formats validated `syn::File` ASTs via `prettyplease::unparse`) |
-| **#737** | Feature | [Feature 31: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] FourLevelAstPartitionerAndHoister](../features/FEAT-31-FourLevelAstPartitionerAndHoister.md) (enforces `Invariant_REQ_0607_SC_01` and `Invariant_REQ_0607_SC_04` across lowered units) |
-| **#739** | Feature | [Feature 33: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] ModularRustMultiFileEmitter](../features/FEAT-33-ModularRustMultiFileEmitter.md) (enforces `enforce_syn_parse_grammar`, `canonical_prettyplease_format`, `submodule_max_exec_sloc = 380`, and `legacy_string_codegen_deleted_sloc = 1100`) |
+| **#799** | User Story | [User Story 49: format pretty syn file](../user-stories/US-49-format_pretty_syn_file.md) (formats validated `syn::File` ASTs via `prettyplease::unparse`) |
+| **#829** | Feature | [Feature 31: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] FourLevelAstPartitionerAndHoister](../features/FEAT-31-FourLevelAstPartitionerAndHoister.md) (enforces `Invariant_REQ_0607_SC_01` and `Invariant_REQ_0607_SC_04` across lowered units) |
+| **#831** | Feature | [Feature 33: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] ModularRustMultiFileEmitter](../features/FEAT-33-ModularRustMultiFileEmitter.md) (enforces `enforce_syn_parse_grammar`, `canonical_prettyplease_format`, `submodule_max_exec_sloc = 380`, and `legacy_string_codegen_deleted_sloc = 1100`) |
 
 ## Source References
 Use case operational flows and lifecycle activity references:

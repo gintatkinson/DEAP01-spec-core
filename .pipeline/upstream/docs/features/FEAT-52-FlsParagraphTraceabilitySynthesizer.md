@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #758 |
+| **Issue ID** | #850 |
 | **Title** | Feature 52: [BP 11 Ferrocene Qualified Toolchain FLS Traceability Structural Coverage and 3 Ring Rust_Flutter DO 178 C DO 330 Certification Architecture] FlsParagraphTraceabilitySynthesizer |
 | **Type** | feature |
 | **Parent Epic** | [EPIC-11-BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture](../epics/EPIC-11-BP_11_Ferrocene_Qualified_Toolchain_FLS_Traceability_Structural_Coverage_and_3_Ring_Rust_Flutter_DO_178C_DO_330_Certification_Architecture.md) |
@@ -128,10 +128,10 @@ Classifier `FlsParagraphTraceabilitySynthesizer` binds external and behavioral i
 ### Associated Use Cases & User Stories
 
 #### Associated Use Cases
-- [ ] #788 - [Use Case 60: End to End FLS Normative Paragraph Traceability Emission and Fail Closed Orphan Detection](../use-cases/UC-60-End_to_End_FLS_Normative_Paragraph_Traceability_Emission_and_Fail_Closed_Orphan_Detection.md)
+- [ ] #789 - [Use Case 60: End to End FLS Normative Paragraph Traceability Emission and Fail Closed Orphan Detection](../use-cases/UC-60-End_to_End_FLS_Normative_Paragraph_Traceability_Emission_and_Fail_Closed_Orphan_Detection.md)
 
 #### Associated User Stories
-- [ ] #825 - [User Story 76: verify fls traceability chain](../user-stories/US-76-verify_fls_traceability_chain.md)
+- [ ] #826 - [User Story 76: verify fls traceability chain](../user-stories/US-76-verify_fls_traceability_chain.md)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `FlsParagraphTraceabilitySynthesizer` initialization inputs for `unmapped_fls_item_count` (`Integer`), `trace_chain_depth` (`Integer`), `enforce_safety_comment_fls` (`Boolean`) satisfying `C_CERT_03` (`unmapped_fls_item_count == 0`, `trace_chain_depth == 5`) and `Invariant_REQ_0611_SC_02`, When `FlsParagraphTraceabilitySynthesizer` stamps `[FLS: fls_*]` anchors via `syn`, `quote`, and `prettyplease` and commits typed domain state, Then declared state attributes hold verified values with 100% 5-link FLS traceability coverage.

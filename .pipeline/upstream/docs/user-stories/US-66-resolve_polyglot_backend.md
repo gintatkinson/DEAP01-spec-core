@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #815 |
+| **Issue ID** | #816 |
 | **Title** | User Story 66: resolve polyglot backend |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine](../epics/EPIC-10-BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine.md) |
@@ -67,8 +67,8 @@ test case def Test_resolve_polyglot_backend {
 - [ ] AC-US-66-08: Given violated formal constraint `C_INC_01 (max_ast_depth >= 1 and max_ast_depth <= 64)` or `C_INC_07 (rustc_private_feature_count > 0)`, When `TypedPolyglotIngestionFrontend` invokes `resolve_polyglot_backend` on `SalsaIncrementalCompilerDatabase`, Then `SalsaIncrementalCompilerDatabase` rejects the request without partial state mutation, preserves prior verified state, and emits a deterministic `DEAP-E1005` fault diagnostic across the interface binding.
 
 ## Required Features
-- [ ] #755 - [Feature 49: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] TypedPolyglotIngestionFrontend](../features/FEAT-49-TypedPolyglotIngestionFrontend.md) (provides `resolve_polyglot_backend` 6-frontend CST/AST dispatch)
-- [ ] #754 - [Feature 48: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] SalsaIncrementalCompilerDatabase](../features/FEAT-48-SalsaIncrementalCompilerDatabase.md) (provides the target 4-layer `salsa` incremental compiler database)
+- [ ] #847 - [Feature 49: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] TypedPolyglotIngestionFrontend](../features/FEAT-49-TypedPolyglotIngestionFrontend.md) (provides `resolve_polyglot_backend` 6-frontend CST/AST dispatch)
+- [ ] #846 - [Feature 48: [BP 10 Incremental Lossless SysML v2 and Polyglot Compiler Engine] SalsaIncrementalCompilerDatabase](../features/FEAT-48-SalsaIncrementalCompilerDatabase.md) (provides the target 4-layer `salsa` incremental compiler database)
 
 ## Source References
 Operational concept definitions and system sequence interaction models:

@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #765 |
+| **Issue ID** | #766 |
 | **Title** | Use Case 37: Dogfood SysML v2 Blueprint Ingestion and Twelve Gate Closed Loop Conformance |
 | **Type** | use-case |
 | **Primary Actor** | Operator |
@@ -58,10 +58,10 @@ graph TD
 ## 8. Realization Matrix
 | Specification Item | Type | Link / Reference |
 | :--- | :--- | :--- |
-| **#799** | User Story | [User Story 50: emit modular rust tree](../user-stories/US-50-emit_modular_rust_tree.md) (persists modular Rust tree from compiled `BP_07` schema) |
-| **#801** | User Story | [User Story 52: verify fixed point digest](../user-stories/US-52-verify_fixed_point_digest.md) (verifies deterministic fixed-point SHA-256 digest parity) |
-| **#737** | Feature | [Feature 31: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] FourLevelAstPartitionerAndHoister](../features/FEAT-31-FourLevelAstPartitionerAndHoister.md) (enforces `Invariant_REQ_0607_REQ_0607` across `BP_07` AST) |
-| **#740** | Feature | [Feature 34: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] SelfHostingModularCodegenCompiler](../features/FEAT-34-SelfHostingModularCodegenCompiler.md) (compiles dogfood `BP_07` package AST and enforces `C_MOD_01..05`) |
+| **#800** | User Story | [User Story 50: emit modular rust tree](../user-stories/US-50-emit_modular_rust_tree.md) (persists modular Rust tree from compiled `BP_07` schema) |
+| **#802** | User Story | [User Story 52: verify fixed point digest](../user-stories/US-52-verify_fixed_point_digest.md) (verifies deterministic fixed-point SHA-256 digest parity) |
+| **#829** | Feature | [Feature 31: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] FourLevelAstPartitionerAndHoister](../features/FEAT-31-FourLevelAstPartitionerAndHoister.md) (enforces `Invariant_REQ_0607_REQ_0607` across `BP_07` AST) |
+| **#832** | Feature | [Feature 34: [BP 07 Self Hosting 4 Level Modular Multi File Code Generator Blueprint] SelfHostingModularCodegenCompiler](../features/FEAT-34-SelfHostingModularCodegenCompiler.md) (compiles dogfood `BP_07` package AST and enforces `C_MOD_01..05`) |
 
 ## Source References
 Use case operational flows and lifecycle activity references:

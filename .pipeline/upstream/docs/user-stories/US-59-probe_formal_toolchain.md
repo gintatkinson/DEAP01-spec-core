@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #808 |
+| **Issue ID** | #809 |
 | **Title** | User Story 59: probe formal toolchain |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
@@ -86,8 +86,8 @@ test case def Test_probe_formal_toolchain {
 - [ ] AC-US-59-08: Given violated formal constraint `C_VER_08` or a missing formal driver when `require_formal_toolchains == true`, When `MultiStageVerificationOrchestrator` invokes `probe_formal_toolchain` on `StableClippyTotalFunctionGate`, Then `StableClippyTotalFunctionGate` rejects the request without partial state mutation, transitions to `FailedClosedJsonDiagnostic`, and emits single-line NDJSON diagnostic `DEAP-E0905` across `unified_gate_ndjson_out`.
 
 ## Required Features
-- [ ] #750 - [Feature 44: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] MultiStageVerificationOrchestrator](../features/FEAT-44-MultiStageVerificationOrchestrator.md) (Coordinates cross-platform runtime `PATH` probing and `--require-formal-toolchains` fail-closed state transitions)
-- [ ] #751 - [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) (Binds Stage 1 Clippy driver discovery and manifest readiness checks)
+- [ ] #842 - [Feature 44: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] MultiStageVerificationOrchestrator](../features/FEAT-44-MultiStageVerificationOrchestrator.md) (Coordinates cross-platform runtime `PATH` probing and `--require-formal-toolchains` fail-closed state transitions)
+- [ ] #843 - [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) (Binds Stage 1 Clippy driver discovery and manifest readiness checks)
 
 ## Source References
 Operational concept definitions and system sequence interaction models:

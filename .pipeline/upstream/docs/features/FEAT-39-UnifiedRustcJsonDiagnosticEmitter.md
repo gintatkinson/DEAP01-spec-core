@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #745 |
+| **Issue ID** | #837 |
 | **Title** | Feature 39: [BP 08 Lossless Rust CST Codemod Engine and Unified rustc Compatible JSON Diagnostics] UnifiedRustcJsonDiagnosticEmitter |
 | **Type** | feature |
 | **Parent Epic** | [EPIC-08-BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics](../epics/EPIC-08-BP_08_Lossless_Rust_CST_Codemod_Engine_and_Unified_rustc_Compatible_JSON_Diagnostics.md) |
@@ -137,11 +137,11 @@ Classifier `UnifiedRustcJsonDiagnosticEmitter` binds external and behavioral int
 ### Associated Use Cases & User Stories
 
 #### Associated Use Cases
-- [ ] #771 - [Use Case 43: Unified rustc Compatible Single Line JSON Diagnostics and Machine Applicable Auto Fix Across All Five CLIs](../use-cases/UC-43-Unified_rustc_Compatible_Single_Line_JSON_Diagnostics_and_MachineApplicable_Auto_Fix_Across_All_Five_CLIs.md) (directly exercises `UnifiedRustcJsonDiagnosticEmitter` single-line NDJSON emission and `--apply-machine-fixes` across all 5 CLIs)
-- [ ] #768 - [Use Case 40: Fail Closed Rejection on Span Collisions Missing Symbols or Post Splice Syntax Errors](../use-cases/UC-40-Fail_Closed_Rejection_on_Span_Collisions_Missing_Symbols_or_Post_Splice_Syntax_Errors.md) (emits `DEAP-E0801`, `DEAP-E0802`, and `DEAP-E0803` single-line NDJSON diagnostics via `UnifiedRustcJsonDiagnosticEmitter`)
+- [ ] #772 - [Use Case 43: Unified rustc Compatible Single Line JSON Diagnostics and Machine Applicable Auto Fix Across All Five CLIs](../use-cases/UC-43-Unified_rustc_Compatible_Single_Line_JSON_Diagnostics_and_MachineApplicable_Auto_Fix_Across_All_Five_CLIs.md) (directly exercises `UnifiedRustcJsonDiagnosticEmitter` single-line NDJSON emission and `--apply-machine-fixes` across all 5 CLIs)
+- [ ] #769 - [Use Case 40: Fail Closed Rejection on Span Collisions Missing Symbols or Post Splice Syntax Errors](../use-cases/UC-40-Fail_Closed_Rejection_on_Span_Collisions_Missing_Symbols_or_Post_Splice_Syntax_Errors.md) (emits `DEAP-E0801`, `DEAP-E0802`, and `DEAP-E0803` single-line NDJSON diagnostics via `UnifiedRustcJsonDiagnosticEmitter`)
 
 #### Associated User Stories
-- [ ] #806 - [User Story 57: format ndjson line](../user-stories/US-57-format_ndjson_line.md) (directly invokes `format_ndjson_line(msg)` on `UnifiedRustcJsonDiagnosticEmitter`)
+- [ ] #807 - [User Story 57: format ndjson line](../user-stories/US-57-format_ndjson_line.md) (directly invokes `format_ndjson_line(msg)` on `UnifiedRustcJsonDiagnosticEmitter`)
 
 ## Acceptance Criteria (BDD)
 - [ ] AC-01: Given valid `UnifiedRustcJsonDiagnosticEmitter` initialization inputs for `cli_binary_count` (`Integer`), `zero_ansi_in_json_mode` (`Boolean`), `machine_applicable_only` (`Boolean`), `envelope_reason` (`String`) (no additional constraints specified in schema), When `UnifiedRustcJsonDiagnosticEmitter` commits typed domain state, Then declared state attributes hold verified values.

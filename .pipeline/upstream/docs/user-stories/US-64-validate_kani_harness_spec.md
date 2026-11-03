@@ -1,6 +1,6 @@
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Issue ID** | #813 |
+| **Issue ID** | #814 |
 | **Title** | User Story 64: validate kani harness spec |
 | **Type** | user-story |
 | **Parent Epic** | [EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper](../epics/EPIC-09-BP_09_Multi_Stage_Compiler_and_Formal_Verification_Gatekeeper.md) |
@@ -88,9 +88,9 @@ test case def Test_validate_kani_harness_spec {
 - [ ] AC-US-64-08: Given violated formal constraint `C_VER_05 (max_kani_counterexamples == 0)` or `C_VER_06 (1 <= default_kani_unwind_bound <= 64)`, When `MultiStageVerificationOrchestrator` invokes `validate_kani_harness_spec` on `KaniCbmcProofSynthesizer`, Then `KaniCbmcProofSynthesizer` rejects the request without partial state mutation, transitions to `FailedClosedJsonDiagnostic`, and emits single-line NDJSON diagnostic `DEAP-E0904`.
 
 ## Required Features
-- [ ] #749 - [Feature 43: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] KaniCbmcProofSynthesizer](../features/FEAT-43-KaniCbmcProofSynthesizer.md) (Implements `validate_kani_harness_spec` and `syn` + `proc-macro2` + `quote` + `prettyplease` `outer kani::proof` synthesis)
-- [ ] #750 - [Feature 44: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] MultiStageVerificationOrchestrator](../features/FEAT-44-MultiStageVerificationOrchestrator.md) (Dispatches Stage 4 Kani CBMC verification and transitions to `VerifiedAllFourStages` or `FailedClosedJsonDiagnostic`)
-- [ ] #751 - [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) (Enforces Stage 1 total-function lint discipline on synthesized proof modules)
+- [ ] #841 - [Feature 43: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] KaniCbmcProofSynthesizer](../features/FEAT-43-KaniCbmcProofSynthesizer.md) (Implements `validate_kani_harness_spec` and `syn` + `proc-macro2` + `quote` + `prettyplease` `outer kani::proof` synthesis)
+- [ ] #842 - [Feature 44: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] MultiStageVerificationOrchestrator](../features/FEAT-44-MultiStageVerificationOrchestrator.md) (Dispatches Stage 4 Kani CBMC verification and transitions to `VerifiedAllFourStages` or `FailedClosedJsonDiagnostic`)
+- [ ] #843 - [Feature 45: [BP 09 Multi Stage Compiler and Formal Verification Gatekeeper] StableClippyTotalFunctionGate](../features/FEAT-45-StableClippyTotalFunctionGate.md) (Enforces Stage 1 total-function lint discipline on synthesized proof modules)
 
 ## Source References
 Operational concept definitions and system sequence interaction models:
