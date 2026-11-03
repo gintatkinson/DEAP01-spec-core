@@ -6,7 +6,7 @@
 
 use super::naming::{escape_dart_single_quoted, to_camel_case, to_pascal_case, to_snake_case_dart};
 use super::topology::{collect_package_slices, strip_surrounding_quotes};
-use deap_core::sysml_ast::{AttributeDef, PackageDef, PortDef, SysmlModel};
+use deap_core::sysml_cst::{AttributeDef, PackageDef, PortDef, SysmlModel};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Normalized descriptor pairing a SysML contract identifier with its Dart DTO class and fields.

@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use deap_core::sysml_ast::{ActionDef, AttributeDef, OperationDef, PartDef, StateDef, SysmlModel};
+use deap_core::sysml_cst::{ActionDef, AttributeDef, OperationDef, PartDef, StateDef, SysmlModel};
 
 use crate::spec_audit::diagram_ast::{
     ClassAttributeAst, ClassDefAst, ClassDiagramAst, ClassOperationAst, SequenceDiagramAst,
@@ -243,7 +243,7 @@ fn test_vacuous_class_stub_fails_validation() {
 fn test_class_diagram_with_port_passes() {
     let mut model = create_test_sysml_model();
     if let Some(first_part) = model.parts.first_mut() {
-        first_part.ports.push(deap_core::sysml_ast::PortDef {
+        first_part.ports.push(deap_core::sysml_cst::PortDef {
             name: "telemetry_port".to_string(),
             type_name: "TelemetryStream".to_string(),
             direction: "out".to_string(),

@@ -175,31 +175,31 @@
     {
       "name": "BijectiveSha256GateVerifier",
       "node_type": "Part",
-      "doc": "Cross-platform CRLF-normalized Stage-1 == Stage-2 HIR equality, `ariadne` diagnostic renderer, and SHA-256 semantic digest gate",
+      "doc": "Cross-platform CRLF-normalized Stage-1 == Stage-2 HIR equality, ariadne diagnostic renderer, and SHA-256 semantic digest gate",
       "allocated_activities": []
     },
     {
       "name": "LogosRowanSysmlCstFrontend",
       "node_type": "Part",
-      "doc": "Uncapped 6-clause `logos::Logos` lexer and `rowan::GreenNodeBuilder` lossless Red/Green CST builder preserving trivia, metadata tags, doc comments, and exact spans",
+      "doc": "Uncapped 6-clause logos::Logos lexer and rowan::GreenNodeBuilder lossless Red/Green CST builder preserving trivia, metadata tags, doc comments, and exact spans",
       "allocated_activities": []
     },
     {
       "name": "PolyglotTypedCstIngestor",
       "node_type": "Part",
-      "doc": "Unified polyglot frontend binding `ra_ap_syntax` (Rust), `deap_core::dart_cst` (Dart), typed `serde_json` (OpenAPI/JSON-Schema), and `logos`+`rowan` (OMG IDL / IETF YANG)",
+      "doc": "Unified polyglot frontend binding ra_ap_syntax (Rust), deap_core::dart_cst (Dart), typed serde_json (OpenAPI/JSON-Schema), and logos+rowan (OMG IDL / IETF YANG)",
       "allocated_activities": []
     },
     {
       "name": "SalsaIncrementalQueryDb",
       "node_type": "Part",
-      "doc": "Demand-driven `salsa` query engine memoizing `parse_sysml_cst`, `lower_sysml_hir`, `resolve_stdlib_and_metadata`, `emit_canonical_sysml`, and `compute_bijective_digest`",
+      "doc": "Demand-driven salsa query engine memoizing parse_sysml_cst, lower_sysml_hir, resolve_stdlib_and_metadata, emit_canonical_sysml, and compute_bijective_digest",
       "allocated_activities": []
     },
     {
       "name": "SysmlBijectiveRoundtripCompilerGate",
       "node_type": "Part",
-      "doc": "Cumulative byte-offset drift between normalized source bytes, `rowan` GreenNode token spans, and `ariadne` labels [unit: bytes]",
+      "doc": "Cumulative byte-offset drift between normalized source bytes, rowan GreenNode token spans, and ariadne labels [unit: bytes]",
       "allocated_activities": []
     }
   ],

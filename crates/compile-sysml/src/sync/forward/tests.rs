@@ -32,7 +32,7 @@
 //! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
 
 use super::*;
-use deap_core::sysml_ast::PartDef;
+use deap_core::sysml_cst::PartDef;
 
 /// Verifies forward synchronization emits expected Epic, Feature, and STPA matrix paths.
 /// Realises: [REQ-0604], [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
@@ -79,12 +79,12 @@ fn test_recursive_package_traversal_picks_up_subpackage_elements(
         name: "AlphaPart".to_string(),
         ..Default::default()
     });
-    sub.use_case_defs.push(deap_core::sysml_ast::UseCaseDef {
+    sub.use_case_defs.push(deap_core::sysml_cst::UseCaseDef {
         name: "AlphaUseCase".to_string(),
         subject: Some("AlphaPart".to_string()),
         ..Default::default()
     });
-    sub.action_defs.push(deap_core::sysml_ast::ActionDef {
+    sub.action_defs.push(deap_core::sysml_cst::ActionDef {
         name: "AlphaAction".to_string(),
         ..Default::default()
     });

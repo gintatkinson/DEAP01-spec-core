@@ -23,7 +23,7 @@ use crate::docstring_cst::{
 };
 use crate::docstring_dart_inspect::inspect_dart_item_details;
 use crate::docstring_schema_bind::validate_unforced_schema_realises;
-use deap_core::sysml_ast::PackageDef;
+use deap_core::sysml_cst::PackageDef;
 use std::collections::BTreeSet;
 
 /// Target Dart item metadata passed to `DartInjectorState::validate_or_enrich_dart_item`.

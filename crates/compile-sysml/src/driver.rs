@@ -181,7 +181,7 @@ pub fn resolve_schema_file(explicit_path: Option<PathBuf>) -> Result<PathBuf, St
 pub fn load_and_validate_schema(
     explicit_path: Option<PathBuf>,
     require_validation: bool,
-) -> Result<(SchemaTarget, deap_core::sysml_ast::PackageDef, String), String> {
+) -> Result<(SchemaTarget, deap_core::sysml_cst::PackageDef, String), String> {
     load_and_validate_schema_typed(explicit_path, require_validation)
         .map_err(|e| <(i32, String)>::from(e).1)
 }
@@ -192,7 +192,7 @@ pub fn load_and_validate_schema(
 /// Bounds & Faults: O(N log N) time and O(N) space; returns `Err(String)` on any parse or semantic error.
 pub fn load_schema_package_for_cli(
     explicit_path: Option<PathBuf>,
-) -> Result<(SchemaTarget, deap_core::sysml_ast::PackageDef, String), String> {
+) -> Result<(SchemaTarget, deap_core::sysml_cst::PackageDef, String), String> {
     load_and_validate_schema(explicit_path, true)
 }
 

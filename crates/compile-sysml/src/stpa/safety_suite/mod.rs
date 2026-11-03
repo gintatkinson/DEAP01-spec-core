@@ -74,8 +74,8 @@ use super::fmeca::{
     FmecaScoringConfig, RegistryFailureEntry,
 };
 use super::uca::{expand_cartesian_stpa, UnsafeControlAction};
-use crate::semantic::digest::write_atomic;
-use deap_core::sysml_ast::{ConstraintDef, PackageDef, PartDef};
+use crate::salsa_db::write_atomic;
+use deap_core::sysml_cst::{ConstraintDef, PackageDef, PartDef};
 
 /// Transpiles the SysML v2 AST into the 10-pillar safety artifact suite.
 /// Realises: [REQ-STPA-SAFETY-SUITE-TRANSPILE-SAFETY-SUITE]

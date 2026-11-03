@@ -17,7 +17,7 @@ use crate::docstring_cst::{
     SourceLineEdits, SourceParam,
 };
 use crate::docstring_rust_scan::ClassifiedRustItem;
-use deap_core::sysml_ast::PackageDef;
+use deap_core::sysml_cst::PackageDef;
 use std::collections::BTreeSet;
 
 /// Scanned single-line context passed between Rust docstring injection helpers.

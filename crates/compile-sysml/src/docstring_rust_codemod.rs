@@ -24,7 +24,7 @@ use crate::docstring_rust_scan::{
     is_mod_tests_entry, scan_rust_impl_segment, update_attr_bracket_depth, RustPendingAttr,
 };
 use crate::docstring_schema_bind::validate_unforced_schema_realises;
-use deap_core::sysml_ast::PackageDef;
+use deap_core::sysml_cst::PackageDef;
 use std::collections::BTreeSet;
 
 /// Per-file state machine for tiered Rust safety docstring synthesis and Tier B/C compaction.

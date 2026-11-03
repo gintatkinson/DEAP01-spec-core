@@ -154,107 +154,40 @@ impl From<SysmlSyntaxKind> for u16 {
 }
 
 const ALL_SYNTAX_KINDS: [SysmlSyntaxKind; (SysmlSyntaxKind::Last as usize) + 1] = [
-    SysmlSyntaxKind::Whitespace,
-    SysmlSyntaxKind::LineComment,
-    SysmlSyntaxKind::BlockComment,
-    SysmlSyntaxKind::DefKw,
-    SysmlSyntaxKind::PackageKw,
-    SysmlSyntaxKind::NamespaceKw,
-    SysmlSyntaxKind::DocMetaKw,
-    SysmlSyntaxKind::StructuralKw,
-    SysmlSyntaxKind::BehavioralKw,
-    SysmlSyntaxKind::ReqCalcVerificationKw,
-    SysmlSyntaxKind::KermlModifierKw,
-    SysmlSyntaxKind::ColonColonGt,
-    SysmlSyntaxKind::ColonGtGt,
-    SysmlSyntaxKind::ColonGt,
-    SysmlSyntaxKind::ColonColon,
-    SysmlSyntaxKind::ColonEq,
-    SysmlSyntaxKind::Colon,
-    SysmlSyntaxKind::Tilde,
-    SysmlSyntaxKind::At,
-    SysmlSyntaxKind::Hash,
-    SysmlSyntaxKind::DotDot,
-    SysmlSyntaxKind::Arrow,
-    SysmlSyntaxKind::FatArrow,
-    SysmlSyntaxKind::Dot,
-    SysmlSyntaxKind::Comma,
-    SysmlSyntaxKind::Semi,
-    SysmlSyntaxKind::LBrace,
-    SysmlSyntaxKind::RBrace,
-    SysmlSyntaxKind::LBracket,
-    SysmlSyntaxKind::RBracket,
-    SysmlSyntaxKind::LParen,
-    SysmlSyntaxKind::RParen,
-    SysmlSyntaxKind::Operator,
-    SysmlSyntaxKind::StringLit,
-    SysmlSyntaxKind::UnrestrictedName,
-    SysmlSyntaxKind::NumberLit,
-    SysmlSyntaxKind::Ident,
-    SysmlSyntaxKind::ErrorToken,
-    SysmlSyntaxKind::SourceFile,
-    SysmlSyntaxKind::PackageDecl,
-    SysmlSyntaxKind::LibraryPackageDecl,
-    SysmlSyntaxKind::ImportDecl,
-    SysmlSyntaxKind::AliasDecl,
-    SysmlSyntaxKind::DocCommentNode,
-    SysmlSyntaxKind::MetadataDef,
-    SysmlSyntaxKind::MetadataUsage,
-    SysmlSyntaxKind::AttributeDef,
-    SysmlSyntaxKind::AttributeUsage,
-    SysmlSyntaxKind::EnumDef,
-    SysmlSyntaxKind::EnumUsage,
-    SysmlSyntaxKind::ItemDef,
-    SysmlSyntaxKind::ItemUsage,
-    SysmlSyntaxKind::PartDef,
-    SysmlSyntaxKind::PartUsage,
-    SysmlSyntaxKind::PortDef,
-    SysmlSyntaxKind::PortUsage,
-    SysmlSyntaxKind::ConnectionDef,
-    SysmlSyntaxKind::ConnectionUsage,
-    SysmlSyntaxKind::InterfaceDef,
-    SysmlSyntaxKind::InterfaceUsage,
-    SysmlSyntaxKind::FlowDef,
-    SysmlSyntaxKind::FlowUsage,
-    SysmlSyntaxKind::SuccessionDecl,
-    SysmlSyntaxKind::AllocationDef,
-    SysmlSyntaxKind::AllocationUsage,
-    SysmlSyntaxKind::OccurrenceDef,
-    SysmlSyntaxKind::OccurrenceUsage,
-    SysmlSyntaxKind::ActionDef,
-    SysmlSyntaxKind::ActionUsage,
-    SysmlSyntaxKind::StateDef,
-    SysmlSyntaxKind::StateUsage,
-    SysmlSyntaxKind::TransitionDecl,
-    SysmlSyntaxKind::CalcDef,
-    SysmlSyntaxKind::CalcUsage,
-    SysmlSyntaxKind::ConstraintDef,
-    SysmlSyntaxKind::ConstraintUsage,
-    SysmlSyntaxKind::RequirementDef,
-    SysmlSyntaxKind::RequirementUsage,
-    SysmlSyntaxKind::ConcernDef,
-    SysmlSyntaxKind::ConcernUsage,
-    SysmlSyntaxKind::UseCaseDef,
-    SysmlSyntaxKind::UseCaseUsage,
-    SysmlSyntaxKind::AnalysisDef,
-    SysmlSyntaxKind::AnalysisUsage,
-    SysmlSyntaxKind::VerificationDef,
-    SysmlSyntaxKind::VerificationUsage,
-    SysmlSyntaxKind::ViewDef,
-    SysmlSyntaxKind::ViewUsage,
-    SysmlSyntaxKind::ViewpointDef,
-    SysmlSyntaxKind::ViewpointUsage,
-    SysmlSyntaxKind::RenderingDef,
-    SysmlSyntaxKind::RenderingUsage,
-    SysmlSyntaxKind::VariationDecl,
-    SysmlSyntaxKind::VariantUsage,
-    SysmlSyntaxKind::SpecializationClause,
-    SysmlSyntaxKind::MultiplicityBounds,
-    SysmlSyntaxKind::ExpressionNode,
-    SysmlSyntaxKind::BlockBody,
-    SysmlSyntaxKind::StatementNode,
-    SysmlSyntaxKind::ErrorNode,
-    SysmlSyntaxKind::Last,
+    SysmlSyntaxKind::Whitespace, SysmlSyntaxKind::LineComment, SysmlSyntaxKind::BlockComment,
+    SysmlSyntaxKind::DefKw, SysmlSyntaxKind::PackageKw, SysmlSyntaxKind::NamespaceKw,
+    SysmlSyntaxKind::DocMetaKw, SysmlSyntaxKind::StructuralKw, SysmlSyntaxKind::BehavioralKw,
+    SysmlSyntaxKind::ReqCalcVerificationKw, SysmlSyntaxKind::KermlModifierKw,
+    SysmlSyntaxKind::ColonColonGt, SysmlSyntaxKind::ColonGtGt, SysmlSyntaxKind::ColonGt,
+    SysmlSyntaxKind::ColonColon, SysmlSyntaxKind::ColonEq, SysmlSyntaxKind::Colon,
+    SysmlSyntaxKind::Tilde, SysmlSyntaxKind::At, SysmlSyntaxKind::Hash,
+    SysmlSyntaxKind::DotDot, SysmlSyntaxKind::Arrow, SysmlSyntaxKind::FatArrow,
+    SysmlSyntaxKind::Dot, SysmlSyntaxKind::Comma, SysmlSyntaxKind::Semi,
+    SysmlSyntaxKind::LBrace, SysmlSyntaxKind::RBrace, SysmlSyntaxKind::LBracket,
+    SysmlSyntaxKind::RBracket, SysmlSyntaxKind::LParen, SysmlSyntaxKind::RParen,
+    SysmlSyntaxKind::Operator, SysmlSyntaxKind::StringLit, SysmlSyntaxKind::UnrestrictedName,
+    SysmlSyntaxKind::NumberLit, SysmlSyntaxKind::Ident, SysmlSyntaxKind::ErrorToken,
+    SysmlSyntaxKind::SourceFile, SysmlSyntaxKind::PackageDecl, SysmlSyntaxKind::LibraryPackageDecl,
+    SysmlSyntaxKind::ImportDecl, SysmlSyntaxKind::AliasDecl, SysmlSyntaxKind::DocCommentNode,
+    SysmlSyntaxKind::MetadataDef, SysmlSyntaxKind::MetadataUsage, SysmlSyntaxKind::AttributeDef,
+    SysmlSyntaxKind::AttributeUsage, SysmlSyntaxKind::EnumDef, SysmlSyntaxKind::EnumUsage,
+    SysmlSyntaxKind::ItemDef, SysmlSyntaxKind::ItemUsage, SysmlSyntaxKind::PartDef,
+    SysmlSyntaxKind::PartUsage, SysmlSyntaxKind::PortDef, SysmlSyntaxKind::PortUsage,
+    SysmlSyntaxKind::ConnectionDef, SysmlSyntaxKind::ConnectionUsage, SysmlSyntaxKind::InterfaceDef,
+    SysmlSyntaxKind::InterfaceUsage, SysmlSyntaxKind::FlowDef, SysmlSyntaxKind::FlowUsage,
+    SysmlSyntaxKind::SuccessionDecl, SysmlSyntaxKind::AllocationDef, SysmlSyntaxKind::AllocationUsage,
+    SysmlSyntaxKind::OccurrenceDef, SysmlSyntaxKind::OccurrenceUsage, SysmlSyntaxKind::ActionDef,
+    SysmlSyntaxKind::ActionUsage, SysmlSyntaxKind::StateDef, SysmlSyntaxKind::StateUsage,
+    SysmlSyntaxKind::TransitionDecl, SysmlSyntaxKind::CalcDef, SysmlSyntaxKind::CalcUsage,
+    SysmlSyntaxKind::ConstraintDef, SysmlSyntaxKind::ConstraintUsage, SysmlSyntaxKind::RequirementDef,
+    SysmlSyntaxKind::RequirementUsage, SysmlSyntaxKind::ConcernDef, SysmlSyntaxKind::ConcernUsage,
+    SysmlSyntaxKind::UseCaseDef, SysmlSyntaxKind::UseCaseUsage, SysmlSyntaxKind::AnalysisDef,
+    SysmlSyntaxKind::AnalysisUsage, SysmlSyntaxKind::VerificationDef, SysmlSyntaxKind::VerificationUsage,
+    SysmlSyntaxKind::ViewDef, SysmlSyntaxKind::ViewUsage, SysmlSyntaxKind::ViewpointDef,
+    SysmlSyntaxKind::ViewpointUsage, SysmlSyntaxKind::RenderingDef, SysmlSyntaxKind::RenderingUsage,
+    SysmlSyntaxKind::VariationDecl, SysmlSyntaxKind::VariantUsage, SysmlSyntaxKind::SpecializationClause,
+    SysmlSyntaxKind::MultiplicityBounds, SysmlSyntaxKind::ExpressionNode, SysmlSyntaxKind::BlockBody,
+    SysmlSyntaxKind::StatementNode, SysmlSyntaxKind::ErrorNode, SysmlSyntaxKind::Last,
 ];
 
 /// Rowan language definition for SysML v2 / KerML CST. Realises: [REQ-0201]
@@ -281,8 +214,88 @@ impl rowan::Language for SysmlLanguage {
 /// Rowan syntax node alias for SysML v2 / KerML.
 pub type SysmlSyntaxNode = rowan::SyntaxNode<SysmlLanguage>;
 
-/// Rowan syntax token alias for SysML v2 / KerML.
+/// Rowan syntax token alias for SysML v2 / KerML. Realises: [REQ-0201] [FLS: fls_8tsynkj2cufj]
 pub type SysmlSyntaxToken = rowan::SyntaxToken<SysmlLanguage>;
+
+/// Rowan syntax element alias (node or token) for SysML v2 / KerML. Realises: [REQ-0201] [FLS: fls_8tsynkj2cufj]
+pub type SysmlSyntaxElement = rowan::SyntaxElement<SysmlLanguage>;
+
+impl SysmlSyntaxKind {
+    /// Alias for [`Self::SourceFile`]. Realises: [REQ-0201] [FLS: fls_8tsynkj2cufj]
+    pub const SOURCE_FILE: Self = Self::SourceFile;
+    /// Alias for [`Self::PackageDecl`]. Realises: [REQ-0201] [FLS: fls_8tsynkj2cufj]
+    pub const PACKAGE_DEF: Self = Self::PackageDecl;
+    /// Alias for [`Self::PartDef`]. Realises: [REQ-0201] [FLS: fls_8tsynkj2cufj]
+    pub const PART_DEF: Self = Self::PartDef;
+    /// Alias for [`Self::ActionDef`]. Realises: [REQ-0201] [FLS: fls_8tsynkj2cufj]
+    pub const ACTION_DEF: Self = Self::ActionDef;
+    /// Alias for [`Self::StateDef`]. Realises: [REQ-0201] [FLS: fls_8tsynkj2cufj]
+    pub const STATE_DEF: Self = Self::StateDef;
+    /// Alias for [`Self::PortDef`]. Realises: [REQ-0201] [FLS: fls_8tsynkj2cufj]
+    pub const PORT_DEF: Self = Self::PortDef;
+    /// Alias for [`Self::ConstraintDef`]. Realises: [REQ-0201] [FLS: fls_8tsynkj2cufj]
+    pub const CONSTRAINT_DEF: Self = Self::ConstraintDef;
+    /// Alias for [`Self::RequirementDef`]. Realises: [REQ-0201] [FLS: fls_8tsynkj2cufj]
+    pub const REQUIREMENT_DEF: Self = Self::RequirementDef;
+    /// Alias for [`Self::UseCaseDef`]. Realises: [REQ-0201] [FLS: fls_8tsynkj2cufj]
+    pub const USE_CASE_DEF: Self = Self::UseCaseDef;
+    /// Alias for [`Self::VerificationDef`]. Realises: [REQ-0201] [FLS: fls_8tsynkj2cufj]
+    pub const TEST_CASE_DEF: Self = Self::VerificationDef;
+    /// Alias for [`Self::CalcDef`]. Realises: [REQ-0201] [FLS: fls_8tsynkj2cufj]
+    pub const CALC_DEF: Self = Self::CalcDef;
+    /// Alias for [`Self::ConnectionDef`]. Realises: [REQ-0201] [FLS: fls_8tsynkj2cufj]
+    pub const CONNECTION_DEF: Self = Self::ConnectionDef;
+    /// Alias for [`Self::EnumDef`]. Realises: [REQ-0201] [FLS: fls_8tsynkj2cufj]
+    pub const ENUM_DEF: Self = Self::EnumDef;
+    /// Alias for [`Self::AttributeDef`]. Realises: [REQ-0201] [FLS: fls_8tsynkj2cufj]
+    pub const ATTRIBUTE_DEF: Self = Self::AttributeDef;
+    /// Alias for [`Self::DocCommentNode`]. Realises: [REQ-0201] [FLS: fls_8tsynkj2cufj]
+    pub const DOC_COMMENT: Self = Self::DocCommentNode;
+    /// Alias for [`Self::ErrorNode`]. Realises: [REQ-0201] [FLS: fls_8tsynkj2cufj]
+    pub const ERROR_NODE: Self = Self::ErrorNode;
+
+    /// Returns `true` when `self` is a composite CST node kind rather than a leaf token kind.
+    /// [DOC-TIER: A]
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Distinguishes composite Rowan syntax nodes from leaf lexical tokens under DO-178C Level A.
+    /// ## 2. Invariants & Mathematical Properties
+    /// `self as u16 >= Self::SourceFile as u16 && self != Self::Last`.
+    /// ## 3. Preconditions
+    /// `self` is a valid `SysmlSyntaxKind` variant.
+    /// ## 4. Postconditions
+    /// Returns `true` iff `self` is a composite CST node kind.
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time Complexity: O(1); Space Complexity: O(1).
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// Total pure discriminant comparison with zero panics.
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-0201] | [FLS: fls_66m4rnbssgig]
+    #[must_use]
+    pub const fn is_composite_node(self) -> bool {
+        (self as u16) >= (Self::SourceFile as u16) && (self as u16) < (Self::Last as u16)
+    }
+
+    /// Returns `true` when `self` is a whitespace or comment trivia token kind.
+    /// [DOC-TIER: A]
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Identifies lossless trivia tokens for CST lookahead under DO-178C Level A.
+    /// ## 2. Invariants & Mathematical Properties
+    /// Matches `Whitespace`, `LineComment`, and `BlockComment`.
+    /// ## 3. Preconditions
+    /// `self` is a valid `SysmlSyntaxKind` variant.
+    /// ## 4. Postconditions
+    /// Returns `true` iff `self` is trivia.
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time Complexity: O(1); Space Complexity: O(1).
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// Total pure pattern match with zero panics.
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-0201] | [FLS: fls_9ucqbbd0s2yo]
+    #[must_use]
+    pub const fn is_trivia(self) -> bool {
+        matches!(self, Self::Whitespace | Self::LineComment | Self::BlockComment)
+    }
+}
 
 /// Map a `SysmlToken` lexer token to its corresponding `SysmlSyntaxKind`. Realises: [REQ-0201]
 #[must_use]

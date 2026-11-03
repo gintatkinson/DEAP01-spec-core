@@ -25,7 +25,7 @@ use crate::modular_codegen::domain::{
     CompilationUnit, DependencyEdge, LayerRole, ModularityBounds, ModularityDiagnostic,
     ModuleGraph, UnitKind,
 };
-use deap_core::sysml_ast::{PackageDef, PartDef};
+use deap_core::sysml_cst::{PackageDef, PartDef};
 use std::collections::{BTreeMap, BTreeSet};
 
 type ClassifierRegistry = BTreeMap<String, (String, LayerRole)>;

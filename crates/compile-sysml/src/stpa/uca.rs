@@ -16,7 +16,7 @@
 //!   deterministically from SysML v2 AST nodes with zero unresolved placeholder literals.
 //!
 //! ## 3. Preconditions
-//! - Caller supplies a parsed `deap_core::sysml_ast::PackageDef` hierarchy.
+//! - Caller supplies a parsed `deap_core::sysml_cst::PackageDef` hierarchy.
 //!
 //! ## 4. Postconditions
 //! - Every emitted `UnsafeControlAction` contains single-line Markdown-safe cells, deterministic
@@ -41,7 +41,7 @@ mod resolvers;
 
 use std::collections::BTreeSet;
 
-use deap_core::sysml_ast::{
+use deap_core::sysml_cst::{
     AttributeDef, ConstraintDef, HazardDef, PackageDef, PartDef, RequirementDef,
 };
 use serde::{Deserialize, Serialize};
@@ -251,7 +251,7 @@ pub fn expand_cartesian_stpa(pkg: &PackageDef) -> Vec<UnsafeControlAction> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use deap_core::sysml_ast::{ActionDef, PartDef};
+    use deap_core::sysml_cst::{ActionDef, PartDef};
 
     /// Verifies that `expand_cartesian_stpa` expands 2 inline controller actions across all 4 STPA
     /// guide words into 8 bijective UCAs preserving `H-1`/`H-2` and `SC-001`..`SC-008` identifiers.

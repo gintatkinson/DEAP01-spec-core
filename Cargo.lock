@@ -306,16 +306,20 @@ checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 name = "compile-sysml"
 version = "0.1.0"
 dependencies = [
+ "ariadne",
  "camino",
  "chrono",
  "clap",
  "deap-core",
  "line-index",
+ "logos",
  "prettyplease",
  "proc-macro2",
  "quote",
  "ra_ap_syntax",
  "ra_ap_text_edit",
+ "rowan",
+ "salsa",
  "serde",
  "serde_json",
  "syn 2.0.119",

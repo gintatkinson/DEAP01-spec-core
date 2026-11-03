@@ -301,7 +301,7 @@ fn audit_pillar_7_multi_mode_and_ast(
     let Some(text) = crate::checks::parity_gates::discover_architectural_sysml_model_text(repo_root) else {
         return;
     };
-    let expected_parts: Vec<String> = deap_core::sysml_ast::parse_part_defs(&text)
+    let expected_parts: Vec<String> = deap_core::sysml_cst::parse_part_defs(&text)
         .into_iter()
         .map(|p| p.name)
         .filter(|n| !n.starts_with('_'))
@@ -319,7 +319,7 @@ fn audit_pillar_7_multi_mode_and_ast(
     }
     let mut missing_parts: Vec<String> = expected_parts
         .iter()
-        .filter(|p| !table_components.iter().any(|c| deap_core::sysml_ast::component_matches(c, p)))
+        .filter(|p| !table_components.iter().any(|c| deap_core::sysml_cst::component_matches(c, p)))
         .cloned()
         .collect();
     if !missing_parts.is_empty() {
@@ -328,7 +328,7 @@ fn audit_pillar_7_multi_mode_and_ast(
     }
     let mut undeclared_parts: Vec<String> = table_components
         .iter()
-        .filter(|c| !expected_parts.iter().any(|p| deap_core::sysml_ast::component_matches(c, p)))
+        .filter(|c| !expected_parts.iter().any(|p| deap_core::sysml_cst::component_matches(c, p)))
         .cloned()
         .collect();
     if !undeclared_parts.is_empty() {
@@ -336,8 +336,8 @@ fn audit_pillar_7_multi_mode_and_ast(
         errors.push(format!("Pillar 7 violation: FMECA table references undeclared phantom component(s) not in AST: {}.", undeclared_parts.join(", ")));
     }
     for c in &table_components {
-        if deap_core::sysml_ast::is_component_negated(c, &text)
-            || deap_core::sysml_ast::is_component_negated(c, combined_content)
+        if deap_core::sysml_cst::is_component_negated(c, &text)
+            || deap_core::sysml_cst::is_component_negated(c, combined_content)
         {
             errors.push(format!("Pillar 7 violation: FMECA table references component '{}' contradicted by negative AST model constraint.", c));
         }

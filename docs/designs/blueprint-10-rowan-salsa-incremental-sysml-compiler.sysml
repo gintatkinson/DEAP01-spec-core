@@ -8,25 +8,25 @@ package BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine {
     attribute Tracked_Issues : String = "#742";
     attribute Generation_Mode : String = "subagent";
     attribute Specification_Source : String = "Cargo.toml:1-34 / crates/deap-core/src/lib.rs:1-40 / crates/compile-sysml/src/lib.rs:1-40 / crates/ingest-sysml/src/lib.rs:1-40 / #742";
-    doc /* `SysmlToken`, `SysmlSyntaxKind` (zero 16-construct caps), `SysmlLanguage`, `CstParseReceipt`, `HirPackageSummary`, `HirSourceMap`, `SourceInput`, `PolyglotFormat`, `PolyglotBackendKind`, and `AriadneSpanReport` across `deap_core::sysml_cst`, `deap_core::dart_cst`, `compile_sysml::salsa_db`, and `ingest_sysml::cst::{idl_cst, yang_cst}` / `ingest_sysml::polyglot_cst`. */
-    attribute Layer_1_Domain_State_Data_Model : String = "Full Contract A SysML v2.0 + KerML 1.0 lossless Red/Green CSTs (`rowan` pinned to `ra_ap_syntax`), trivia-erased HIR records, `HirSourceMap` byte-span tables, and cross-platform `camino::Utf8PathBuf` inputs";
-    doc /* `normalize_line_endings`, `lex_sysml_tokens`, `parse_lossless_sysml_cst`, `verify_lossless_cst_invariants`, `evaluate_hir_early_cutoff`, `apply_formatting_preserving_splices`, and `resolve_polyglot_backend` with 100% typed CST traversal and zero `.syntax().text().contains(...)`. */
-    attribute Layer_2_Logic_State_Management : String = "Pure `logos` DFA lexing, `rowan` GreenNode building (`MAX_AST_DEPTH <= 64`), 4-layer `salsa` memoized early-cutoff queries, disjoint CST splicing, and typed polyglot CST lowering";
-    doc /* `render_ariadne_diagnostic` plus `compile-sysml`, `ingest-sysml`, and `verify-baseline check-blueprint` CLI actuators emitting ANSI-free deterministic `ariadne` / NDJSON diagnostics (`DEAP-E1000..DEAP-E1005`) and bijective `.sysml` + `.digest.json` artifacts across macOS, Linux, and Windows. */
-    attribute Layer_3_Presentation_Actuator_Interface_Binding : String = "Deterministic `ariadne` byte-span diagnostic renderer, `--message-format=json` NDJSON CLI stream, and atomic `.sysml` / `.digest.json` workspace actuators";
-    doc /* [unit: `levels`] */
+    doc /* SysmlToken, SysmlSyntaxKind (zero 16-construct caps), SysmlLanguage, CstParseReceipt, HirPackageSummary, HirSourceMap, SourceInput, PolyglotFormat, PolyglotBackendKind, and AriadneSpanReport across deap_core::sysml_cst, deap_core::dart_cst, compile_sysml::salsa_db, and ingest_sysml::cst::{idl_cst, yang_cst} / ingest_sysml::polyglot_cst. */
+    attribute Layer_1_Domain_State_Data_Model : String = "Full Contract A SysML v2.0 + KerML 1.0 lossless Red/Green CSTs (rowan pinned to ra_ap_syntax), trivia-erased HIR records, HirSourceMap byte-span tables, and cross-platform camino::Utf8PathBuf inputs";
+    doc /* normalize_line_endings, lex_sysml_tokens, parse_lossless_sysml_cst, verify_lossless_cst_invariants, evaluate_hir_early_cutoff, apply_formatting_preserving_splices, and resolve_polyglot_backend with 100% typed CST traversal and zero .syntax().text().contains(...). */
+    attribute Layer_2_Logic_State_Management : String = "Pure logos DFA lexing, rowan GreenNode building (MAX_AST_DEPTH <= 64), 4-layer salsa memoized early-cutoff queries, disjoint CST splicing, and typed polyglot CST lowering";
+    doc /* render_ariadne_diagnostic plus compile-sysml, ingest-sysml, and verify-baseline check-blueprint CLI actuators emitting ANSI-free deterministic ariadne / NDJSON diagnostics (DEAP-E1000..DEAP-E1005) and bijective .sysml + .digest.json artifacts across macOS, Linux, and Windows. */
+    attribute Layer_3_Presentation_Actuator_Interface_Binding : String = "Deterministic ariadne byte-span diagnostic renderer, --message-format=json NDJSON CLI stream, and atomic .sysml / .digest.json workspace actuators";
+    doc /* [unit: levels] */
     attribute max_ast_depth : Real;
-    doc /* [unit: `bytes`] */
+    doc /* [unit: bytes] */
     attribute untouched_trivia_mutation_bytes : Real;
-    doc /* [unit: `files`] */
+    doc /* [unit: files] */
     attribute stage_fixed_point_mismatch_files : Real;
-    doc /* [unit: `layers`] */
+    doc /* [unit: layers] */
     attribute query_layer_count : Real;
-    doc /* [unit: `queries`] */
+    doc /* [unit: queries] */
     attribute trivia_edit_downstream_recomputations : Real;
-    doc /* [unit: `frontends`] */
+    doc /* [unit: frontends] */
     attribute polyglot_frontend_count : Real;
-    doc /* [unit: `crates`] */
+    doc /* [unit: crates] */
     attribute rustc_private_feature_count : Real;
     doc /* resolve_polyglot_backend(format) */
     action def resolve_polyglot_backend;
@@ -42,31 +42,31 @@ package BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine {
     action def apply_formatting_preserving_splices;
     doc /* render_ariadne_diagnostic(input, diag) */
     action def render_ariadne_diagnostic;
-    doc /* [unit: `levels`] */
+    doc /* [unit: levels] */
     assert constraint C_INC_01 {
         max_ast_depth >= 1 and max_ast_depth <= 64;
     }
-    doc /* [unit: `bytes`] */
+    doc /* [unit: bytes] */
     assert constraint C_INC_02 {
         untouched_trivia_mutation_bytes >= 0 and untouched_trivia_mutation_bytes <= 0;
     }
-    doc /* [unit: `files`] */
+    doc /* [unit: files] */
     assert constraint C_INC_03 {
         stage_fixed_point_mismatch_files >= 0 and stage_fixed_point_mismatch_files <= 0;
     }
-    doc /* [unit: `layers`] */
+    doc /* [unit: layers] */
     assert constraint C_INC_04 {
         query_layer_count >= 4 and query_layer_count <= 4;
     }
-    doc /* [unit: `queries`] */
+    doc /* [unit: queries] */
     assert constraint C_INC_05 {
         trivia_edit_downstream_recomputations >= 0 and trivia_edit_downstream_recomputations <= 0;
     }
-    doc /* [unit: `frontends`] */
+    doc /* [unit: frontends] */
     assert constraint C_INC_06 {
         polyglot_frontend_count >= 6 and polyglot_frontend_count <= 6;
     }
-    doc /* [unit: `crates`] */
+    doc /* [unit: crates] */
     assert constraint C_INC_07 {
         rustc_private_feature_count >= 0 and rustc_private_feature_count <= 0;
     }
@@ -188,88 +188,88 @@ package BP_10_Incremental_Lossless_SysML_v2_and_Polyglot_Compiler_Engine {
         message apply_formatting_preserving_splices from FormattingPreservingSyncSplicer to FormattingPreservingSyncSplicer;
         message render_ariadne_diagnostic from SalsaIncrementalCompilerDatabase to SalsaIncrementalCompilerDatabase;
     }
-    doc /* Permitted Stage-1 versus Stage-2 SHA-256 digest mismatch count across bijective (`BP-03`) and self-hosted modular codegen (`E0705`). [unit: files] */
+    doc /* Permitted Stage-1 versus Stage-2 SHA-256 digest mismatch count across bijective (BP-03) and self-hosted modular codegen (E0705). [unit: files] */
     part def FormattingPreservingSyncSplicer {
         attribute stage_fixed_point_mismatch_files : Integer = 0;
-        doc /* Permitted byte mutations to comments and whitespace outside modified declaration `Utf8TextRange` intervals during incremental sync. [unit: bytes] */
+        doc /* Permitted byte mutations to comments and whitespace outside modified declaration Utf8TextRange intervals during incremental sync. [unit: bytes] */
         attribute untouched_trivia_mutation_bytes : Integer = 0;
-        doc /* Enforces pairwise-disjoint UTF-8 boundary verification and post-splice CST re-parse checks in `deap_core::sysml_cst::printer` before atomic commit. [unit: flag] */
+        doc /* Enforces pairwise-disjoint UTF-8 boundary verification and post-splice CST re-parse checks in deap_core::sysml_cst::printer before atomic commit. [unit: flag] */
         attribute atomic_disjoint_splice : Boolean = true;
-        doc /* Receives forward (`SysML` to `Markdown`/ICD/WBS) or reverse (`Markdown` to `SysML`) structural HIR diff descriptors. [protocol: BidirectionalHirDelta] */
+        doc /* Receives forward (SysML to Markdown/ICD/WBS) or reverse (Markdown to SysML) structural HIR diff descriptors. [protocol: BidirectionalHirDelta] */
         port in sync_delta_in : String {
             flow in sync_delta_in_flow : String;
         }
-        doc /* Commits formatting-preserving `rowan` CST child splices and disjoint byte patches atomically to workspace storage. [protocol: LosslessSplicedSysmlAndMarkdown] */
+        doc /* Commits formatting-preserving rowan CST child splices and disjoint byte patches atomically to workspace storage. [protocol: LosslessSplicedSysmlAndMarkdown] */
         port out spliced_artifact_out : String {
             flow out spliced_artifact_out_flow : String;
         }
-        doc /* Emits fail-closed `ariadne` and NDJSON `DEAP-E1003` diagnostics on overlapping splice intervals or post-splice syntax regressions. [protocol: AriadneAndJsonDiagnosticStream] */
+        doc /* Emits fail-closed ariadne and NDJSON DEAP-E1003 diagnostics on overlapping splice intervals or post-splice syntax regressions. [protocol: AriadneAndJsonDiagnosticStream] */
         port out splice_diag_out : String {
             flow out splice_diag_out_flow : String;
         }
     }
-    doc /* Hard structural nesting ceiling across all normative OMG SysML v2.0 and KerML 1.0 declaration, usage, behavioral, and expression CST blocks in `deap_core::sysml_cst::parser` (Contract A, zero 16-construct caps). [unit: levels] */
+    doc /* Hard structural nesting ceiling across all normative OMG SysML v2.0 and KerML 1.0 declaration, usage, behavioral, and expression CST blocks in deap_core::sysml_cst::parser (Contract A, zero 16-construct caps). [unit: levels] */
     part def LogosRowanSysmlCstEngine {
         attribute max_ast_depth : Integer = 64;
-        doc /* Requires root `rowan::GreenNode` byte concatenation to match the LF-normalized UTF-8 `.sysml` or `.kerml` buffer byte-for-byte including comments, `doc`, `rep`, `@` metadata, and whitespace. [unit: flag] */
+        doc /* Requires root rowan::GreenNode byte concatenation to match the LF-normalized UTF-8 .sysml or .kerml buffer byte-for-byte including comments, doc, rep, @ metadata, and whitespace. [unit: flag] */
         attribute lossless_trivia_preserved : Boolean = true;
-        doc /* Wraps malformed token spans in `ErrorNode` subtrees and continues parsing at synchronization tokens while emitting `ariadne` / JSON `DEAP-E1001` diagnostics. [unit: flag] */
+        doc /* Wraps malformed token spans in ErrorNode subtrees and continues parsing at synchronization tokens while emitting ariadne / JSON DEAP-E1001 diagnostics. [unit: flag] */
         attribute resilient_error_recovery : Boolean = true;
-        doc /* Canonical deterministic blueprint component identifier (`DEAP-BP-DET-10`). [unit: uuidv5] */
+        doc /* Canonical deterministic blueprint component identifier (DEAP-BP-DET-10). [unit: uuidv5] */
         attribute deterministic_uuid : String = "6ba7b810-9dad-11d1-80b4-00c04fd430ca";
-        doc /* Receives CRLF-to-LF normalized UTF-8 `.sysml` or `.kerml` source text via `camino::Utf8Path` from `SourceDatabase` without pre-lexer sigil rewriting. [protocol: Utf8SysmlSourceBuffer] */
+        doc /* Receives CRLF-to-LF normalized UTF-8 .sysml or .kerml source text via camino::Utf8Path from SourceDatabase without pre-lexer sigil rewriting. [protocol: Utf8SysmlSourceBuffer] */
         port in sysml_source_in : String {
             flow in sysml_source_in_flow : String;
         }
-        doc /* Emits immutable, thread-safe `rowan::GreenNode` (`rowan` pinned to `ra_ap_syntax`) and typed `SysmlSyntaxNode` projection covering 100% of Contract A productions. [protocol: RowanGreenSysmlTree] */
+        doc /* Emits immutable, thread-safe rowan::GreenNode (rowan pinned to ra_ap_syntax) and typed SysmlSyntaxNode projection covering 100% of Contract A productions. [protocol: RowanGreenSysmlTree] */
         port out green_cst_out : String {
             flow out green_cst_out_flow : String;
         }
-        doc /* Streams deterministic `ariadne` byte-span reports and single-line `DEAP-E1001` / `DEAP-E1002` NDJSON diagnostics. [protocol: AriadneAndJsonDiagnosticStream] */
+        doc /* Streams deterministic ariadne byte-span reports and single-line DEAP-E1001 / DEAP-E1002 NDJSON diagnostics. [protocol: AriadneAndJsonDiagnosticStream] */
         port out syntax_diag_out : String {
             flow out syntax_diag_out_flow : String;
         }
     }
-    doc /* Mandatory count of stratified `salsa` query groups in `compile_sysml::salsa_db` (`SourceDatabase`, `CstDatabase`, `HirDatabase`, `SafetyVerificationDatabase`). [unit: layers] */
+    doc /* Mandatory count of stratified salsa query groups in compile_sysml::salsa_db (SourceDatabase, CstDatabase, HirDatabase, SafetyVerificationDatabase). [unit: layers] */
     part def SalsaIncrementalCompilerDatabase {
         attribute query_layer_count : Integer = 4;
         doc /* Required count of downstream STPA, Kani, and baseline verification query recomputations when edits alter only non-semantic trivia. [unit: queries] */
         attribute trivia_edit_downstream_recomputations : Integer = 0;
-        doc /* Mandates `BTreeMap` and `BTreeSet` deterministic ordering and forbids filesystem or clock side effects inside derived `salsa` queries. [unit: flag] */
+        doc /* Mandates BTreeMap and BTreeSet deterministic ordering and forbids filesystem or clock side effects inside derived salsa queries. [unit: flag] */
         attribute pure_deterministic_btreemap : Boolean = true;
-        doc /* Intercepts cyclic `salsa` dependency chains across imports, specializations, or feature chains and emits deterministic `DEAP-E1004` `ariadne` + JSON diagnostics. [unit: flag] */
+        doc /* Intercepts cyclic salsa dependency chains across imports, specializations, or feature chains and emits deterministic DEAP-E1004 ariadne + JSON diagnostics. [unit: flag] */
         attribute cycle_recovery_fail_closed : Boolean = true;
-        doc /* Receives `FileId` buffer updates, `camino::Utf8PathBuf` paths, `DurabilityTier` (`Low`, `Medium`, `High`), and LF-normalized SHA-256 input digests. [protocol: SalsaSourceInputRevision] */
+        doc /* Receives FileId buffer updates, camino::Utf8PathBuf paths, DurabilityTier (Low, Medium, High), and LF-normalized SHA-256 input digests. [protocol: SalsaSourceInputRevision] */
         port in source_revision_in : String {
             flow in source_revision_in_flow : String;
         }
-        doc /* Emits trivia-erased `HirPackageSummary` semantic graphs covering full SysML v2.0 + KerML 1.0 constructs decoupled from `DefId` to `Utf8TextRange` `HirSourceMap` tables for early cutoff. [protocol: InternedHirPackageAndSourceMap] */
+        doc /* Emits trivia-erased HirPackageSummary semantic graphs covering full SysML v2.0 + KerML 1.0 constructs decoupled from DefId to Utf8TextRange HirSourceMap tables for early cutoff. [protocol: InternedHirPackageAndSourceMap] */
         port out hir_model_out : String {
             flow out hir_model_out_flow : String;
         }
-        doc /* Emits memoized STPA UCA/FMECA matrices, Kani CBMC proof harnesses, `ariadne` diagnostics, and `verify-baseline` parity receipts. [protocol: MemoizedStpaKaniBaselineReceipt] */
+        doc /* Emits memoized STPA UCA/FMECA matrices, Kani CBMC proof harnesses, ariadne diagnostics, and verify-baseline parity receipts. [protocol: MemoizedStpaKaniBaselineReceipt] */
         port out safety_verification_out : String {
             flow out safety_verification_out_flow : String;
         }
     }
-    doc /* Count of Contract B typed CST/AST frontends (`ra_ap_syntax` Rust, `deap_core::dart_cst` Dart, typed `serde_json` OpenAPI/JSON-Schema, `logos`+`rowan` OMG IDL and IETF YANG in `ingest_sysml::cst::idl_cst` and `ingest_sysml::cst::yang_cst`, and Markdown in `ingest_sysml::cst::markdown_cst`). [unit: frontends] */
+    doc /* Count of Contract B typed CST/AST frontends (ra_ap_syntax Rust, deap_core::dart_cst Dart, typed serde_json OpenAPI/JSON-Schema, logos+rowan OMG IDL and IETF YANG in ingest_sysml::cst::idl_cst and ingest_sysml::cst::yang_cst, and Markdown in ingest_sysml::cst::markdown_cst). [unit: frontends] */
     part def TypedPolyglotIngestionFrontend {
         attribute polyglot_frontend_count : Integer = 6;
-        doc /* Enforces `ZERO #![feature(rustc_private)]` occurrences across all workspace crates under `./crates/ *`. [unit: crates] */
+        doc /* Enforces ZERO #![feature(rustc_private)] occurrences across all workspace crates under ./crates/ *. [unit: crates] */
         attribute rustc_private_feature_count : Integer = 0;
-        doc /* Emits deterministic `ariadne` byte-span reports and `--message-format=json` diagnostics (`DEAP-E1005`) across all polyglot formats. [unit: flag] */
+        doc /* Emits deterministic ariadne byte-span reports and --message-format=json diagnostics (DEAP-E1005) across all polyglot formats. [unit: flag] */
         attribute json_and_ariadne_span_diagnostics : Boolean = true;
-        doc /* Enforces linear-time `logos` DFA / `rowan` CST and typed `serde_json` AST parsing with zero hand-rolled line scanners or NFA backtracking (`Check 34`). [unit: flag] */
+        doc /* Enforces linear-time logos DFA / rowan CST and typed serde_json AST parsing with zero hand-rolled line scanners or NFA backtracking (Check 34). [unit: flag] */
         attribute zero_backtracking_lexers : Boolean = true;
-        doc /* Receives LF-normalized Rust (`.rs`), Dart (`.dart`), JSON-Schema/OpenAPI (`.json`), OMG IDL (`.idl`), IETF YANG (`.yang`), or Markdown (`.md`) buffers. [protocol: PolyglotSpecBuffer] */
+        doc /* Receives LF-normalized Rust (.rs), Dart (.dart), JSON-Schema/OpenAPI (.json), OMG IDL (.idl), IETF YANG (.yang), or Markdown (.md) buffers. [protocol: PolyglotSpecBuffer] */
         port in polyglot_source_in : String {
             flow in polyglot_source_in_flow : String;
         }
-        doc /* Lowers typed polyglot syntax trees directly into interned `compile_sysml::salsa_db` `HirPackageSummary` and `HirSourceMap` records. [protocol: CanonicalHirDatabaseInput] */
+        doc /* Lowers typed polyglot syntax trees directly into interned compile_sysml::salsa_db HirPackageSummary and HirSourceMap records. [protocol: CanonicalHirDatabaseInput] */
         port out lowered_hir_out : String {
             flow out lowered_hir_out_flow : String;
         }
-        doc /* Streams deterministic `ariadne` byte-span reports and single-line `DEAP-E1005` NDJSON diagnostics on syntax or schema-pointer errors. [protocol: AriadneAndJsonDiagnosticStream] */
+        doc /* Streams deterministic ariadne byte-span reports and single-line DEAP-E1005 NDJSON diagnostics on syntax or schema-pointer errors. [protocol: AriadneAndJsonDiagnosticStream] */
         port out ingest_diag_out : String {
             flow out ingest_diag_out_flow : String;
         }

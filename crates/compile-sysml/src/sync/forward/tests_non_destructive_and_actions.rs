@@ -32,7 +32,7 @@
 //! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-GENERATE-CLASS-DIAGRAM]
 
 use super::*;
-use deap_core::sysml_ast::{ActionDef, OperationDef, PartDef};
+use deap_core::sysml_cst::{ActionDef, OperationDef, PartDef};
 
 /// Creates the `DEFECT-07` temporary Feature Markdown fixture and initial `FlightControlSystem` AST.
 /// Realises: [REQ-0604]
@@ -218,7 +218,7 @@ fn test_defect_07_forward_reverse_sync_actions_roundtrip_parity(
 /// Builds the `GncSystem` fixture for `REQ-0604` ICD and WBS compilation tests.
 /// Realises: [REQ-0604]
 fn build_req_0604_gnc_model(act: ActionDef) -> PackageDef {
-    use deap_core::sysml_ast::{ConnectionDef, PortDef};
+    use deap_core::sysml_cst::{ConnectionDef, PortDef};
 
     let mut pkg = PackageDef {
         name: "GncSystem".to_string(),
@@ -263,7 +263,7 @@ fn build_req_0604_gnc_model(act: ActionDef) -> PackageDef {
 #[test]
 fn test_req_0604_forward_sync_parameterized_actions_icd_wbs_and_html_comment_guards(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use deap_core::sysml_ast::AttributeDef;
+    use deap_core::sysml_cst::AttributeDef;
 
     let act = ActionDef {
         name: "SolveAttitude".to_string(),

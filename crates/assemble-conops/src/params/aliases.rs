@@ -5,8 +5,46 @@ use std::fs;
 
 use serde_json::Value;
 
-use super::sysml_lexer::extract_numeric_substring;
 use super::SysMLParameterBindingEngine;
+
+/// Extracts the first signed/decimal numeric substring from a raw attribute value string.
+/// Realises: [REQ-ASSEMBLE-CONOPS-PARAMS-EXTRACT-NUMERIC-SUBSTRING] | SysML v2: ActionDef(extract_numeric_substring)
+pub(super) fn extract_numeric_substring(val: &str) -> Option<&str> {
+    let bytes = val.as_bytes();
+    let mut i = 0;
+    while let Some(&b) = bytes.get(i) {
+        let is_sign = (b == b'+' || b == b'-')
+            && (bytes.get(i + 1).is_some_and(u8::is_ascii_digit)
+                || (bytes.get(i + 1) == Some(&b'.')
+                    && bytes.get(i + 2).is_some_and(u8::is_ascii_digit)));
+        let is_digit = b.is_ascii_digit();
+        let is_dot_digit = b == b'.' && bytes.get(i + 1).is_some_and(u8::is_ascii_digit);
+        if is_sign || is_digit || is_dot_digit {
+            let start = i;
+            let mut j = if is_sign { i + 1 } else { i };
+            let mut has_dot = false;
+            let mut has_digits = false;
+            while let Some(&bj) = bytes.get(j) {
+                if bj.is_ascii_digit() {
+                    has_digits = true;
+                    j += 1;
+                } else if bj == b'.' && !has_dot
+                    && (has_digits || bytes.get(j + 1).is_some_and(u8::is_ascii_digit))
+                {
+                    has_dot = true;
+                    j += 1;
+                } else {
+                    break;
+                }
+            }
+            if has_digits {
+                return val.get(start..j);
+            }
+        }
+        i += 1;
+    }
+    None
+}
 
 impl SysMLParameterBindingEngine {
     /// Maps identity and velocity keys into `aliases` (`[REQ-ASSEMBLE-CONOPS]`).

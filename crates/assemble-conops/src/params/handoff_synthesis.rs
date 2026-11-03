@@ -1,4 +1,6 @@
-//! Segment allocation matrix, port taxonomy, reusable recovery, and Section 4.5 supervisory authority handoff synthesis.
+//! Segment allocation matrix, port taxonomy, reusable recovery, JSON dictionary ingestion, and Section 4.5 supervisory authority handoff synthesis.
+
+use serde_json::Value;
 
 use crate::sanitize::sanitize_level_1b_operational_text;
 
@@ -218,5 +220,116 @@ impl SysMLParameterBindingEngine {
             "SUPERVISORY_AUTHORITY_HANDOFF_SECTION".to_string(),
             lines.join("\n"),
         );
+    }
+
+    /// Binds a single JSON key-value pair into `parameter_bindings` and maps semantic aliases (`[REQ-ASSEMBLE-CONOPS]`).
+    fn ingest_json_entry(&mut self, k: &str, v: &Value) {
+        self.explicit_keys.insert(k.to_uppercase());
+        match v {
+            Value::String(s) => {
+                self.parameter_bindings.insert(k.to_string(), s.clone());
+                self.parameter_bindings.insert(k.to_uppercase(), s.clone());
+                self._map_semantic_aliases(k, s);
+            }
+            Value::Number(n) => {
+                let str_val = n.to_string();
+                self.parameter_bindings.insert(k.to_string(), str_val.clone());
+                self.parameter_bindings.insert(k.to_uppercase(), str_val.clone());
+                self._map_semantic_aliases(k, &str_val);
+            }
+            Value::Bool(b) => {
+                let str_val = b.to_string();
+                self.parameter_bindings.insert(k.to_string(), str_val.clone());
+                self.parameter_bindings.insert(k.to_uppercase(), str_val.clone());
+                self._map_semantic_aliases(k, &str_val);
+            }
+            Value::Array(arr) => {
+                let lower_k = k.to_lowercase();
+                if [
+                    "core_mission_capabilities",
+                    "core_capabilities",
+                    "capabilities",
+                    "mission_capabilities",
+                ]
+                .contains(&lower_k.as_str())
+                {
+                    let mut lines = Vec::new();
+                    for (idx, item) in arr.iter().enumerate() {
+                        let item_str = match item {
+                            Value::String(s) => s.trim().to_string(),
+                            other => other.to_string(),
+                        };
+                        if item_str.starts_with(&format!("{}.", idx + 1)) || item_str.starts_with('-') {
+                            lines.push(format!("  {item_str}"));
+                        } else {
+                            lines.push(format!("  {}. {item_str}", idx + 1));
+                        }
+                    }
+                    let formatted = lines.join("\n");
+                    self.parameter_bindings.insert(k.to_string(), formatted.clone());
+                    self.parameter_bindings.insert(k.to_uppercase(), formatted.clone());
+                    self.parameter_bindings.insert("CORE_MISSION_CAPABILITIES".to_string(), formatted);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Extracts package/system identifier and AST part names from `schema_nodes` (`[REQ-ASSEMBLE-CONOPS]`).
+    fn ingest_schema_nodes(&mut self, nodes: &[Value]) {
+        for node in nodes {
+            if let Value::String(s) = node {
+                if let Some((kind, name)) = s.split_once(':') {
+                    if (kind == "package" || kind == "system")
+                        && self.inferred_system_identifier.is_none()
+                    {
+                        self.inferred_system_identifier = Some(name.trim().to_string());
+                    }
+                    if kind == "part" {
+                        self.ast_part_names.insert(name.trim().to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    /// Recursively ingests nested parameter dictionaries and `schema_nodes` from a JSON `Value`.
+    /// Inputs: `data: &Value` | Outputs: `()` | Invariants: maps semantic aliases for all scalar entries
+    ///Errors: ignores non-object JSON values | Complexity: O(N) over JSON tree nodes
+    /// Realises: [REQ-ASSEMBLE-CONOPS-PARAMS-SYSMLPARAMETERBINDINGENGINE-INGEST-DICTIONARY] | SysML v2: ActionDef(SysMLParameterBindingEngine::ingest_dictionary)
+    pub fn ingest_dictionary(&mut self, data: &Value) {
+        if let Value::Object(map) = data {
+            let containers = [
+                "parameters", "domain_parameters", "domain_params",
+                "specs", "attributes", "metadata",
+            ];
+            for container_key in &containers {
+                if let Some(sub) = map.get(*container_key) {
+                    self.ingest_dictionary(sub);
+                }
+            }
+
+            for name_key in &[
+                "system_identifier", "system_name", "system",
+                "name", "SYSTEM_IDENTIFIER", "MISSION_SYSTEM_NAME",
+            ] {
+                if let Some(Value::String(s)) = map.get(*name_key) {
+                    let trimmed = s.trim();
+                    if !trimmed.is_empty() {
+                        self.inferred_system_identifier = Some(trimmed.to_string());
+                    }
+                }
+            }
+
+            for (k, v) in map {
+                if !containers.contains(&k.as_str()) && k != "schema_nodes" {
+                    self.ingest_json_entry(k, v);
+                }
+            }
+
+            if let Some(Value::Array(nodes)) = map.get("schema_nodes") {
+                self.ingest_schema_nodes(nodes);
+            }
+        }
     }
 }

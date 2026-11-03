@@ -8,7 +8,7 @@ use crate::cli::MessageFormat;
 use crate::docstring_cst::compact_tier_bc_tree;
 use crate::driver::DriverError;
 use crate::driver_mode_handlers::handle_inject_docstrings;
-use crate::semantic::digest::write_atomic;
+use crate::salsa_db::write_atomic;
 use deap_core::diagnostics::{DiagnosticEmitError, StructuredDiagnostic};
 use deap_core::rust_cst::codemod::{
     list_rust_cst_items, CodemodError, RustCstInventoryError,

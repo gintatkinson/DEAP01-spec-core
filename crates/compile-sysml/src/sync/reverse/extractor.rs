@@ -36,7 +36,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
-use deap_core::sysml_ast::{
+use deap_core::sysml_cst::{
     CapabilityDef, ConstraintDef, InteractionDef, PackageDef, PartDef, UseCaseDef,
 };
 use walkdir::WalkDir;

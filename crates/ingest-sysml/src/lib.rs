@@ -3,7 +3,7 @@
 //! ## 1. Safety Intent & Regulatory Scope
 //! Authoritative Ground 0.0 ingestion framework transforming heterogeneous Level 0 OEM
 //! requirements, ICDs, and domain specifications into canonical SysML v2 AST models
-//! (`deap_core::sysml_ast::PackageDef`).
+//! (`deap_core::PackageDef`).
 //!
 //! ## 2. Invariants & Mathematical Properties
 //! - Pure schema-driven operation across Markdown, IDL, OpenAPI, YANG, and source code ASTs.
@@ -14,7 +14,7 @@
 //! - Input payloads must be valid UTF-8 text streams with well-formed package identifiers.
 //!
 //! ## 4. Postconditions
-//! - Produces deterministic `deap_core::sysml_ast::PackageDef` models with closed-world scope pruning.
+//! - Produces deterministic `deap_core::PackageDef` models with closed-world scope pruning.
 //!
 //! ## 5. Algorithmic Complexity Bounds
 //! - Time Complexity: $O(N + P \cdot C)$ over input byte length $N$, part definitions $P$, and cross-references $C$.
@@ -26,12 +26,12 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-SYSML-INGEST-LIB], [DO-330-TQL-4-INGEST-LIB]
 
+pub mod cst;
 pub mod detectors;
 pub mod digest;
 pub mod table;
-pub mod translators;
 
-use deap_core::sysml_ast::{ConstraintDef, PackageDef, PartDef};
+use deap_core::{ConstraintDef, IncrementalAstCache, PackageDef, PartDef, SysmlModel};
 use std::collections::BTreeSet;
 
 /// Fail-safe process exit code classification for the `ingest-sysml` CLI engine. Realises: [REQ-SYSML-INGEST-EXIT-CODE/IngestExitCode]
@@ -54,17 +54,17 @@ impl IngestExitCode {
 
 /// Translates a single Markdown requirement document into a canonical SysML v2 `PackageDef`. Realises: [REQ-SYSML-INGEST-CORE/translate_markdown]
 pub fn translate_markdown(content: &str, file_name: &str) -> Result<PackageDef, String> {
-    translators::markdown::MarkdownTranslator::new().translate(content, file_name)
+    cst::markdown_cst::MarkdownTranslator::new().translate(content, file_name)
 }
 
 /// Translates a single YANG model into a canonical SysML v2 `PackageDef`. Realises: [REQ-SYSML-INGEST-CORE/translate_yang]
 pub fn translate_yang(content: &str, file_name: &str) -> Result<PackageDef, String> {
-    translators::yang::YangTranslator::new().translate(content, file_name)
+    cst::yang_cst::YangTranslator::new().translate(content, file_name)
 }
 
 /// Translates a single Rust or Dart source file into a canonical SysML v2 `PackageDef`. Realises: [REQ-SYSML-INGEST-CORE/translate_code]
 pub fn translate_code(content: &str, file_name: &str) -> Result<PackageDef, String> {
-    translators::code::CodeTranslator::new().translate(content, file_name)
+    cst::code_cst::CodeTranslator::new().translate(content, file_name)
 }
 
 /// Filters AST nodes to target metamodel scope and projects negative invariants. Realises: [REQ-SYSML-INGEST-SCOPE/filter_ast_to_target_scope]
@@ -224,8 +224,8 @@ pub fn filter_ast_to_realized_or_allowed(pkg: &mut PackageDef, schema_parts: &BT
 pub fn cache_ingested_sysml_model(
     repo_root: &std::path::Path,
     sysml_source: &str,
-) -> Result<(deap_core::sysml_ast::SysmlModel, bool), String> {
-    let cache = deap_core::sysml_ast::IncrementalAstCache::new(repo_root);
+) -> Result<(SysmlModel, bool), String> {
+    let cache = IncrementalAstCache::new(repo_root);
     cache.load_or_parse(sysml_source).map_err(String::from)
 }
 
@@ -283,7 +283,7 @@ mod tests {
         let (f1, f2) = (tmp.0.join("spec1.md"), tmp.0.join("spec2.md"));
         std::fs::write(&f1, "# Package_0\n\n## Classifier_Alpha\nAlpha doc.")?;
         std::fs::write(&f2, "# Package_0\n\n## Classifier_Beta\nBeta doc.")?;
-        let pkg = translators::markdown::MarkdownTranslator::new().translate_files(
+        let pkg = cst::markdown_cst::MarkdownTranslator::new().translate_files(
             &[f1.to_string_lossy().to_string(), f2.to_string_lossy().to_string()],
             "Consolidated_Package",
         )?;
@@ -300,7 +300,7 @@ mod tests {
         std::fs::write(&valid_md_path, "# Package_0\n\n## Classifier_Alpha\nAlpha doc.")?;
         let valid_md = valid_md_path.to_string_lossy().to_string();
         let missing_md = tmp.0.join("missing.md").to_string_lossy().to_string();
-        let md_translator = translators::markdown::MarkdownTranslator::new();
+        let md_translator = cst::markdown_cst::MarkdownTranslator::new();
         assert!(md_translator.translate_files(&[], "Pkg").is_err());
         assert!(md_translator.translate_files(&[valid_md, missing_md], "Pkg").is_err());
 
@@ -308,7 +308,7 @@ mod tests {
         std::fs::write(&valid_yang_path, "module valid-mod { namespace \"urn:test:valid\"; prefix vm; container root { leaf id { type string; } } }")?;
         let valid_yang = valid_yang_path.to_string_lossy().to_string();
         let missing_yang = tmp.0.join("missing.yang").to_string_lossy().to_string();
-        let yang_translator = translators::yang::YangTranslator::new();
+        let yang_translator = cst::yang_cst::YangTranslator::new();
         assert!(yang_translator.translate_files(&[], "Pkg").is_err());
         assert!(yang_translator.translate_files(std::slice::from_ref(&missing_yang), "Pkg").is_err());
         assert!(yang_translator.translate_files(&[valid_yang, missing_yang], "Pkg").is_err());
@@ -353,8 +353,8 @@ mod tests {
     fn test_issue_491_zero_blanket_lint_suppressions() -> Result<(), Box<dyn std::error::Error>> {
         let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let targets = [
-            "src/lib.rs", "src/main.rs", "src/translators/markdown.rs", "src/translators/yang.rs",
-            "src/translators/code.rs", "tests/code_ingestion_tests.rs", "tests/code_realization_scoping_tests.rs",
+            "src/lib.rs", "src/main.rs", "src/cst/markdown_cst.rs", "src/cst/yang_cst.rs",
+            "src/cst/code_cst.rs", "tests/code_ingestion_tests.rs", "tests/code_realization_scoping_tests.rs",
         ];
         let crate_allow = concat!("#![", "allow(");
         let crate_clippy = concat!("#![", "allow(", "clippy::");
@@ -366,7 +366,7 @@ mod tests {
             assert!(!content.contains(crate_allow) && !content.contains(crate_clippy));
             assert!(!content.contains(item_clippy) && !content.contains(dead_code_attr));
         }
-        assert!(translators::markdown::MarkdownTranslator::new().translate_files(&[], "EmptyBatch").is_err());
+        assert!(cst::markdown_cst::MarkdownTranslator::new().translate_files(&[], "EmptyBatch").is_err());
         Ok(())
     }
 }

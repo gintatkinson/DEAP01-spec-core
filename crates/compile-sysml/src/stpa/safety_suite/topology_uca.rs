@@ -36,7 +36,7 @@
 pub(super) use super::loss_scenarios::*;
 use super::tokens::{sanitize_markdown_cell, sanitize_mermaid_id};
 use super::*;
-use deap_core::sysml_ast::{AttributeDef, ConnectionDef, RequirementDef};
+use deap_core::sysml_cst::{AttributeDef, ConnectionDef, RequirementDef};
 
 /// Resolved single-line sanitized AST control-loop anchors cycled per UCA index for Class-1 and Class-2 STPA loss scenarios.
 /// Realises: [REQ-STPA-SAFETY-SUITE-LOSS-SCENARIO-ANCHORS]

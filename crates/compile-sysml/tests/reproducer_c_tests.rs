@@ -37,7 +37,7 @@ use std::process::Command;
 
 use compile_sysml::stpa::fmeca::FmecaRow;
 use compile_sysml::FmecaScoringConfig;
-use deap_core::sysml_ast::{
+use deap_core::sysml_cst::{
     ActionDef, AttributeDef, OperationDef, PackageDef, PartDef, PortDef, StateDef,
 };
 

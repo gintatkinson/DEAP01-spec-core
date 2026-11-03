@@ -34,7 +34,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-0603], [REQ-STPA-FMECA-GENERATE-WITH-REGISTRY] | SysML v2: PackageDef(fmeca_synthesis)
 
-use deap_core::sysml_ast::{HazardDef, PackageDef, PartDef};
+use deap_core::sysml_cst::{HazardDef, PackageDef, PartDef};
 
 use super::members::{
     classify_hazard_dimension, collect_dimension_member_triples, compute_negated_part_names,

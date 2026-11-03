@@ -23,7 +23,7 @@
 //! - Linear `O(N)` traversal over AST elements with deterministic `BTreeMap` ordering.
 //!
 //! ## 5. Dependencies & Integration Contracts
-//! - Consumes `deap_core::sysml_ast`, `crate::stpa`, and `crate::semantic::digest::write_atomic`.
+//! - Consumes `deap_core::sysml_cst`, `crate::stpa`, and `crate::salsa_db::write_atomic`.
 //!
 //! ## 6. Verification & Acceptance Criteria
 //! - Verified by unit and round-trip tests in `sync/forward/tests*.rs`.
@@ -77,7 +77,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use deap_core::sysml_ast::{
+use deap_core::sysml_cst::{
     ActionDef, AttributeDef, ConnectionDef, ConstraintDef, InteractionDef, PackageDef, PartDef,
     RequirementDef, StateDef, TransitionDef, UseCaseDef,
 };
@@ -123,7 +123,7 @@ use walkdir::WalkDir;
 pub use wbs_emitter::*;
 use wbs_formatters::*;
 
-use crate::semantic::digest::write_atomic;
+use crate::salsa_db::write_atomic;
 use crate::stpa::uca::expand_cartesian_stpa;
 
 /// Configuration paths and execution mode flags controlling SysML v2 forward synchronization.

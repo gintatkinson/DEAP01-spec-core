@@ -36,7 +36,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use compile_sysml::sync::forward::{forward_sync_sysml_to_specs, ForwardSyncOptions};
-use deap_core::sysml_ast::{ActionDef, PackageDef, PartDef, UseCaseDef};
+use deap_core::sysml_cst::{ActionDef, PackageDef, PartDef, UseCaseDef};
 
 use crate::reproducer_tests::{
     assert_mermaid_blocks_free_of_backticks_and_semicolons, extract_markdown_h2_section,

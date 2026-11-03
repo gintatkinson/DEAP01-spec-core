@@ -12,8 +12,7 @@ use crate::driver_schema_loader::{
     load_and_validate_schema_typed, load_schema_package_typed, resolve_schema_targets_typed,
     run_compilation_gate_with_dry_run,
 };
-use crate::semantic::digest::{count_structural_elements, write_atomic};
-use crate::semantic::serializer::to_sysml;
+use crate::salsa_db::{count_structural_elements, to_sysml, write_atomic};
 use crate::stpa::{
     compile_stpa_to_constraints_filtered, emit_safety_suite, transpile_safety_suite,
     FmecaScoringConfig,

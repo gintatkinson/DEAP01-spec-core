@@ -32,14 +32,14 @@
 //! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-TEST-FEATURE-BDD-DERIVED]
 
 use super::*;
-use deap_core::sysml_ast::PartDef;
+use deap_core::sysml_cst::PartDef;
 
 /// Verifies `generate_feature_bdd` derives positive and negative BDD acceptance criteria from `PartDef` constraints and `RequirementDef` obligations within `3..=10` items.
 /// Realises: [REQ-0604], [REQ-SYNC-FORWARD-TEST-FEATURE-BDD-DERIVED]
 #[test]
 fn test_feature_bdd_derived_from_constraints_and_requirements(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use deap_core::sysml_ast::{ConstraintDef, RequirementDef};
+    use deap_core::sysml_cst::{ConstraintDef, RequirementDef};
 
     let mut part = PartDef {
         name: "TelemetryProcessor".to_string(),
@@ -170,7 +170,7 @@ fn test_generate_use_case_diagram_model_integrity() -> Result<(), Box<dyn std::e
 /// Realises: [REQ-0604], [REQ-SYNC-FORWARD-TEST-FEATURE-BDD-DERIVED]
 #[test]
 fn test_epic_statechart_and_class_diagram_generation() -> Result<(), Box<dyn std::error::Error>> {
-    use deap_core::sysml_ast::{AttributeDef, PortDef, StateDef, TransitionDef};
+    use deap_core::sysml_cst::{AttributeDef, PortDef, StateDef, TransitionDef};
 
     let mut pkg = PackageDef {
         name: "SpatioTemporalStateSolvers".to_string(),
@@ -240,7 +240,7 @@ fn test_epic_statechart_and_class_diagram_generation() -> Result<(), Box<dyn std
 #[test]
 fn test_user_story_subsystem_parent_epic_and_dynamic_spec_source(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use deap_core::sysml_ast::{ActionDef, InteractionDef};
+    use deap_core::sysml_cst::{ActionDef, InteractionDef};
 
     let mut root = PackageDef {
         name: "DEAP_Compiler_System".to_string(),

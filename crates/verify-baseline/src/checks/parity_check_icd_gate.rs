@@ -14,7 +14,7 @@ use super::parity_check_icd_signals::{
     harvest_icd02_signal_port_bindings, Icd01ConnAuditState,
 };
 use super::parity_gates::ParityOutcome;
-use deap_core::sysml_ast::parse_part_defs;
+use deap_core::sysml_cst::parse_part_defs;
 use deap_core::workspace::is_upstream_compiler;
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 use std::fs;

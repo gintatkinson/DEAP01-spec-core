@@ -32,7 +32,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-0603], [REQ-STPA-FMECA-TESTS] | SysML v2: VerificationCaseDef(fmeca_tests)
 
-use deap_core::sysml_ast::{PackageDef, PartDef};
+use deap_core::sysml_cst::{PackageDef, PartDef};
 
 use super::generate_fmeca_matrix;
 
@@ -89,12 +89,12 @@ fn test_fmeca_matrix_excludes_negated_components() -> Result<(), Box<dyn std::er
     pkg.part_defs.push(p2);
 
     // Explicit negative constraint: backupEnabled = 0; backupSystem = "No";
-    pkg.attribute_defs.push(deap_core::sysml_ast::AttributeDef {
+    pkg.attribute_defs.push(deap_core::sysml_cst::AttributeDef {
         name: "backupEnabled".to_string(),
         default_value: Some("0".to_string()),
         ..Default::default()
     });
-    pkg.attribute_defs.push(deap_core::sysml_ast::AttributeDef {
+    pkg.attribute_defs.push(deap_core::sysml_cst::AttributeDef {
         name: "backupSystem".to_string(),
         default_value: Some("\"No\"".to_string()),
         ..Default::default()
@@ -123,7 +123,7 @@ fn test_arch_07_fmeca_matrix_precomputes_bang_negated_components_in_btreeset(
         ..Default::default()
     });
     pkg.constraint_defs
-        .push(deap_core::sysml_ast::ConstraintDef {
+        .push(deap_core::sysml_cst::ConstraintDef {
             name: "ExcludeBackupUnit".to_string(),
             expression: "!AuxiliaryBackupUnit".to_string(),
             is_assertion: true,

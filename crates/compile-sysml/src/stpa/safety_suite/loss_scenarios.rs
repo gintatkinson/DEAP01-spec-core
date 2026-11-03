@@ -39,7 +39,7 @@ use super::topology_uca::{
     LossScenarioPkgScope,
 };
 use super::*;
-use deap_core::sysml_ast::ConnectionDef;
+use deap_core::sysml_cst::ConnectionDef;
 
 /// Cycles across AST ports, states, attributes, connections, and constraints/requirements at `idx` to ground STPA loss scenarios.
 /// Realises: [REQ-STPA-SAFETY-SUITE-RESOLVE-LOSS-ANCHORS]

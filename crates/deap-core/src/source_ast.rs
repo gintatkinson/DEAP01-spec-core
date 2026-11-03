@@ -34,7 +34,7 @@ pub use crate::rust_cst::codemod::{
     SpanSpliceEdit, Utf8ByteSpan, ZeroTokenCodemodConfig,
 };
 pub use crate::rust_cst::source_bridge::*;
-use crate::sysml_ast::{
+use crate::sysml_cst::{
     ActionDef, AttributeDef, ConstraintDef, PackageDef, PartDef, PortDef, RequirementDef,
 };
 

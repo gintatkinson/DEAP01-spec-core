@@ -6,7 +6,7 @@
 
 use super::parity_check_coverage::parse_use_case_defs;
 use super::parity_gates::ParityOutcome;
-use deap_core::sysml_ast::{
+use deap_core::sysml_cst::{
     find_matching_brace, mask_string_literals, parse_action_defs, parse_attribute_defs,
     parse_calc_defs, parse_connection_defs, parse_constraint_defs, parse_part_defs,
     parse_port_defs, parse_requirement_defs, parse_state_defs, parse_test_case_defs,
@@ -290,7 +290,7 @@ fn collect_dual_schema_files(repo_root: &Path) -> Result<Vec<PathBuf>, Vec<Strin
 
     if schema_dir.is_dir() {
         schema_sysml_files =
-            deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[
+            deap_core::sysml_cst::UnifiedSchemaModelExtractor::discover_schema_files(&[
                 &schema_dir,
             ])
             .into_iter()
@@ -303,7 +303,7 @@ fn collect_dual_schema_files(repo_root: &Path) -> Result<Vec<PathBuf>, Vec<Strin
 
     if designs_dir.is_dir() {
         let mut design_sysml_files: Vec<PathBuf> =
-            deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[
+            deap_core::sysml_cst::UnifiedSchemaModelExtractor::discover_schema_files(&[
                 &designs_dir,
             ])
             .into_iter()

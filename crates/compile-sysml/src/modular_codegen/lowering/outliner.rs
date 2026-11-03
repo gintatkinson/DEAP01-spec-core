@@ -17,7 +17,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use deap_core::sysml_ast::{ActionDef, StateDef, TransitionDef};
+use deap_core::sysml_cst::{ActionDef, StateDef, TransitionDef};
 
 use crate::modular_codegen::domain::{
     ModularityBounds, OutlinedActionPlan, OutlinedActionStage, OutlinedStateHandler,

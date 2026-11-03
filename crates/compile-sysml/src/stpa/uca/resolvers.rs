@@ -34,7 +34,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-0603], [REQ-STPA-UCA-MODULE] | SysML v2: PackageDef(stpa_uca_resolvers)
 
-use deap_core::sysml_ast::{ConstraintDef, PartDef};
+use deap_core::sysml_cst::{ConstraintDef, PartDef};
 
 use super::helpers::{
     find_attr_exact_ci, find_attr_prefix_ci, map_hazard_severity_score, sanitize_uca_cell,

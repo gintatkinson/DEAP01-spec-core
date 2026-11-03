@@ -11,13 +11,17 @@ workspace = true
 
 [dependencies]
 deap-core = { path = "../deap-core" }
+ariadne = { workspace = true }
 camino = { workspace = true }
+logos = { workspace = true }
 prettyplease = { workspace = true }
 proc-macro2 = { workspace = true }
 quote = { workspace = true }
 ra_ap_line_index = { workspace = true }
 ra_ap_syntax = { workspace = true }
 ra_ap_text_edit = { workspace = true }
+rowan = { workspace = true }
+salsa = { workspace = true }
 syn = { workspace = true }
 clap = { version = "4.4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }

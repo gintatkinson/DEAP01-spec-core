@@ -33,7 +33,7 @@
 //! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-UC-DOC-HELPERS-UNIT]
 
 use super::*;
-use deap_core::sysml_ast::{AttributeDef, ConstraintDef, PartDef, PortDef, RequirementDef};
+use deap_core::sysml_cst::{AttributeDef, ConstraintDef, PartDef, PortDef, RequirementDef};
 
 /// Verifies inline Use Case clause splitting, normalization, and Mermaid label sanitization for Issue `#694`.
 /// Realises: [REQ-0604], [REQ-SYNC-FORWARD-UC-DOC-HELPERS-UNIT]
@@ -121,7 +121,7 @@ fn assert_issue_694_merge_eviction_and_ast_override(
 #[test]
 fn test_issue_694_use_case_doc_helpers_mermaid_sanitization_and_merge_eviction(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use deap_core::sysml_ast::{InteractionDef, PackageDef, UseCaseDef};
+    use deap_core::sysml_cst::{InteractionDef, PackageDef, UseCaseDef};
 
     assert_issue_694_clause_and_mermaid_helpers();
 

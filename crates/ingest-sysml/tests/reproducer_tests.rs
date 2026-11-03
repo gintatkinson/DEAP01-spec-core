@@ -2,7 +2,9 @@
 //!
 //! Realises: [REQ-SYSML-INGEST-MD/reproducer_tests]
 
-use ingest_sysml::translators::markdown::MarkdownTranslator;
+use ingest_sysml::cst::idl::{parse_idl_cst, IDLTranslator};
+use ingest_sysml::cst::markdown::MarkdownTranslator;
+use ingest_sysml::cst::yang::{parse_yang_cst, YangTranslator};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Verifies `MarkdownTranslator::translate_files` preserves distinct top-level packages for distinct blueprints (`BP-01`, `BP-02`) sharing `Target Crates`. Realises: [REQ-SYSML-INGEST-MD/test_issue_548_blueprint_target_crates_do_not_collapse_packages]
@@ -221,5 +223,26 @@ fn test_issue_692_sequence_diagram_excludes_reply_arrows_and_preserves_compound_
             }
         }
     }
+    Ok(())
+}
+
+/// Verifies lossless CST parsing and HIR lowering for OMG IDL and IETF YANG translators (`crates/ingest-sysml/src/cst/{idl_cst,yang_cst,yang_lower}.rs`). Realises: [REQ-0201]
+#[test]
+fn test_idl_and_yang_cst_translators_lossless_roundtrip_and_hir_lowering() -> Result<(), String> {
+    let idl_src = "module TelemetryMod {\n  typedef unsigned long SeqId;\n  struct NavPacket { double lat_deg; double lon_deg; };\n  interface FlightLink { void send_nav(in NavPacket pkt, out SeqId ack); };\n};\n";
+    let idl_cst = parse_idl_cst(idl_src);
+    assert!(idl_cst.lossless_roundtrip_eq);
+    let idl_pkg = IDLTranslator::new().translate(idl_src, "DefaultIdl")?;
+    assert_eq!(idl_pkg.name, "TelemetryMod");
+    assert!(idl_pkg.part_defs.iter().any(|p| p.name == "NavPacket" && p.attributes.len() == 2));
+    assert!(idl_pkg.part_defs.iter().any(|p| p.name == "FlightLink" && p.actions.len() == 1));
+    assert!(idl_pkg.attribute_defs.iter().any(|a| a.name == "SeqId"));
+
+    let yang_src = "module ietf-nav-link {\n  namespace \"urn:ietf:params:xml:ns:yang:ietf-nav-link\";\n  prefix nav;\n  container nav-state {\n    leaf altitude-m {\n      type int32;\n      units \"meters\";\n    }\n  }\n}\n";
+    let yang_cst = parse_yang_cst(yang_src);
+    assert!(yang_cst.lossless_roundtrip_eq);
+    let yang_pkg = YangTranslator::new().translate(yang_src, "DefaultYang")?;
+    assert_eq!(yang_pkg.name, "IetfNavLink");
+    assert!(yang_pkg.part_defs.iter().any(|p| p.name == "NavState"));
     Ok(())
 }

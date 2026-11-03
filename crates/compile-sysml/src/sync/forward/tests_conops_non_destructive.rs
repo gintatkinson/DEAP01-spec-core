@@ -32,7 +32,7 @@
 //! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-MERGE-EXISTING-SPEC]
 
 use super::*;
-use deap_core::sysml_ast::{ActionDef, InteractionDef, PartDef, UseCaseDef};
+use deap_core::sysml_cst::{ActionDef, InteractionDef, PartDef, UseCaseDef};
 
 /// Writes the pre-existing `EPIC-02-ConOps.md` fixture to `docs_dir`.
 /// Realises: [REQ-0604]

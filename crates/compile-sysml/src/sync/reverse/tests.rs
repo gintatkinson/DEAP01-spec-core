@@ -30,7 +30,7 @@
 
 use std::path::Path;
 
-use deap_core::sysml_ast::PartDef;
+use deap_core::sysml_cst::PartDef;
 
 use super::*;
 

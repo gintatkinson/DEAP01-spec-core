@@ -1,43 +1,34 @@
+//! # OMG SysML v2.0 & KerML 1.0 Concrete Syntax Tree (`logos` + `rowan` + `salsa`)
 //! [DOC-TIER: A]
 //!
-//! ### 1. Architectural Purpose
-//! Exposes the lossless SysML v2 and KerML Concrete Syntax Tree (CST) subsystem,
-//! unifying the `logos` DFA lexer (`lexer`), `rowan` syntax kinds (`syntax_kind`),
-//! lossless CST / construct parser (`parser`), and incremental Salsa-backed query
-//! database (`salsa_db`).
+//! ## 1. Module Description
+//! Provides a 100% lossless Concrete Syntax Tree (CST) and incremental Salsa database
+//! for OMG SysML v2.0 and KerML 1.0 textual notation (`BP-03`, `BP-10`).
 //!
-//! ### 2. Mathematical / Formal / Standard Formulation
-//! For any UTF-8 SysML v2 specification string $S \in \Sigma^*$:
-//! $$
-//! \begin{aligned}
-//! \text{unparse}(\text{parse\_sysml\_cst}(S).\text{green}) &= S
-//! \end{aligned}
-//! $$
-//! And for any two inputs $S_1, S_2$ equivalent modulo whitespace trivia:
-//! $$
-//! \begin{aligned}
-//! D_{\text{canon}}(S_1) &= D_{\text{canon}}(S_2)
-//! \end{aligned}
-//! $$
+//! ## 2. Contract and Invariants
+//! - **Lossless Trivia Preservation**: Whitespace, line comments, and block comments
+//!   are retained in the Rowan green/red tree so `syntax.text().to_string() == source` holds.
+//! - **6-Clause Grammar Coverage**: Supports Clauses 1--3 (`parser_clauses_1_3`) and
+//!   Clauses 4--6 (`parser_clauses_4_6`), HIR lowering (`hir_lower`), lossless printing and
+//!   disjoint span splicing (`printer`), bijective digests and `ariadne` diagnostics (`digest`),
+//!   and incremental `salsa` memoization (`salsa_db`).
 //!
-//! ### 3. Step-by-Step Execution Flow
-//! 1. Lex raw UTF-8 source text into byte-accurate `LexedSysmlToken` slices (`lexer`).
-//! 2. Map token kinds to `SysmlSyntaxKind` (`syntax_kind`).
-//! 3. Construct the lossless Rowan `GreenNode` and extract `SysmlConstructSummary` records (`parser`).
-//! 4. Memoize CST, HIR constructs, and canonical SHA-256 digests in `SysmlCompilerDb` (`salsa_db`).
+//! ## 3. Normative References
+//! - OMG Systems Modeling Language (SysML) v2.0 Specification
+//! - OMG Kernel Modeling Language (KerML) v1.0 Specification
 //!
-//! ### 4. Key Data Structures & Invariants
-//! - `ParsedSysmlCst`: Root Rowan green node, construct list, diagnostics, and roundtrip proof.
-//! - `SysmlCompilerDb`: Deterministic incremental query cache keyed by `SourceProgram`.
+//! ## 4. Safety and Security Considerations
+//! - Total, panic-free lexical scanning and parsing bounded by `MAX_CST_PARSE_DEPTH` (`64`).
 //!
-//! ### 5. Error Handling & Edge Cases
-//! - Lexical anomalies and unbalanced braces emit `SysmlCstDiagnostic` records without panicking.
+//! ## 5. Verification and Testing
+//! - Round-trip byte-for-byte identity tests, 6-clause construct recognition tests,
+//!   disjoint span splicer tests, and Salsa early-cutoff invariance tests.
 //!
-//! ### 6. Performance & Complexity
-//! - Time and space complexity: $\mathcal{O}(|S|)$ linear in byte length of the source buffer.
+//! ## 6. Performance Profile
+//! - $O(N)$ linear-time DFA lexing (`logos`) and single-pass Rowan `GreenNodeBuilder` assembly.
 //!
-//! ### 7. Safety & Concurrency
-//! Pure safe Rust (`#![forbid(unsafe_code)]` compatible) across all submodules.
+//! ## 7. Traceability
+//! - Realises: [REQ-0201], [REQ-0608] | [FLS: fls_66m4rnbssgig]
 
 #![deny(
     clippy::too_many_lines,
@@ -45,111 +36,170 @@
     clippy::undocumented_unsafe_blocks
 )]
 
+mod actions;
+mod connections_and_flows;
+pub mod digest;
+mod expressions;
+pub mod hir_lower;
+mod identifiers;
+mod interactions;
+mod interfaces_and_items;
 pub mod lexer;
+mod model_parser;
+mod package_model;
 pub mod parser;
+pub mod parser_clauses_1_3;
+pub mod parser_clauses_4_6;
+mod parts_and_ports;
+mod persistence;
+pub mod printer;
+mod requirements;
+mod safety_and_fmeca;
 pub mod salsa_db;
+mod schema_extractor;
+mod slice;
+mod states;
 pub mod syntax_kind;
 
+pub use actions::{parse_action_defs, ActionDef};
+pub use connections_and_flows::{parse_connection_defs, parse_port_defs, ConnectionDef};
+pub use digest::{
+    compute_bijective_digest, normalize_line_endings, render_ariadne_diagnostic,
+    sha256_hex_digest, AriadneSpanReport, BijectiveDigestReceipt,
+};
+pub use expressions::{parse_calc_defs, parse_constraint_defs, CalcDef, ConstraintDef};
+pub use hir_lower::{
+    extract_cst_import_path, extract_cst_type_ref, lower_cst_to_hir, DefId, HirMemberEntry,
+    HirPackageSummary, HirSourceMap,
+};
+pub use identifiers::{
+    find_matching_brace, is_valid_subsystem_identifier, mask_string_literals, AttributeDef, FlowDef,
+};
+pub use interactions::{parse_test_case_defs, InteractionDef, TestCaseDef, UseCaseDef};
+pub use interfaces_and_items::{parse_attribute_defs, parse_part_defs, InterfaceDef};
 pub use lexer::{tokenize_sysml, LexedSysmlToken, SysmlToken};
+pub use model_parser::{lower_to_hir_db, parse_sysml, parse_sysml_model, strip_sysml_comments};
+pub use package_model::{AstSlice, ImportDef, PackageDef, SysmlModel};
 pub use parser::{
-    classify_keyword_kind, parse_sysml_cst, ParsedSysmlCst, SysmlConstructSummary,
-    SysmlCstDiagnostic,
+    classify_keyword_kind, parse_sysml_cst, parse_sysml_green, ParsedSysmlCst, SysmlClause8Kind,
+    SysmlConstructSummary, SysmlCstDiagnostic,
+};
+pub use parser_clauses_1_3::{SysmlCstBuilder, MAX_CST_PARSE_DEPTH};
+pub use parts_and_ports::{
+    CapabilityDef, FieldDescriptor, ItemDef, OperationDef, PartDef, PortDef,
+    SupportedExtensionsCatalog, SupportedSchemaExtension, TypeDescriptor,
+};
+pub use persistence::{AstPersistenceEngine, CotAuditLog, CotAuditRecord, IncrementalAstCache};
+pub use printer::{
+    apply_formatting_preserving_splices, format_canonical_hir_summary, print_lossless_cst,
+    validate_disjoint_splice_ranges, CstSplicePatch,
+};
+pub(in crate::sysml_cst) use requirements::parse_safety_and_layer_annotations;
+pub use requirements::{parse_requirement_defs, parse_satisfied_requirements, RequirementDef};
+pub(in crate::sysml_cst) use safety_and_fmeca::{
+    component_matches_negated_stems, extract_negated_key_stem,
+};
+pub use safety_and_fmeca::{
+    component_matches, extract_negated_components, is_component_negated, parse_hazard_defs,
+    HazardDef, RiskDef,
 };
 pub use salsa_db::{
-    compute_canonical_digest, lower_sysml_hir, parse_sysml_green, SourceProgram, SysmlCompilerDb,
+    compute_canonical_digest, evaluate_hir_early_cutoff, is_standard_library_package,
+    lower_sysml_hir, resolve_standard_library_symbol, SalsaSysmlSource, SourceProgram,
+    SysmlCompilerDb, SysmlHirPackage, SysmlSalsaStorage, tracked_lower_sysml_hir,
+    STANDARD_LIBRARY_PACKAGES,
 };
+pub use schema_extractor::UnifiedSchemaModelExtractor;
+pub use states::{parse_state_defs, StateDef, TransitionDef};
 pub use syntax_kind::{
-    token_to_syntax_kind, SysmlLanguage, SysmlSyntaxKind, SysmlSyntaxNode, SysmlSyntaxToken,
+    token_to_syntax_kind, SysmlLanguage, SysmlSyntaxElement, SysmlSyntaxKind, SysmlSyntaxNode,
+    SysmlSyntaxToken,
 };
+
+#[cfg(test)]
+mod sysml_cst_model_tests;
+#[cfg(test)]
+mod sysml_cst_schema_tests;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const NORMATIVE_SYSML_SNIPPET: &str = r"library package AerospaceCore {
-    metadata def HazardMeta;
-    metadata def RiskMeta;
-    metadata def CapabilityMeta;
-    part def ActuatorSubsys {
-        port cmdPort : ~CommandPort [1..*] {ordered};
+    const NORMATIVE_SYSML_SNIPPET: &str = r#"// Header line comment
+library package VehicleSafety {
+    doc /* ISO 26262 ASIL-D Vehicle Safety Package */
+    public import ScalarValues::*;
+    alias Mass for Real;
+
+    metadata def SafetyCritical;
+    attribute def Voltage :> Real;
+    enum def GearState { enum Park; enum Drive; }
+    item def BrakeFluid;
+
+    abstract part def BrakingSubsystem :> BaseSubsystem {
+        attribute nominalVoltage : Voltage [1..1] = 12.0;
+        port brakeIn : ~BrakeCommandPort;
+        state def BrakeMode {
+            entry action initBrakes;
+            transition first Off accept EngageCmd if nominalVoltage > 9.0 do applyPressure then Active;
+        }
     }
-    part primaryActuator :> ActuatorSubsys {
-        port activePort :>> cmdPort ::> AerospaceCore::ActuatorSubsys::cmdPort;
+
+    part primaryBrakes : BrakingSubsystem :>> subsystemRef [1..2] {
+        satisfy EmergencyStopReq by primaryBrakes;
     }
-    port def CommandPort;
-    action def ComputeControlLaw;
-    action runControl : ComputeControlLaw;
-    state def FlightModeState;
-    state activeMode : FlightModeState;
-    constraint def TorqueLimitConstraint;
-    constraint torqueCheck : TorqueLimitConstraint;
-    requirement def <'REQ-0301'> DeterminismReq {
-        doc /* Deterministic CST roundtrip */
-    }
-    requirement <'REQ-0302'> runtimeReq : DeterminismReq;
-    use case def StabilizeVehicle;
-    use case stabilizeNominal;
-    verification def VerifyDeterminism;
-    verification verifyRun : VerifyDeterminism;
-    #hazard part actuatorRunaway;
-    #risk part elevatedRisk;
-    #capability part faultTolerance;
-    hazard def LegacyThermalHazard;
-    variation part def RedundancyMode {
-        variant part dualChannel;
-    }
+
+    port def BrakeCommandPort;
+    connection def BrakeLink;
+    interface def BrakeBusInterface;
+    flow def PressureFlow;
+    allocation def HardwareAllocation;
+    occurrence def BrakingEvent;
+    action def ApplyBrakes;
+    calc def ComputeStoppingDistance;
+    constraint def MaxStoppingDistanceConstraint;
+    requirement def EmergencyStopReq;
+    concern def PassengerSafetyConcern;
+    use case def EmergencyBrakingUseCase;
+    analysis def StoppingMarginAnalysis;
+    verification def VerifyStoppingDistance;
+    view def SafetyArchitectureView;
+    viewpoint def SafetyAssuranceViewpoint;
+    rendering def BlockDiagramRendering;
+    variation part def BrakeActuatorVariation;
 }
-";
+"#;
 
     #[test]
-    fn test_lossless_roundtrip_and_normative_constructs() {
+    fn test_lossless_roundtrip_and_hierarchical_cst() {
         let parsed = parse_sysml_cst(NORMATIVE_SYSML_SNIPPET);
-        assert!(parsed.lossless_roundtrip_eq);
-        assert!(parsed.diagnostics.is_empty());
         assert_eq!(parsed.syntax().text().to_string(), NORMATIVE_SYSML_SNIPPET);
-
-        let kinds: Vec<SysmlSyntaxKind> = parsed.constructs.iter().map(|c| c.kind).collect();
-        assert!(kinds.contains(&SysmlSyntaxKind::PackageDecl));
-        assert!(kinds.contains(&SysmlSyntaxKind::MetadataDef));
-        assert!(kinds.contains(&SysmlSyntaxKind::PartDef));
-        assert!(kinds.contains(&SysmlSyntaxKind::PartUsage));
-        assert!(kinds.contains(&SysmlSyntaxKind::PortDef));
-        assert!(kinds.contains(&SysmlSyntaxKind::PortUsage));
-        assert!(kinds.contains(&SysmlSyntaxKind::ActionDef));
-        assert!(kinds.contains(&SysmlSyntaxKind::ActionUsage));
-        assert!(kinds.contains(&SysmlSyntaxKind::StateDef));
-        assert!(kinds.contains(&SysmlSyntaxKind::StateUsage));
-        assert!(kinds.contains(&SysmlSyntaxKind::ConstraintDef));
-        assert!(kinds.contains(&SysmlSyntaxKind::ConstraintUsage));
-        assert!(kinds.contains(&SysmlSyntaxKind::RequirementDef));
-        assert!(kinds.contains(&SysmlSyntaxKind::RequirementUsage));
-        assert!(kinds.contains(&SysmlSyntaxKind::UseCaseDef));
-        assert!(kinds.contains(&SysmlSyntaxKind::UseCaseUsage));
-        assert!(kinds.contains(&SysmlSyntaxKind::VerificationDef));
-        assert!(kinds.contains(&SysmlSyntaxKind::VerificationUsage));
-        assert!(kinds.contains(&SysmlSyntaxKind::VariationDecl));
-        assert!(kinds.contains(&SysmlSyntaxKind::VariantUsage));
+        assert!(parsed.diagnostics.is_empty());
+        assert!(parsed.syntax().children().count() > 0);
+        assert!(!parsed.nodes_of_kind(SysmlSyntaxKind::LibraryPackageDecl).is_empty());
+        assert!(!parsed.nodes_of_kind(SysmlSyntaxKind::PartDef).is_empty());
+        assert!(!parsed.nodes_of_kind(SysmlSyntaxKind::StateDef).is_empty());
+        assert!(!parsed.nodes_of_kind(SysmlSyntaxKind::TransitionDecl).is_empty());
     }
 
     #[test]
-    fn test_salsa_db_incremental_digest_stability() {
+    fn test_salsa_db_early_cutoff_and_stdlib_resolution() {
         let mut db = SysmlCompilerDb::new();
-        let prog_v1 = SourceProgram::new("schema/model.sysml", NORMATIVE_SYSML_SNIPPET);
-        let digest_v1 = compute_canonical_digest(&mut db, &prog_v1);
-        let digest_v1_repeat = compute_canonical_digest(&mut db, &prog_v1);
-        assert_eq!(digest_v1, digest_v1_repeat);
-        assert_eq!(db.parse_count(), 1);
-        assert_eq!(digest_v1.len(), 64);
+        let prog1 = SourceProgram::new("vehicle.sysml", NORMATIVE_SYSML_SNIPPET);
+        let hir1 = db.lower_to_hir(&prog1);
+        assert_eq!(hir1.package_name.as_deref(), Some("VehicleSafety"));
+        let rev1 = db.revision();
+        let hir2 = db.lower_to_hir(&prog1);
+        assert_eq!(rev1, db.revision());
+        assert_eq!(hir1.hir_structural_hash, hir2.hir_structural_hash);
 
-        let whitespace_edited = NORMATIVE_SYSML_SNIPPET.replace("    ", "        \n  ");
-        let prog_v2 = prog_v1.with_text(whitespace_edited);
-        let cst_v2 = parse_sysml_green(&mut db, &prog_v2);
-        assert!(cst_v2.lossless_roundtrip_eq);
-        let digest_v2 = compute_canonical_digest(&mut db, &prog_v2);
-        assert_eq!(digest_v1, digest_v2);
-        assert_eq!(db.parse_count(), 2);
-
-        let hir = lower_sysml_hir(&mut db, &prog_v2);
-        assert!(!hir.is_empty());
+        let prog_comment = SourceProgram::new(
+            "vehicle.sysml",
+            format!("// Extra trivia comment\n{NORMATIVE_SYSML_SNIPPET}\n"),
+        );
+        let hir3 = db.lower_to_hir(&prog_comment);
+        assert_eq!(hir1.hir_structural_hash, hir3.hir_structural_hash);
+        assert!(is_standard_library_package("ISQ::*"));
+        assert_eq!(resolve_standard_library_symbol("Real"), Some("ScalarValues::Real"));
     }
 }

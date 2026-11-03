@@ -135,7 +135,7 @@ pub fn discover_sysml_model_text(repo_root: &Path) -> Option<String> {
     let designs_dir = repo_root.join("docs").join("designs");
     if designs_dir.is_dir() {
         let mut paths =
-            deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[
+            deap_core::sysml_cst::UnifiedSchemaModelExtractor::discover_schema_files(&[
                 &designs_dir,
             ]);
         paths.sort();
@@ -160,7 +160,7 @@ pub fn discover_sysml_model_text(repo_root: &Path) -> Option<String> {
 /// Realises: [REQ-SYSML-MODEL-DISCOVERY]
 fn discover_schema_dir_model_text(schema_dir: &Path) -> Option<String> {
     let mut paths =
-        deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[schema_dir]);
+        deap_core::sysml_cst::UnifiedSchemaModelExtractor::discover_schema_files(&[schema_dir]);
     paths.sort();
     let mut sysml_contents = Vec::new();
     let mut non_sysml_paths = Vec::new();
@@ -181,7 +181,7 @@ fn discover_schema_dir_model_text(schema_dir: &Path) -> Option<String> {
         return Some(sysml_contents.join("\n\n"));
     }
     if !non_sysml_paths.is_empty() {
-        let parts = deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts(
+        let parts = deap_core::sysml_cst::UnifiedSchemaModelExtractor::extract_subsystem_parts(
             &non_sysml_paths,
         );
         if !parts.is_empty() {
@@ -201,7 +201,7 @@ fn discover_schema_dir_model_text(schema_dir: &Path) -> Option<String> {
 pub fn discover_architectural_sysml_model_text(repo_root: &Path) -> Option<String> {
     let raw_text = resolve_raw_architectural_sysml_text(repo_root)?;
     let stripped = strip_realization_packages_from_sysml(&raw_text);
-    if !deap_core::sysml_ast::parse_part_defs(&stripped).is_empty() {
+    if !deap_core::sysml_cst::parse_part_defs(&stripped).is_empty() {
         Some(stripped)
     } else {
         Some(raw_text)
@@ -223,7 +223,7 @@ fn resolve_raw_architectural_sysml_text(repo_root: &Path) -> Option<String> {
     let mut resolved: Option<String> = None;
     if !scan_roots.is_empty() {
         let mut paths =
-            deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&scan_roots);
+            deap_core::sysml_cst::UnifiedSchemaModelExtractor::discover_schema_files(&scan_roots);
         paths.sort();
         let mut domain_sysml = Vec::new();
         let mut all_sysml = Vec::new();
@@ -255,7 +255,7 @@ fn resolve_raw_architectural_sysml_text(repo_root: &Path) -> Option<String> {
         } else if !all_sysml.is_empty() {
             resolved = Some(all_sysml.join("\n\n"));
         } else if !non_sysml.is_empty() {
-            let parts = deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts(
+            let parts = deap_core::sysml_cst::UnifiedSchemaModelExtractor::extract_subsystem_parts(
                 &non_sysml,
             );
             if !parts.is_empty() {

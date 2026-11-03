@@ -20,7 +20,7 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
 
-use deap_core::sysml_ast::{PackageDef, PartDef};
+use deap_core::sysml_cst::{PackageDef, PartDef};
 
 use super::contracts::{FlutterCodegenError, TopologyNode};
 use super::naming::{format_display_name, to_pascal_case, to_snake_case_dart};

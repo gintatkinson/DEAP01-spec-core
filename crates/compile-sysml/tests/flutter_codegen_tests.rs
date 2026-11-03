@@ -29,7 +29,7 @@ use compile_sysml::flutter_codegen::{
     emit_dart_solver_bridge, generate_domain_seed_dart, generate_schema_models_dart,
     generate_solver_bridge_dart, generate_ui_contract_test_dart, TopologyNode,
 };
-use deap_core::sysml_ast::{AttributeDef, ItemDef, PartDef, PortDef, SysmlModel};
+use deap_core::sysml_cst::{AttributeDef, ItemDef, PartDef, PortDef, SysmlModel};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;

@@ -33,10 +33,9 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use compile_sysml::parse_sysml;
-use compile_sysml::parser::grammar::parse_sysml_tree;
-use compile_sysml::semantic::serializer::SysmlSerializable;
-use compile_sysml::semantic::symbols::SymbolTable;
-use compile_sysml::semantic::validator::SemanticValidator;
+use compile_sysml::salsa_db::{
+    is_synthetic_forest_root, parse_sysml_tree, SemanticValidator, SymbolTable, SysmlSerializable,
+};
 use compile_sysml::sync::forward::{forward_sync_sysml_to_specs, ForwardSyncOptions};
 
 /// Allocates a collision-free temporary directory for multi-file compilation tests.
@@ -52,7 +51,7 @@ fn make_temp_dir(prefix: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
 /// Realises: [REQ-SYSML-MULTI-FILE-NAMESPACE]
 fn verify_multi_package_symbols_and_sync(
     tmp_dir: &Path,
-    multi_root: &deap_core::sysml_ast::PackageDef,
+    multi_root: &deap_core::sysml_cst::PackageDef,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let sym_table = SymbolTable::build_from_package(multi_root);
     assert!(sym_table.lookup("Sub1::NavEngine").is_some());
@@ -166,7 +165,7 @@ fn test_multi_file_with_top_level_doc_and_imports_preserves_package_scopes_and_d
     let tree_unsorted = parse_sysml_tree(&[solver_file.clone(), domain_file.clone(), cockpit_file.clone()])?;
     let tree_sorted = parse_sysml_tree(&[domain_file, cockpit_file, solver_file])?;
     assert_eq!(tree_unsorted, tree_sorted);
-    assert!(compile_sysml::parser::grammar::is_synthetic_forest_root(&tree_sorted));
+    assert!(is_synthetic_forest_root(&tree_sorted));
 
     let compiled_sysml = tree_sorted.to_sysml(0);
     fs::write(pipeline_dir.join("schema.sysml"), &compiled_sysml)?;

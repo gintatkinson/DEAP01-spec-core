@@ -5,7 +5,7 @@
 //! Bounds & Faults: Pure non-panicking AST and lexical inspection with zero regex or hardcoded word lists.
 
 use super::parity_check_icd_ast::is_valid_si_unit;
-use deap_core::sysml_ast::{parse_constraint_defs, parse_part_defs, parse_port_defs};
+use deap_core::sysml_cst::{parse_constraint_defs, parse_part_defs, parse_port_defs};
 use std::collections::BTreeSet;
 
 /// Determines whether a lexical token has the structural morphology of a technical protocol identifier.
@@ -76,7 +76,7 @@ pub(crate) fn normalize_ast_protocol_symbol(token: &str) -> String {
 /// Recursively harvests AST symbols and quantitative claims from a slice of `PartDef` nodes.
 /// Realises: [REQ-AST-GROUND-TRUTH-EXTRACTION]
 pub(crate) fn harvest_ast_parts_ground_truth(
-    parts: &[deap_core::sysml_ast::PartDef],
+    parts: &[deap_core::sysml_cst::PartDef],
     symbols: &mut BTreeSet<String>,
     claims: &mut BTreeSet<String>,
 ) {
@@ -107,7 +107,7 @@ pub(crate) fn harvest_ast_parts_ground_truth(
 /// Harvests AST symbols and quantitative claims from a single `PortDef` node.
 /// Realises: [REQ-AST-GROUND-TRUTH-EXTRACTION]
 pub(crate) fn harvest_ast_port_ground_truth(
-    port: &deap_core::sysml_ast::PortDef,
+    port: &deap_core::sysml_cst::PortDef,
     symbols: &mut BTreeSet<String>,
     claims: &mut BTreeSet<String>,
 ) {
@@ -145,7 +145,7 @@ pub(crate) fn harvest_ast_port_ground_truth(
 /// Harvests AST symbols and quantitative claims from a single `AttributeDef` node.
 /// Realises: [REQ-AST-GROUND-TRUTH-EXTRACTION]
 pub(crate) fn harvest_ast_attribute_ground_truth(
-    attr: &deap_core::sysml_ast::AttributeDef,
+    attr: &deap_core::sysml_cst::AttributeDef,
     symbols: &mut BTreeSet<String>,
     claims: &mut BTreeSet<String>,
 ) {
@@ -182,7 +182,7 @@ pub(crate) fn build_ast_model_ground_truth(model_str: &str) -> (BTreeSet<String>
     for port in parse_port_defs(model_str) {
         harvest_ast_port_ground_truth(&port, &mut symbols, &mut claims);
     }
-    for attr in deap_core::sysml_ast::parse_attribute_defs(model_str) {
+    for attr in deap_core::sysml_cst::parse_attribute_defs(model_str) {
         harvest_ast_attribute_ground_truth(&attr, &mut symbols, &mut claims);
     }
     for c in parse_constraint_defs(model_str) {

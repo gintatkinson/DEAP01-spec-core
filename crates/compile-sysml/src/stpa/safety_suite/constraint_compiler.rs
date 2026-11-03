@@ -55,12 +55,12 @@ pub fn compile_stpa_to_constraints_filtered(
     };
 
     let mut negated_components: BTreeSet<String> =
-        deap_core::sysml_ast::extract_negated_components(content)
+        deap_core::sysml_cst::extract_negated_components(content)
             .into_iter()
             .collect();
     if let Some(m) = model {
-        let sysml = crate::semantic::serializer::to_sysml(m);
-        negated_components.extend(deap_core::sysml_ast::extract_negated_components(&sysml));
+        let sysml = crate::salsa_db::to_sysml(m);
+        negated_components.extend(deap_core::sysml_cst::extract_negated_components(&sysml));
         negated_components.extend(m.extract_negated_components());
     }
 
@@ -160,7 +160,7 @@ fn compile_fmeca_row_to_constraint(
 
     if negated_components.iter().any(|neg| {
         comp_alnum.contains(neg.as_str())
-            || deap_core::sysml_ast::component_matches(comp_clean, neg)
+            || deap_core::sysml_cst::component_matches(comp_clean, neg)
     }) {
         return None;
     }
@@ -168,7 +168,7 @@ fn compile_fmeca_row_to_constraint(
     if let Some(parts) = allowed_parts {
         if !parts
             .iter()
-            .any(|p| deap_core::sysml_ast::component_matches(comp_clean, p))
+            .any(|p| deap_core::sysml_cst::component_matches(comp_clean, p))
         {
             return None;
         }

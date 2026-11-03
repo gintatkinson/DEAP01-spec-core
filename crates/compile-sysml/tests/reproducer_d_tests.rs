@@ -34,7 +34,7 @@
 
 use std::collections::BTreeMap;
 
-use deap_core::sysml_ast::{
+use deap_core::sysml_cst::{
     ActionDef, AttributeDef, CalcDef, ConstraintDef, PackageDef, PartDef,
 };
 

@@ -49,11 +49,13 @@ mod tests_manifest_and_utf8;
 use std::fs;
 use std::path::PathBuf;
 
-use deap_core::sysml_ast::PackageDef;
+use deap_core::sysml_cst::PackageDef;
 pub use frontmatter::*;
 
-use crate::semantic::digest::{generate_digest, write_atomic, write_digest_atomic, SchemaDigest};
-use crate::semantic::serializer::to_sysml;
+use crate::salsa_db::{
+    compute_file_manifest, discover_sysml_files, generate_digest, to_sysml, write_atomic,
+    write_digest_atomic, SchemaDigest,
+};
 
 /// Options for reverse synchronization.
 ///
@@ -81,14 +83,14 @@ fn collect_and_refresh_manifest_files(
         .as_deref()
         .unwrap_or_else(|| std::path::Path::new("schema"));
     if schema_dir.is_dir() {
-        manifest_files.extend(crate::parser::grammar::discover_sysml_files(schema_dir));
+        manifest_files.extend(discover_sysml_files(schema_dir));
     } else if schema_dir.is_file() {
         manifest_files.push(schema_dir.to_path_buf());
     }
 
     let designs_dir = opts.docs_dir.join("designs");
     if designs_dir.is_dir() {
-        for design_sysml in crate::parser::grammar::discover_sysml_files(&designs_dir) {
+        for design_sysml in discover_sysml_files(&designs_dir) {
             if !dry_run {
                 let design_src = fs::read_to_string(&design_sysml).map_err(|e| {
                     format!(
@@ -98,7 +100,7 @@ fn collect_and_refresh_manifest_files(
                     )
                 })?;
                 let design_pkg = crate::parse_sysml(&design_src).map_err(|e| e.to_string())?;
-                let single_manifest = crate::semantic::digest::compute_file_manifest(
+                let single_manifest = compute_file_manifest(
                     std::slice::from_ref(&design_sysml),
                 );
                 let bp_digest =
@@ -173,7 +175,7 @@ pub fn reverse_sync_specs_to_sysml_with_dry_run(
     let mut digest = generate_digest(&pkg, &sysml_code);
     let manifest_files = collect_and_refresh_manifest_files(opts, dry_run)?;
     if !manifest_files.is_empty() {
-        let manifest = crate::semantic::digest::compute_file_manifest(&manifest_files);
+        let manifest = compute_file_manifest(&manifest_files);
         digest = digest.with_file_manifest(manifest);
     }
 

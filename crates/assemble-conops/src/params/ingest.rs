@@ -8,10 +8,9 @@ use serde_json::Value;
 
 use super::schema_extractor::{
     extract_subsystem_parts_from_interface_schema, extract_subsystem_parts_from_json,
-    extract_subsystem_parts_from_markdown, extract_subsystem_parts_from_yaml,
+    extract_subsystem_parts_from_markdown, extract_subsystem_parts_from_sysml,
+    extract_subsystem_parts_from_yaml, find_all_attributes, find_first_package,
 };
-use super::sysml_extractor::extract_subsystem_parts_from_sysml;
-use super::sysml_lexer::{find_all_attributes, find_first_package};
 use super::SysMLParameterBindingEngine;
 
 impl SysMLParameterBindingEngine {
@@ -41,8 +40,7 @@ impl SysMLParameterBindingEngine {
     ///Errors: skips unreadable files | Complexity: O(F) over workspace schema files
     /// Realises: [REQ-ASSEMBLE-CONOPS-PARAMS-SYSMLPARAMETERBINDINGENGINE-AUTO-DETECT-WORKSPACE-PARAMETERS] | SysML v2: ActionDef(SysMLParameterBindingEngine::auto_detect_workspace_parameters)
     pub fn auto_detect_workspace_parameters(&mut self, search_dirs: &[PathBuf]) {
-        let supported_exts =
-            deap_core::sysml_ast::UnifiedSchemaModelExtractor::SUPPORTED_EXTENSIONS;
+        let supported_exts = deap_core::UnifiedSchemaModelExtractor::SUPPORTED_EXTENSIONS;
 
         for sdir in search_dirs {
             if sdir.join(".pipeline").join("upstream").is_dir() {
@@ -256,7 +254,7 @@ impl SysMLParameterBindingEngine {
         }
 
         let parts =
-            deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(
+            deap_core::UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(
                 ".sysml", text,
             );
         for p_name in parts {

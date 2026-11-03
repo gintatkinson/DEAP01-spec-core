@@ -33,7 +33,7 @@ pub fn format_default_literal(rust_ty: &str, raw: Option<&str>) -> String {
 
 /// Conforms to DO-178C Level A.
 /// Realises: [REQ-0607]
-pub fn render_part_model(o: &mut String, p: &deap_core::sysml_ast::PartDef, tier: u8) {
+pub fn render_part_model(o: &mut String, p: &deap_core::sysml_cst::PartDef, tier: u8) {
     let (name, mut sn, at) = (l::to_pascal_ident(&p.name), BTreeSet::new(), &p.attributes);
     let (mut decls, mut init) = (String::new(), String::new());
     for a in at.iter().filter(|a| sn.insert(l::to_snake_slug(&a.name))) {

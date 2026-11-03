@@ -8,19 +8,19 @@ package BP_03_SysML_v2_Lossless_Red_Green_CST_Salsa_Incremental_Query_DB_and_Bij
     attribute Tracked_Issues : String = "#493, #495, #496, #497, #504, #505, #509";
     attribute Generation_Mode : String = "subagent";
     attribute Specification_Source : String = "Cargo.toml:1-90 / crates/deap-core/src/lib.rs:1-40 / crates/compile-sysml/src/lib.rs:1-40 / #493";
-    doc /* `SysmlSyntaxKind` (all 6 OMG SysML v2.0 + KerML 1.0 clauses), `SysmlLanguage`, `CstParseOutput`, `SysmlHirPackage`, `SafetyMetadataKind`, `StdlibNamespace`, `SourceInput`, and `BijectiveDigestReceipt` in `deap_core::sysml_cst` and `compile_sysml::salsa_db` with `camino::Utf8PathBuf` paths and pinned `rowan`. */
-    attribute Layer_1_Domain_State_Data_Model : String = "Full 6-clause lossless Red/Green CST, typed HIR, `ISQ`/`SI`/`ScalarValues` stdlib env, and incremental query inputs";
-    doc /* `normalize_line_endings`, `parse_sysml_cst`, `lower_sysml_hir`, `resolve_stdlib_and_metadata`, `emit_canonical_sysml`, `render_ariadne_diagnostic`, and `compute_bijective_digest` enforcing fail-closed `E0100..E0400` diagnostics and cross-platform SHA-256 digest invariance. */
-    attribute Layer_2_Logic_State_Management : String = "Deterministic `logos` + `rowan` 6-clause parsing, `salsa` memoized lowering, `ariadne` diagnostics, and Stage-1 == Stage-2 bijective verification";
-    doc /* `compile-sysml`, `ingest-sysml`, and `verify-baseline check-blueprint` CLI actuators emitting deterministic `ariadne` diagnostics, canonical `.sysml` models, and `.digest.json` receipts (`ra_ap_syntax`, `deap_core::dart_cst`, `serde_json`, `logos`+`rowan` IDL/YANG). */
-    attribute Layer_3_Presentation_Actuator_Interface_Binding : String = "CLI compiler gate output, `ariadne` terminal diagnostics, persisted `.sysml` / `.digest.json` artifacts, and polyglot ingestion CLI actuators";
-    doc /* [unit: `bytes`] */
+    doc /* SysmlSyntaxKind (all 6 OMG SysML v2.0 + KerML 1.0 clauses), SysmlLanguage, CstParseOutput, SysmlHirPackage, SafetyMetadataKind, StdlibNamespace, SourceInput, and BijectiveDigestReceipt in deap_core::sysml_cst and compile_sysml::salsa_db with camino::Utf8PathBuf paths and pinned rowan. */
+    attribute Layer_1_Domain_State_Data_Model : String = "Full 6-clause lossless Red/Green CST, typed HIR, ISQ/SI/ScalarValues stdlib env, and incremental query inputs";
+    doc /* normalize_line_endings, parse_sysml_cst, lower_sysml_hir, resolve_stdlib_and_metadata, emit_canonical_sysml, render_ariadne_diagnostic, and compute_bijective_digest enforcing fail-closed E0100..E0400 diagnostics and cross-platform SHA-256 digest invariance. */
+    attribute Layer_2_Logic_State_Management : String = "Deterministic logos + rowan 6-clause parsing, salsa memoized lowering, ariadne diagnostics, and Stage-1 == Stage-2 bijective verification";
+    doc /* compile-sysml, ingest-sysml, and verify-baseline check-blueprint CLI actuators emitting deterministic ariadne diagnostics, canonical .sysml models, and .digest.json receipts (ra_ap_syntax, deap_core::dart_cst, serde_json, logos+rowan IDL/YANG). */
+    attribute Layer_3_Presentation_Actuator_Interface_Binding : String = "CLI compiler gate output, ariadne terminal diagnostics, persisted .sysml / .digest.json artifacts, and polyglot ingestion CLI actuators";
+    doc /* [unit: bytes] */
     attribute span_offset_drift_bytes : Real;
-    doc /* [unit: `branches`] */
+    doc /* [unit: branches] */
     attribute silent_skip_branch_count : Real;
-    doc /* [unit: `fields`] */
+    doc /* [unit: fields] */
     attribute dropped_ast_field_count : Real;
-    doc /* [unit: `nodes`] */
+    doc /* [unit: nodes] */
     attribute roundtrip_ast_mismatch_count : Real;
     doc /* normalize_line_endings(raw_source) */
     action def normalize_line_endings;
@@ -36,19 +36,19 @@ package BP_03_SysML_v2_Lossless_Red_Green_CST_Salsa_Incremental_Query_DB_and_Bij
     action def emit_canonical_sysml;
     doc /* sha256_hex_digest(canonical_sysml) */
     action def sha256_hex_digest;
-    doc /* [unit: `bytes`] */
+    doc /* [unit: bytes] */
     assert constraint C_RT_01 {
         span_offset_drift_bytes >= 0 and span_offset_drift_bytes <= 0;
     }
-    doc /* [unit: `branches`] */
+    doc /* [unit: branches] */
     assert constraint C_RT_02 {
         silent_skip_branch_count >= 0 and silent_skip_branch_count <= 0;
     }
-    doc /* [unit: `fields`] */
+    doc /* [unit: fields] */
     assert constraint C_RT_03 {
         dropped_ast_field_count >= 0 and dropped_ast_field_count <= 0;
     }
-    doc /* [unit: `nodes`] */
+    doc /* [unit: nodes] */
     assert constraint C_RT_04 {
         roundtrip_ast_mismatch_count >= 0 and roundtrip_ast_mismatch_count <= 0;
     }
@@ -153,46 +153,46 @@ package BP_03_SysML_v2_Lossless_Red_Green_CST_Salsa_Incremental_Query_DB_and_Bij
         message reply_DeterministicSha256HexDigest from Gate to DB;
         message reply_Ok from DB to CLI;
     }
-    doc /* Cross-platform CRLF-normalized Stage-1 == Stage-2 HIR equality, `ariadne` diagnostic renderer, and SHA-256 semantic digest gate */
+    doc /* Cross-platform CRLF-normalized Stage-1 == Stage-2 HIR equality, ariadne diagnostic renderer, and SHA-256 semantic digest gate */
     part def BijectiveSha256GateVerifier {
         attribute quantity : Integer = 1;
         attribute type : String = "Subcomponent";
     }
-    doc /* Uncapped 6-clause `logos::Logos` lexer and `rowan::GreenNodeBuilder` lossless Red/Green CST builder preserving trivia, metadata tags, doc comments, and exact spans */
+    doc /* Uncapped 6-clause logos::Logos lexer and rowan::GreenNodeBuilder lossless Red/Green CST builder preserving trivia, metadata tags, doc comments, and exact spans */
     part def LogosRowanSysmlCstFrontend {
         attribute quantity : Integer = 1;
         attribute type : String = "Subcomponent";
     }
-    doc /* Unified polyglot frontend binding `ra_ap_syntax` (Rust), `deap_core::dart_cst` (Dart), typed `serde_json` (OpenAPI/JSON-Schema), and `logos`+`rowan` (OMG IDL / IETF YANG) */
+    doc /* Unified polyglot frontend binding ra_ap_syntax (Rust), deap_core::dart_cst (Dart), typed serde_json (OpenAPI/JSON-Schema), and logos+rowan (OMG IDL / IETF YANG) */
     part def PolyglotTypedCstIngestor {
         attribute quantity : Integer = 1;
         attribute type : String = "Subcomponent";
     }
-    doc /* Demand-driven `salsa` query engine memoizing `parse_sysml_cst`, `lower_sysml_hir`, `resolve_stdlib_and_metadata`, `emit_canonical_sysml`, and `compute_bijective_digest` */
+    doc /* Demand-driven salsa query engine memoizing parse_sysml_cst, lower_sysml_hir, resolve_stdlib_and_metadata, emit_canonical_sysml, and compute_bijective_digest */
     part def SalsaIncrementalQueryDb {
         attribute quantity : Integer = 1;
         attribute type : String = "Subcomponent";
     }
-    doc /* Cumulative byte-offset drift between normalized source bytes, `rowan` GreenNode token spans, and `ariadne` labels [unit: bytes] */
+    doc /* Cumulative byte-offset drift between normalized source bytes, rowan GreenNode token spans, and ariadne labels [unit: bytes] */
     part def SysmlBijectiveRoundtripCompilerGate {
         attribute span_offset_drift_bytes : Integer = 0;
         doc /* Count of silent token-skip fallback branches during 6-clause CST parsing and typed HIR lowering [unit: branches] */
         attribute silent_skip_branch_count : Integer = 0;
-        doc /* Count of 6-clause HIR semantic fields, metadata tags, or docstrings omitted during `emit_canonical_sysml` printing [unit: fields] */
+        doc /* Count of 6-clause HIR semantic fields, metadata tags, or docstrings omitted during emit_canonical_sysml printing [unit: fields] */
         attribute dropped_ast_field_count : Integer = 0;
         doc /* Count of HIR or canonical CST nodes differing between Stage-1 and Stage-2 bijective compilation [unit: nodes] */
         attribute roundtrip_ast_mismatch_count : Integer = 0;
-        doc /* Ingests UTF-8 SysML v2.0 / KerML 1.0 or polyglot CST-lowered source via `camino::Utf8Path` with CRLF-to-LF normalization [protocol: SalsaSourceInput] */
+        doc /* Ingests UTF-8 SysML v2.0 / KerML 1.0 or polyglot CST-lowered source via camino::Utf8Path with CRLF-to-LF normalization [protocol: SalsaSourceInput] */
         port in RawSysmlSourceInputPort : String {
             flow in RawSysmlSourceInputPort_flow : String;
         }
-        doc /* Streams immutable 6-clause `rowan` Red/Green CST trees (`SyntaxNode~SysmlLanguage~`) across `salsa` query stages [protocol: RowanGreenNode] */
+        doc /* Streams immutable 6-clause rowan Red/Green CST trees (SyntaxNode~SysmlLanguage~) across salsa query stages [protocol: RowanGreenNode] */
         port inout LosslessRedGreenCstPort : String;
-        doc /* Emits canonical LF-normalized SysML v2.0 / KerML 1.0 text synthesized by `emit_canonical_sysml` [protocol: CanonicalSysmlV2] */
+        doc /* Emits canonical LF-normalized SysML v2.0 / KerML 1.0 text synthesized by emit_canonical_sysml [protocol: CanonicalSysmlV2] */
         port out SerializedSysmlOutputPort : String {
             flow out SerializedSysmlOutputPort_flow : String;
         }
-        doc /* Emits SHA-256 `BijectiveDigestReceipt` or fail-closed `ariadne` `E0100..E0400` structural diff diagnostics [protocol: StructuredDiagnostic] */
+        doc /* Emits SHA-256 BijectiveDigestReceipt or fail-closed ariadne E0100..E0400 structural diff diagnostics [protocol: StructuredDiagnostic] */
         port out BijectiveDiffDiagnosticPort : String {
             flow out BijectiveDiffDiagnosticPort_flow : String;
         }

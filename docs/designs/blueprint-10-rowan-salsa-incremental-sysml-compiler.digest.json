@@ -210,25 +210,25 @@
     {
       "name": "FormattingPreservingSyncSplicer",
       "node_type": "Part",
-      "doc": "Permitted Stage-1 versus Stage-2 SHA-256 digest mismatch count across bijective (`BP-03`) and self-hosted modular codegen (`E0705`). [unit: files]",
+      "doc": "Permitted Stage-1 versus Stage-2 SHA-256 digest mismatch count across bijective (BP-03) and self-hosted modular codegen (E0705). [unit: files]",
       "allocated_activities": []
     },
     {
       "name": "LogosRowanSysmlCstEngine",
       "node_type": "Part",
-      "doc": "Hard structural nesting ceiling across all normative OMG SysML v2.0 and KerML 1.0 declaration, usage, behavioral, and expression CST blocks in `deap_core::sysml_cst::parser` (Contract A, zero 16-construct caps). [unit: levels]",
+      "doc": "Hard structural nesting ceiling across all normative OMG SysML v2.0 and KerML 1.0 declaration, usage, behavioral, and expression CST blocks in deap_core::sysml_cst::parser (Contract A, zero 16-construct caps). [unit: levels]",
       "allocated_activities": []
     },
     {
       "name": "SalsaIncrementalCompilerDatabase",
       "node_type": "Part",
-      "doc": "Mandatory count of stratified `salsa` query groups in `compile_sysml::salsa_db` (`SourceDatabase`, `CstDatabase`, `HirDatabase`, `SafetyVerificationDatabase`). [unit: layers]",
+      "doc": "Mandatory count of stratified salsa query groups in compile_sysml::salsa_db (SourceDatabase, CstDatabase, HirDatabase, SafetyVerificationDatabase). [unit: layers]",
       "allocated_activities": []
     },
     {
       "name": "TypedPolyglotIngestionFrontend",
       "node_type": "Part",
-      "doc": "Count of Contract B typed CST/AST frontends (`ra_ap_syntax` Rust, `deap_core::dart_cst` Dart, typed `serde_json` OpenAPI/JSON-Schema, `logos`+`rowan` OMG IDL and IETF YANG in `ingest_sysml::cst::idl_cst` and `ingest_sysml::cst::yang_cst`, and Markdown in `ingest_sysml::cst::markdown_cst`). [unit: frontends]",
+      "doc": "Count of Contract B typed CST/AST frontends (ra_ap_syntax Rust, deap_core::dart_cst Dart, typed serde_json OpenAPI/JSON-Schema, logos+rowan OMG IDL and IETF YANG in ingest_sysml::cst::idl_cst and ingest_sysml::cst::yang_cst, and Markdown in ingest_sysml::cst::markdown_cst). [unit: frontends]",
       "allocated_activities": []
     }
   ],

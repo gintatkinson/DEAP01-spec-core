@@ -32,7 +32,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-0603], [REQ-STPA-SAFETY-SUITE-RENDER-REGULATORY-OBJECTIVES-ASSESSMENT] | SysML v2: PackageDef(regulatory_objectives)
 
-use deap_core::sysml_ast::CalcDef;
+use deap_core::sysml_cst::CalcDef;
 
 use super::pillars::{
     collect_declared_token_objectives, collect_token_classification_rows, RegulatoryObjectiveRow,

@@ -8,8 +8,6 @@ mod lifecycle_ontology;
 mod physics_budgets;
 mod schema_extractor;
 mod substitution;
-mod sysml_extractor;
-mod sysml_lexer;
 mod text_replace;
 
 #[cfg(test)]
@@ -25,10 +23,9 @@ use serde::{Deserialize, Serialize};
 pub use schema_extractor::{
     extract_subsystem_parts, extract_subsystem_parts_from_interface_schema,
     extract_subsystem_parts_from_json, extract_subsystem_parts_from_markdown,
-    extract_subsystem_parts_from_yaml,
+    extract_subsystem_parts_from_sysml, extract_subsystem_parts_from_yaml, find_line_number,
+    parse_subsystem_ports_from_body,
 };
-pub use sysml_extractor::{extract_subsystem_parts_from_sysml, parse_subsystem_ports_from_body};
-pub use sysml_lexer::find_line_number;
 
 /// Subsystem port representing a physical or logical interface boundary.
 /// Inputs: port metadata fields | Outputs: `SubsystemPort` | Invariants: preserves source provenance

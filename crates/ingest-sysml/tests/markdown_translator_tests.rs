@@ -1,8 +1,8 @@
 //! Integration and regression tests for `MarkdownTranslator` and its CST/AST extraction helpers.
 //! Realises: [REQ-0021] [REQ-0032] [REQ-SYSML-INGEST-MD]
 
-use deap_core::sysml_ast::PackageDef;
-use ingest_sysml::translators::markdown::{
+use deap_core::{AttributeDef, PackageDef, PartDef};
+use ingest_sysml::cst::markdown::{
     clean_bdd_text, clean_normative_text, extract_acceptance_criteria,
     extract_behavioral_ast_nodes, extract_formal_invariants, extract_normative_statement,
     extract_req_metadata, make_port, Frontmatter, MarkdownTranslator,
@@ -263,9 +263,9 @@ Section prose with /* comment delimiter */ inside doc.
     assert!(!mod_alpha.doc.as_deref().unwrap_or("").contains("/*"));
 
     fn find_attr<'a>(
-        p: &'a deap_core::sysml_ast::PartDef,
+        p: &'a PartDef,
         n: &str,
-    ) -> Result<&'a deap_core::sysml_ast::AttributeDef, String> {
+    ) -> Result<&'a AttributeDef, String> {
         p.attributes.iter().find(|a| a.name == n).ok_or_else(|| format!("missing {n}"))
     }
     let prop_count = find_attr(mod_alpha, "prop_count")?;

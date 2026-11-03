@@ -33,7 +33,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-0603], [REQ-STPA-SAFETY-SUITE-RENDER-RTA-ARCHITECTURE] | SysML v2: PackageDef(rta_renderer)
 
-use deap_core::sysml_ast::CalcDef;
+use deap_core::sysml_cst::CalcDef;
 
 use super::*;
 

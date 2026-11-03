@@ -1,41 +1,32 @@
+//! # SysML v2 / KerML Rowan CST Parser Entrypoint
 //! [DOC-TIER: A]
 //!
-//! ### 1. Architectural Purpose
-//! Provides lossless Rowan Concrete Syntax Tree (CST) construction and structural
-//! construct extraction for SysML v2 and KerML documents (`parse_sysml_cst`).
+//! ## 1. Safety Intent & Regulatory Scope
+//! Provides the primary lossless Rowan CST parser (`parse_sysml_cst`) and Clause 8.2.2 construct
+//! classification for OMG SysML v2.0 and KerML 1.0 documents under DO-178C Level A (`BP-03`, `BP-10`).
 //!
-//! ### 2. Mathematical / Formal / Standard Formulation
-//! Given source text $S$ and token stream $T = \langle t_1, \dots, t_n \rangle$:
-//! $$
-//! \begin{aligned}
-//! \text{text}(\text{GreenNode}(T)) &= \bigoplus_{i=1}^{n} \text{slice}(t_i) = S
-//! \end{aligned}
-//! $$
-//! Every byte of $S$ (including trivia and lexical errors) is preserved in the root
-//! `SOURCE_FILE` node while non-trivia tokens are scanned into construct summaries.
+//! ## 2. Invariants & Mathematical Properties
+//! - Lossless Identity: `parse_sysml_cst(source).syntax().text().to_string() == source` for all inputs.
+//! - Hierarchical Tree: Constructs nested composite `SysmlSyntaxKind` child nodes via `SysmlCstBuilder`
+//!   (`parser_clauses_1_3` and `parser_clauses_4_6`).
 //!
-//! ### 3. Step-by-Step Execution Flow
-//! 1. Tokenize `source` using `tokenize_sysml(source)`.
-//! 2. Insert all tokens sequentially into `rowan::GreenNodeBuilder` under `SOURCE_FILE`.
-//! 3. Record lexical error spans and verify balanced `{` / `}` delimiters.
-//! 4. Scan non-trivia tokens to extract `SysmlConstructSummary` records.
-//! 5. Verify the lossless roundtrip invariant `syntax.text().to_string() == source`.
+//! ## 3. Preconditions
+//! - `source` is any valid UTF-8 string slice.
 //!
-//! ### 4. Key Data Structures & Invariants
-//! - `SysmlCstDiagnostic`: Byte-spanned lexical or delimiter diagnostic.
-//! - `SysmlConstructSummary`: Typed summary of a discovered SysML/KerML construct.
-//! - `ParsedSysmlCst`: Root `GreenNode`, extracted constructs, diagnostics, and roundtrip flag.
+//! ## 4. Postconditions
+//! - Returns a `ParsedSysmlCst` containing the immutable `rowan::GreenNode`, extracted
+//!   `SysmlConstructSummary` inventory, and `DEAP-E1001`/`DEAP-E1002` diagnostics.
 //!
-//! ### 5. Error Handling & Edge Cases
-//! - Invalid tokens (`SysmlToken::Error`) become `SysmlSyntaxKind::ERROR` leaves plus diagnostics.
-//! - Unbalanced braces produce diagnostics without aborting CST construction.
+//! ## 5. Algorithmic Complexity Bounds
+//! - Time Complexity: O(N) over input byte length `N`.
+//! - Space Complexity: O(N) green-tree storage.
 //!
-//! ### 6. Performance & Complexity
-//! - Time complexity: $\mathcal{O}(|S|)$ single-pass CST construction and header scan.
-//! - Space complexity: $\mathcal{O}(|T|)$ proportional to token count.
+//! ## 6. Failure Modes & Fault Tolerance
+//! - Never panics; malformed tokens and depth overflows emit `SysmlSyntaxKind::ErrorNode` and
+//!   diagnostic strings.
 //!
-//! ### 7. Safety & Concurrency
-//! Pure safe Rust (`Send + Sync` data types) with zero `unsafe` blocks.
+//! ## 7. Realization & Traceability
+//! Realises: [REQ-0201], [REQ-0608] | [FLS: fls_66m4rnbssgig]
 
 #![deny(
     clippy::too_many_lines,
@@ -43,250 +34,261 @@
     clippy::undocumented_unsafe_blocks
 )]
 
-use rowan::GreenNodeBuilder;
+use std::ops::Range;
 
-use super::lexer::{tokenize_sysml, LexedSysmlToken, SysmlToken};
-use super::syntax_kind::{token_to_syntax_kind, SysmlSyntaxKind, SysmlSyntaxNode};
+use rowan::GreenNode;
 
-/// Diagnostic emitted during lossless SysML v2 CST construction. Realises: [REQ-0201]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SysmlCstDiagnostic {
-    /// Human-readable diagnostic message.
-    pub message: String,
-    /// Inclusive start byte offset in source.
-    pub span_start: usize,
-    /// Exclusive end byte offset in source.
-    pub span_end: usize,
+use super::lexer::tokenize_sysml;
+use super::parser_clauses_1_3::SysmlCstBuilder;
+use super::syntax_kind::{SysmlSyntaxKind, SysmlSyntaxNode};
+
+/// OMG SysML v2 Clause 8.2.2 grammar construct taxonomy.
+/// [DOC-TIER: A]
+/// ## 1. Safety Intent & Regulatory Scope
+/// Enumerates the normative Clause 8.2.2 construct categories enforced by `check_sysml_clause8_coverage`.
+/// ## 2. Invariants & Mathematical Properties
+/// Bijective mapping onto the 21 required Clause 8.2.2 grammar productions.
+/// ## 3. Preconditions
+/// None.
+/// ## 4. Postconditions
+/// Provides canonical Clause 8.2.2 construct tags.
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(1); Space Complexity: O(1).
+/// ## 6. Failure Modes & Fault Tolerance
+/// Pure value enum with zero runtime faults.
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0201], [REQ-0608] | [FLS: fls_8tsynkj2cufj]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SysmlClause8Kind {
+    Package,
+    Import,
+    PartDef,
+    PortDef,
+    ActionDef,
+    StateDef,
+    RequirementDef,
+    UseCaseDef,
+    VerificationDef,
+    ConstraintDef,
+    ConnectionDef,
+    InterfaceDef,
+    FlowDef,
+    AllocationDef,
+    CalculationDef,
+    OccurrenceDef,
+    ViewDef,
+    ViewpointDef,
+    MetadataDef,
+    Satisfy,
+    Verify,
 }
 
-/// Summary of a normative SysML v2 or KerML construct discovered in the token stream. Realises: [REQ-0201]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// Extracted construct summary from a SysML CST parse pass.
+/// [DOC-TIER: A]
+/// ## 1. Safety Intent & Regulatory Scope
+/// Records the syntax kind, identifier, definition status, and byte span of each CST declaration.
+/// ## 2. Invariants & Mathematical Properties
+/// `byte_range.start <= byte_range.end`.
+/// ## 3. Preconditions
+/// Populated by `SysmlCstBuilder` during Rowan CST construction.
+/// ## 4. Postconditions
+/// Preserves declaration order across the source file.
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(1) field access; Space Complexity: O(L) over identifier length.
+/// ## 6. Failure Modes & Fault Tolerance
+/// Pure value struct with zero panics.
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0201] | [FLS: fls_66m4rnbssgig]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SysmlConstructSummary {
-    /// Classified composite syntax kind (`*_DEF`, `*_USAGE`, or `*_DECL`).
     pub kind: SysmlSyntaxKind,
-    /// Leading normative keyword head (e.g. `"part"`, `"requirement"`, `"package"`).
-    pub keyword_head: String,
-    /// Declared identifier or unrestricted name, if present.
-    pub name: Option<String>,
-    /// True if the construct includes the `def` keyword or is a formal definition.
+    pub name: String,
     pub is_definition: bool,
-    /// Inclusive start byte offset in source.
-    pub span_start: usize,
-    /// Exclusive end byte offset in source.
-    pub span_end: usize,
+    pub byte_range: Range<usize>,
 }
 
-/// Output of lossless SysML v2 CST parsing. Realises: [REQ-0201]
-#[derive(Debug, Clone)]
+/// Structured diagnostic emitted during SysML CST parsing.
+/// Realises: [REQ-0201] | [FLS: fls_66m4rnbssgig]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SysmlCstDiagnostic {
+    pub code: String,
+    pub message: String,
+    pub byte_range: Range<usize>,
+}
+
+/// Complete result of parsing a SysML v2 / KerML document into a Rowan CST.
+/// [DOC-TIER: A]
+/// ## 1. Safety Intent & Regulatory Scope
+/// Encapsulates the green CST root, extracted construct inventory, and syntax diagnostics.
+/// ## 2. Invariants & Mathematical Properties
+/// `self.syntax().text().to_string()` is byte-for-byte identical to the parsed source text.
+/// ## 3. Preconditions
+/// Produced by `parse_sysml_cst`.
+/// ## 4. Postconditions
+/// Provides O(1) `syntax()` root reconstruction and CST traversal helpers.
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(1) root node projection; Space Complexity: O(N).
+/// ## 6. Failure Modes & Fault Tolerance
+/// Total accessor methods with zero panics.
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0201], [REQ-0608] | [FLS: fls_66m4rnbssgig]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedSysmlCst {
-    /// Immutable Rowan green tree rooted at `SysmlSyntaxKind::SOURCE_FILE`.
-    pub green: rowan::GreenNode,
-    /// Extracted top-level and nested SysML/KerML constructs in source order.
+    pub green: GreenNode,
     pub constructs: Vec<SysmlConstructSummary>,
-    /// Lexical and structural diagnostics collected during parsing.
-    pub diagnostics: Vec<SysmlCstDiagnostic>,
-    /// True when `syntax().text().to_string() == source`.
-    pub lossless_roundtrip_eq: bool,
+    pub diagnostics: Vec<String>,
 }
 
 impl ParsedSysmlCst {
-    /// Creates a navigable typed Rowan red-tree root node from the stored green node. Realises: [REQ-0201]
+    /// Materializes a red `SysmlSyntaxNode` cursor over the green CST root.
+    /// [DOC-TIER: A]
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Projects the immutable `GreenNode` into a navigable Rowan `SyntaxNode`.
+    /// ## 2. Invariants & Mathematical Properties
+    /// Root node kind is always `SysmlSyntaxKind::SourceFile`.
+    /// ## 3. Preconditions
+    /// `self.green` was built by `parse_sysml_cst`.
+    /// ## 4. Postconditions
+    /// Returns a `SysmlSyntaxNode` rooted at `SourceFile`.
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time Complexity: O(1); Space Complexity: O(1).
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// Total function with zero panics.
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-0201] | [FLS: fls_66m4rnbssgig]
     #[must_use]
     pub fn syntax(&self) -> SysmlSyntaxNode {
         SysmlSyntaxNode::new_root(self.green.clone())
     }
-}
 
-/// Maps a normative SysML v2 / KerML keyword head and `is_def` flag to `SysmlSyntaxKind`. Realises: [REQ-0201]
-#[must_use]
-pub fn classify_keyword_kind(keyword: &str, is_def: bool) -> SysmlSyntaxKind {
-    match keyword {
-        "package" | "library" => SysmlSyntaxKind::PackageDecl,
-        "import" => SysmlSyntaxKind::ImportDecl,
-        "alias" => SysmlSyntaxKind::AliasDecl,
-        "doc" | "comment" | "rep" => SysmlSyntaxKind::DocCommentNode,
-        "metadata" => select_kind(is_def, SysmlSyntaxKind::MetadataDef, SysmlSyntaxKind::MetadataUsage),
-        "attribute" => select_kind(is_def, SysmlSyntaxKind::AttributeDef, SysmlSyntaxKind::AttributeUsage),
-        "enum" => select_kind(is_def, SysmlSyntaxKind::EnumDef, SysmlSyntaxKind::EnumUsage),
-        "item" => select_kind(is_def, SysmlSyntaxKind::ItemDef, SysmlSyntaxKind::ItemUsage),
-        "part" => select_kind(is_def, SysmlSyntaxKind::PartDef, SysmlSyntaxKind::PartUsage),
-        "port" => select_kind(is_def, SysmlSyntaxKind::PortDef, SysmlSyntaxKind::PortUsage),
-        "connection" => select_kind(is_def, SysmlSyntaxKind::ConnectionDef, SysmlSyntaxKind::ConnectionUsage),
-        "interface" => select_kind(is_def, SysmlSyntaxKind::InterfaceDef, SysmlSyntaxKind::InterfaceUsage),
-        "flow" | "succession" => select_kind(is_def, SysmlSyntaxKind::FlowDef, SysmlSyntaxKind::FlowUsage),
-        "allocation" | "allocate" => select_kind(is_def, SysmlSyntaxKind::AllocationDef, SysmlSyntaxKind::AllocationUsage),
-        "occurrence" | "individual" | "snapshot" | "timeslice" => {
-            select_kind(is_def, SysmlSyntaxKind::OccurrenceDef, SysmlSyntaxKind::OccurrenceUsage)
-        }
-        "action" => select_kind(is_def, SysmlSyntaxKind::ActionDef, SysmlSyntaxKind::ActionUsage),
-        "state" | "exhibit" => select_kind(is_def, SysmlSyntaxKind::StateDef, SysmlSyntaxKind::StateUsage),
-        "transition" => SysmlSyntaxKind::TransitionDecl,
-        "calc" => select_kind(is_def, SysmlSyntaxKind::CalcDef, SysmlSyntaxKind::CalcUsage),
-        "constraint" => select_kind(is_def, SysmlSyntaxKind::ConstraintDef, SysmlSyntaxKind::ConstraintUsage),
-        "requirement" | "hazard" | "risk" | "capability" => {
-            select_kind(is_def, SysmlSyntaxKind::RequirementDef, SysmlSyntaxKind::RequirementUsage)
-        }
-        "concern" => select_kind(is_def, SysmlSyntaxKind::ConcernDef, SysmlSyntaxKind::ConcernUsage),
-        "use" => select_kind(is_def, SysmlSyntaxKind::UseCaseDef, SysmlSyntaxKind::UseCaseUsage),
-        "analysis" => select_kind(is_def, SysmlSyntaxKind::AnalysisDef, SysmlSyntaxKind::AnalysisUsage),
-        "verification" => select_kind(is_def, SysmlSyntaxKind::VerificationDef, SysmlSyntaxKind::VerificationUsage),
-        "view" => select_kind(is_def, SysmlSyntaxKind::ViewDef, SysmlSyntaxKind::ViewUsage),
-        "viewpoint" => select_kind(is_def, SysmlSyntaxKind::ViewpointDef, SysmlSyntaxKind::ViewpointUsage),
-        "rendering" => select_kind(is_def, SysmlSyntaxKind::RenderingDef, SysmlSyntaxKind::RenderingUsage),
-        "variation" => SysmlSyntaxKind::VariationDecl,
-        "variant" => SysmlSyntaxKind::VariantUsage,
-        _ => SysmlSyntaxKind::ErrorNode,
+    /// Collects all descendant composite `SysmlSyntaxNode`s matching `kind`.
+    /// [DOC-TIER: A]
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Enables structural CST querying without regex or string scanning (`BP-03`).
+    /// ## 2. Invariants & Mathematical Properties
+    /// Returns nodes in deterministic pre-order traversal.
+    /// ## 3. Preconditions
+    /// `kind` is a `SysmlSyntaxKind` variant.
+    /// ## 4. Postconditions
+    /// Returns `Vec<SysmlSyntaxNode>` where every element has `node.kind() == kind`.
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time Complexity: O(N) over CST node count; Space Complexity: O(M) matched nodes.
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// Total traversal with zero panics.
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-0201], [REQ-0608] | [FLS: fls_66m4rnbssgig]
+    #[must_use]
+    pub fn nodes_of_kind(&self, kind: SysmlSyntaxKind) -> Vec<SysmlSyntaxNode> {
+        self.syntax()
+            .descendants()
+            .filter(|n| n.kind() == kind)
+            .collect()
     }
 }
 
-/// Selects definition or usage syntax kind based on flag. Realises: [REQ-0201]
-const fn select_kind(
-    is_def: bool,
-    def_kind: SysmlSyntaxKind,
-    usage_kind: SysmlSyntaxKind,
-) -> SysmlSyntaxKind {
-    if is_def { def_kind } else { usage_kind }
+/// Classifies a SysML v2 / KerML keyword slice and `has_def` flag into its `SysmlSyntaxKind`.
+/// [DOC-TIER: A]
+/// ## 1. Safety Intent & Regulatory Scope
+/// Maps all 6 SysML v2 grammar clauses to their corresponding composite `SysmlSyntaxKind`.
+/// ## 2. Invariants & Mathematical Properties
+/// Delegates to `SysmlCstBuilder::classify_clause_1_3_kind` and `classify_clause_4_6_kind`.
+/// ## 3. Preconditions
+/// `kw` is a keyword lexeme slice.
+/// ## 4. Postconditions
+/// Returns `Some(SysmlSyntaxKind)` for recognized keywords or `None` otherwise.
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(1); Space Complexity: O(1).
+/// ## 6. Failure Modes & Fault Tolerance
+/// Total pure function with zero panics.
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0201], [REQ-0608] | [FLS: fls_66m4rnbssgig]
+#[must_use]
+pub fn classify_keyword_kind(kw: &str, has_def: bool) -> Option<SysmlSyntaxKind> {
+    if kw == "use case" {
+        return Some(if has_def {
+            SysmlSyntaxKind::UseCaseDef
+        } else {
+            SysmlSyntaxKind::UseCaseUsage
+        });
+    }
+    if kw == "test case" {
+        return Some(if has_def {
+            SysmlSyntaxKind::VerificationDef
+        } else {
+            SysmlSyntaxKind::VerificationUsage
+        });
+    }
+    if let Some(kind) = SysmlCstBuilder::classify_clause_1_3_kind(kw, None, has_def, false) {
+        return Some(kind);
+    }
+    let kind = SysmlCstBuilder::classify_clause_4_6_kind(kw, None, has_def);
+    (kind != SysmlSyntaxKind::StatementNode).then_some(kind)
 }
 
-/// Parses `source` into a lossless Rowan CST and extracts SysML v2 / KerML constructs. Realises: [REQ-0201]
+/// Parses a SysML v2 / KerML source string into a hierarchical Rowan CST (`ParsedSysmlCst`).
+/// [DOC-TIER: A]
+/// ## 1. Safety Intent & Regulatory Scope
+/// Primary 6-clause Rowan CST parser entrypoint (`BP-03`, `BP-10`).
+/// ## 2. Invariants & Mathematical Properties
+/// - `parsed.syntax().text().to_string() == source` holds for all `source`.
+/// - Constructs nested composite CST nodes (`PackageDecl`, `PartDef`, `ActionDef`, `StateDef`, etc.).
+/// ## 3. Preconditions
+/// `source` is a valid UTF-8 slice.
+/// ## 4. Postconditions
+/// Returns `ParsedSysmlCst` with populated `green`, `constructs`, and `diagnostics`.
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(N); Space Complexity: O(N).
+/// ## 6. Failure Modes & Fault Tolerance
+/// Never panics; syntax errors and depth overflows (`>= 64`) produce `ErrorNode`s and diagnostics.
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0201], [REQ-0608] | [FLS: fls_66m4rnbssgig]
 #[must_use]
 pub fn parse_sysml_cst(source: &str) -> ParsedSysmlCst {
     let tokens = tokenize_sysml(source);
-    let mut builder = GreenNodeBuilder::new();
-    let mut diagnostics = Vec::new();
-    let mut open_braces: Vec<(usize, usize)> = Vec::new();
-
-    builder.start_node(SysmlSyntaxKind::SourceFile.into());
-    for lexed in &tokens {
-        let kind = token_to_syntax_kind(lexed.token);
-        builder.token(kind.into(), lexed.slice);
-        match lexed.token {
-            SysmlToken::Error => diagnostics.push(SysmlCstDiagnostic {
-                message: format!("Unrecognized lexical token: {:?}", lexed.slice),
-                span_start: lexed.span.start,
-                span_end: lexed.span.end,
-            }),
-            SysmlToken::LBrace => open_braces.push((lexed.span.start, lexed.span.end)),
-            SysmlToken::RBrace if open_braces.pop().is_none() => {
-                diagnostics.push(SysmlCstDiagnostic {
-                    message: "Unmatched closing brace '}'".to_string(),
-                    span_start: lexed.span.start,
-                    span_end: lexed.span.end,
-                });
-            }
-            _ => {}
-        }
-    }
-    builder.finish_node();
-
-    for (start, end) in open_braces {
-        diagnostics.push(SysmlCstDiagnostic {
-            message: "Unclosed opening brace '{'".to_string(),
-            span_start: start,
-            span_end: end,
-        });
-    }
-
-    let green = builder.finish();
-    let constructs = extract_constructs(&tokens);
-    let lossless_roundtrip_eq = SysmlSyntaxNode::new_root(green.clone()).text() == source;
-
+    let (green, diagnostics, constructs) = SysmlCstBuilder::new(&tokens).build_source_file();
     ParsedSysmlCst {
         green,
         constructs,
         diagnostics,
-        lossless_roundtrip_eq,
     }
 }
 
-/// Extracts constructs from non-trivia token stream. Realises: [REQ-0201]
-fn extract_constructs(tokens: &[LexedSysmlToken<'_>]) -> Vec<SysmlConstructSummary> {
-    let non_trivia: Vec<&LexedSysmlToken<'_>> = tokens
-        .iter()
-        .filter(|t| {
-            !matches!(
-                t.token,
-                SysmlToken::Whitespace | SysmlToken::LineComment | SysmlToken::BlockComment
-            )
-        })
-        .collect();
-
-    let mut constructs = Vec::new();
-    let mut idx = 0;
-    while let Some(&tok) = non_trivia.get(idx) {
-        let base_kind = classify_keyword_kind(tok.slice, false);
-        if base_kind == SysmlSyntaxKind::ErrorNode {
-            idx += 1;
-            continue;
-        }
-        let mut cursor = idx + 1;
-        if (tok.slice == "library" && non_trivia.get(cursor).is_some_and(|t| t.slice == "package"))
-            || (matches!(tok.slice, "use" | "analysis" | "verification")
-                && non_trivia.get(cursor).is_some_and(|t| t.slice == "case"))
-        {
-            cursor += 1;
-        }
-        let is_definition = non_trivia
-            .get(cursor)
-            .is_some_and(|t| t.token == SysmlToken::DefKw);
-        if is_definition {
-            cursor += 1;
-        }
-        let kind = classify_keyword_kind(tok.slice, is_definition);
-        let (name, next_cursor) = extract_construct_name(&non_trivia, cursor);
-        let span_end = find_construct_end(&non_trivia, next_cursor, tok.span.end);
-        constructs.push(SysmlConstructSummary {
-            kind,
-            keyword_head: tok.slice.to_string(),
-            name,
-            is_definition,
-            span_start: tok.span.start,
-            span_end,
-        });
-        idx = next_cursor.max(idx + 1);
-    }
-    constructs
+/// Alias for [`parse_sysml_cst`] returning the green/red CST wrapper.
+/// Realises: [REQ-0201] | [FLS: fls_66m4rnbssgig]
+#[must_use]
+pub fn parse_sysml_green(source: &str) -> ParsedSysmlCst {
+    parse_sysml_cst(source)
 }
 
-/// Extracts construct identifier name from token stream. Realises: [REQ-0201]
-fn extract_construct_name(
-    non_trivia: &[&LexedSysmlToken<'_>],
-     mut cursor: usize,
-) -> (Option<String>, usize) {
-    if non_trivia.get(cursor).is_some_and(|t| t.slice == "<")
-        && non_trivia.get(cursor + 2).is_some_and(|t| t.slice == ">")
-    {
-        cursor += 3;
-    }
-    if let Some(tok) = non_trivia.get(cursor) {
-        if matches!(tok.token, SysmlToken::Ident | SysmlToken::UnrestrictedName) {
-            return (Some(tok.slice.to_string()), cursor + 1);
-        }
-    }
-    (None, cursor)
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-/// Finds ending byte offset of construct. Realises: [REQ-0201]
-fn find_construct_end(
-    non_trivia: &[&LexedSysmlToken<'_>],
-    start_cursor: usize,
-    fallback_end: usize,
-) -> usize {
-    let mut depth = 0usize;
-    let mut last_end = fallback_end;
-    for tok in non_trivia.iter().skip(start_cursor) {
-        last_end = tok.span.end;
-        match tok.token {
-            SysmlToken::Semi if depth == 0 => return tok.span.end,
-            SysmlToken::LBrace => depth += 1,
-            SysmlToken::RBrace => {
-                if depth <= 1 {
-                    return tok.span.end;
-                }
-                depth -= 1;
-            }
-            _ => {}
-        }
+    #[test]
+    fn test_parse_hierarchical_cst_and_lossless_roundtrip() {
+        let src = "package FlightPkg {\n    doc /* Flight Control */\n    part def Autopilot :> BaseController {\n        port in cmd_in : CommandPort [1..1];\n        attribute gain : Real = 1.5;\n        state def ModeFsm {\n            state Idle;\n            transition first Idle then Idle;\n        }\n    }\n}\n";
+        let parsed = parse_sysml_cst(src);
+        assert_eq!(parsed.syntax().text().to_string(), src);
+        assert!(parsed.diagnostics.is_empty());
+        assert!(!parsed.nodes_of_kind(SysmlSyntaxKind::PackageDecl).is_empty());
+        assert!(!parsed.nodes_of_kind(SysmlSyntaxKind::PartDef).is_empty());
+        assert!(!parsed.nodes_of_kind(SysmlSyntaxKind::PortUsage).is_empty());
+        assert!(!parsed.nodes_of_kind(SysmlSyntaxKind::AttributeUsage).is_empty());
+        assert!(!parsed.nodes_of_kind(SysmlSyntaxKind::StateDef).is_empty());
+        assert!(!parsed.nodes_of_kind(SysmlSyntaxKind::TransitionDecl).is_empty());
+        assert!(!parsed.nodes_of_kind(SysmlSyntaxKind::SpecializationClause).is_empty());
+        assert!(!parsed.nodes_of_kind(SysmlSyntaxKind::MultiplicityBounds).is_empty());
+        assert!(!parsed.nodes_of_kind(SysmlSyntaxKind::ExpressionNode).is_empty());
     }
-    last_end
+
+    #[test]
+    fn test_depth_64_exceeded_emits_deap_e1002_and_preserves_text() {
+        let open = "package P { ".repeat(65);
+        let close = "}".repeat(65);
+        let src = format!("{open}{close}");
+        let parsed = parse_sysml_cst(&src);
+        assert_eq!(parsed.syntax().text().to_string(), src);
+        assert!(parsed.diagnostics.iter().any(|d| d.contains("DEAP-E1002")));
+        assert!(!parsed.nodes_of_kind(SysmlSyntaxKind::ErrorNode).is_empty());
+    }
 }

@@ -26,7 +26,7 @@ pub mod ui_test_emitter;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use deap_core::sysml_ast::{PackageDef, SysmlModel};
+use deap_core::sysml_cst::{PackageDef, SysmlModel};
 
 pub use bridge_emitter::generate_solver_bridge_dart;
 pub use contracts::{
@@ -91,7 +91,7 @@ fn write_generated_dart_batch(
         if let Some(parent) = full_path.parent() {
             fs::create_dir_all(parent)?;
         }
-        crate::semantic::digest::write_atomic(&full_path, content)?;
+        crate::salsa_db::write_atomic(&full_path, content)?;
     }
     Ok(())
 }
@@ -157,7 +157,7 @@ pub fn emit_dart_solver_bridge(
         fs::create_dir_all(parent)?;
     }
     let content = generate_solver_bridge_dart(model, schema_hash);
-    crate::semantic::digest::write_atomic(&solver_bridge_path, &content)?;
+    crate::salsa_db::write_atomic(&solver_bridge_path, &content)?;
     Ok(solver_bridge_path)
 }
 

@@ -4,7 +4,7 @@
 //! Contract: Extracts `PORT-*`/`CONN-*`/`SIG-*` identifiers, validates SI units, parses Markdown tables, and collects nested AST ports.
 //! Bounds & Faults: Pure non-panicking string and AST operations with zero regex.
 
-use deap_core::sysml_ast::PartDef;
+use deap_core::sysml_cst::PartDef;
 use std::collections::BTreeSet;
 
 /// Checks if a metrology value is an unresolved placeholder string.
@@ -267,7 +267,7 @@ pub(crate) struct PortMeta {
 /// Recursively collects nested subsystem and port identifiers from parsed SysML `PartDef` AST nodes.
 /// Realises: [REQ-PARITY-GATE-24]
 pub(crate) fn collect_ast_nested_subsystems_and_ports(
-    parts: &[deap_core::sysml_ast::PartDef],
+    parts: &[deap_core::sysml_cst::PartDef],
     is_nested: bool,
     nested_subsystems: &mut BTreeSet<String>,
     nested_ports: &mut BTreeSet<String>,

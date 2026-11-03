@@ -35,7 +35,7 @@
 #[cfg(test)]
 mod extended_suite_tests {
     use super::super::*;
-    use deap_core::sysml_ast::{ActionDef, PartDef};
+    use deap_core::sysml_cst::{ActionDef, PartDef};
 
     /// Verifies `ARCH-04`: `emit_safety_suite` delegates persistence to `write_atomic`
     /// and leaves zero `.tmp.*` files in the output directory.

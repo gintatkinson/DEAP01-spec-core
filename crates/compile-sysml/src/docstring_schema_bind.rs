@@ -7,7 +7,7 @@
 use crate::docstring::DocstringError;
 use crate::docstring_cst::extract_realises_ids_from_doc_lines;
 use crate::docstring_schema_index::SchemaLookupIndex;
-use deap_core::sysml_ast::{PackageDef, PartDef, RequirementDef};
+use deap_core::sysml_cst::{PackageDef, PartDef, RequirementDef};
 
 /// Maximum AST nesting depth traversed when collecting SysML v2 packages and nested parts.
 /// Realises: [REQ-FEAT-42-MAX-AST-DEPTH]

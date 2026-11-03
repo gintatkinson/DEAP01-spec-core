@@ -32,7 +32,7 @@
 //! - Realises: [REQ-0604], [REQ-SYNC-FORWARD-FORWARD-SYNC-SYSML-TO-SPECS]
 
 use super::*;
-use deap_core::sysml_ast::PartDef;
+use deap_core::sysml_cst::PartDef;
 
 const FORWARD_SYNC_PRODUCTION_SOURCES: &[(&str, &str)] = &[
     ("epic_diagrams.rs", include_str!("epic_diagrams.rs")),

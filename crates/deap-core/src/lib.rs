@@ -18,7 +18,7 @@
 //!
 //! ## 4. Postconditions
 //! - Exposes a cohesive, strongly-typed public surface unifying `diagnostics`,
-//!   `error`, `markdown`, `rules`, `source_ast`, `sysml_ast`, and `workspace`
+//!   `error`, `markdown`, `rules`, `source_ast`, `sysml_cst`, and `workspace`
 //!   modules without side effects on module load.
 //!
 //! ## 5. Algorithmic Complexity Bounds
@@ -45,7 +45,6 @@ pub mod rules;
 pub mod rust_cst;
 pub mod salsa_db;
 pub mod source_ast;
-pub mod sysml_ast;
 pub mod sysml_cst;
 pub mod workspace;
 
@@ -105,22 +104,20 @@ pub use source_ast::{
     CstLexState, ExtractedMethodSignature, SourceAstItem, SourceField, SourceItemKind,
     SourceLanguage, SourceParam,
 };
-pub use sysml_ast::{
-    component_matches, extract_negated_components, is_component_negated, lower_to_hir_db,
+pub use sysml_cst::{
+    classify_keyword_kind, component_matches, compute_canonical_digest,
+    extract_negated_components, is_component_negated, lower_sysml_hir, lower_to_hir_db,
     parse_action_defs, parse_attribute_defs, parse_calc_defs, parse_connection_defs,
     parse_constraint_defs, parse_hazard_defs, parse_part_defs, parse_port_defs,
     parse_requirement_defs, parse_satisfied_requirements, parse_state_defs, parse_sysml,
-    parse_sysml_model, ActionDef, AstPersistenceEngine, AstSlice, AttributeDef, CalcDef,
-    CapabilityDef, ConnectionDef, ConstraintDef, CotAuditLog, CotAuditRecord, FieldDescriptor,
-    FlowDef, HazardDef, ImportDef, IncrementalAstCache, InteractionDef, InterfaceDef, ItemDef,
-    OperationDef, PackageDef, PartDef, PortDef, RequirementDef, RiskDef, StateDef, SysmlModel,
+    parse_sysml_cst, parse_sysml_green, parse_sysml_model, token_to_syntax_kind, tokenize_sysml,
+    ActionDef, AstPersistenceEngine, AstSlice, AttributeDef, CalcDef, CapabilityDef,
+    ConnectionDef, ConstraintDef, CotAuditLog, CotAuditRecord, FieldDescriptor, FlowDef,
+    HazardDef, ImportDef, IncrementalAstCache, InteractionDef, InterfaceDef, ItemDef,
+    LexedSysmlToken, OperationDef, PackageDef, ParsedSysmlCst, PartDef, PortDef, RequirementDef,
+    RiskDef, SourceProgram, StateDef, SysmlCompilerDb, SysmlConstructSummary, SysmlCstDiagnostic,
+    SysmlLanguage, SysmlModel, SysmlSyntaxKind, SysmlSyntaxNode, SysmlSyntaxToken, SysmlToken,
     TestCaseDef, TransitionDef, TypeDescriptor, UnifiedSchemaModelExtractor, UseCaseDef,
-};
-pub use sysml_cst::{
-    classify_keyword_kind, compute_canonical_digest, lower_sysml_hir, parse_sysml_cst,
-    parse_sysml_green, token_to_syntax_kind, tokenize_sysml, LexedSysmlToken, ParsedSysmlCst,
-    SourceProgram, SysmlCompilerDb, SysmlConstructSummary, SysmlCstDiagnostic, SysmlLanguage,
-    SysmlSyntaxKind, SysmlSyntaxNode, SysmlSyntaxToken, SysmlToken,
 };
 pub use workspace::{
     check_downstream_instructions_exist, check_gitignore_exists, check_no_ds_store_files,

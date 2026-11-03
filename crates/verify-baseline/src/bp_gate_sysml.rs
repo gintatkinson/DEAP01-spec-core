@@ -37,10 +37,10 @@ impl std::error::Error for NormalizeDepthError {}
 /// Validates iteratively that a `PartDef` subtree does not exceed `MAX_NORMALIZE_DEPTH` prior to mutation.
 /// Realises: [REQ-BLUEPRINT-CHECK-10-PART-NORMALIZE]
 fn validate_part_normalize_depth(
-    part: &deap_core::sysml_ast::PartDef,
+    part: &deap_core::sysml_cst::PartDef,
     depth: usize,
 ) -> Result<(), NormalizeDepthError> {
-    let mut stack: Vec<(&deap_core::sysml_ast::PartDef, usize)> = vec![(part, depth)];
+    let mut stack: Vec<(&deap_core::sysml_cst::PartDef, usize)> = vec![(part, depth)];
     while let Some((current, cur_depth)) = stack.pop() {
         if cur_depth > MAX_NORMALIZE_DEPTH {
             return Err(NormalizeDepthError::MaxDepthExceeded {
@@ -59,10 +59,10 @@ fn validate_part_normalize_depth(
 /// Validates iteratively that a `PackageDef` hierarchy and its `PartDef` subtrees do not exceed `MAX_NORMALIZE_DEPTH`.
 /// Realises: [REQ-BLUEPRINT-CHECK-10-AST-NORMALIZE]
 fn validate_package_normalize_depth(
-    pkg: &deap_core::sysml_ast::PackageDef,
+    pkg: &deap_core::sysml_cst::PackageDef,
     depth: usize,
 ) -> Result<(), NormalizeDepthError> {
-    let mut stack: Vec<(&deap_core::sysml_ast::PackageDef, usize)> = vec![(pkg, depth)];
+    let mut stack: Vec<(&deap_core::sysml_cst::PackageDef, usize)> = vec![(pkg, depth)];
     while let Some((current_pkg, cur_depth)) = stack.pop() {
         if cur_depth > MAX_NORMALIZE_DEPTH {
             return Err(NormalizeDepthError::MaxDepthExceeded {
@@ -83,7 +83,7 @@ fn validate_package_normalize_depth(
 
 /// Promotes the first attribute or first port `doc` comment onto `part.doc` for deterministic roundtrip.
 /// Realises: [REQ-BLUEPRINT-CHECK-10-PART-NORMALIZE]
-fn promote_leading_member_doc_to_part(part: &mut deap_core::sysml_ast::PartDef) {
+fn promote_leading_member_doc_to_part(part: &mut deap_core::sysml_cst::PartDef) {
     if let Some(first_attr) = part.attributes.first_mut() {
         if let Some(attr_doc) = first_attr.doc.take() {
             match part.doc {
@@ -109,7 +109,7 @@ fn promote_leading_member_doc_to_part(part: &mut deap_core::sysml_ast::PartDef) 
 
 /// Folds `protocol_family` and `electrical_attributes` into each port's `doc` comment.
 /// Realises: [REQ-BLUEPRINT-CHECK-10-PART-NORMALIZE]
-fn fold_part_port_metadata_into_docs(ports: &mut [deap_core::sysml_ast::PortDef]) {
+fn fold_part_port_metadata_into_docs(ports: &mut [deap_core::sysml_cst::PortDef]) {
     for port in ports {
         let proto = std::mem::take(&mut port.protocol_family);
         let clean_proto = proto.trim_matches(|c: char| c == '"' || c == '`');
@@ -145,11 +145,11 @@ fn fold_part_port_metadata_into_docs(ports: &mut [deap_core::sysml_ast::PortDef]
 /// Iteratively normalizes a `PartDef` subtree up to `MAX_NORMALIZE_DEPTH` for bijective roundtrip.
 /// Realises: [REQ-BLUEPRINT-CHECK-10-PART-NORMALIZE]
 pub(crate) fn normalize_part_for_bijective_roundtrip(
-    part: &mut deap_core::sysml_ast::PartDef,
+    part: &mut deap_core::sysml_cst::PartDef,
     depth: usize,
 ) -> Result<(), NormalizeDepthError> {
     validate_part_normalize_depth(part, depth)?;
-    let mut stack: Vec<(&mut deap_core::sysml_ast::PartDef, usize)> = vec![(part, depth)];
+    let mut stack: Vec<(&mut deap_core::sysml_cst::PartDef, usize)> = vec![(part, depth)];
     while let Some((current, cur_depth)) = stack.pop() {
         if cur_depth > MAX_NORMALIZE_DEPTH {
             return Err(NormalizeDepthError::MaxDepthExceeded {
@@ -170,11 +170,11 @@ pub(crate) fn normalize_part_for_bijective_roundtrip(
 /// Iteratively normalizes a `PackageDef` hierarchy up to `MAX_NORMALIZE_DEPTH` for bijective roundtrip.
 /// Realises: [REQ-BLUEPRINT-CHECK-10-AST-NORMALIZE]
 pub(crate) fn normalize_package_for_bijective_roundtrip(
-    pkg: &mut deap_core::sysml_ast::PackageDef,
+    pkg: &mut deap_core::sysml_cst::PackageDef,
     depth: usize,
 ) -> Result<(), NormalizeDepthError> {
     validate_package_normalize_depth(pkg, depth)?;
-    let mut stack: Vec<(&mut deap_core::sysml_ast::PackageDef, usize)> = vec![(pkg, depth)];
+    let mut stack: Vec<(&mut deap_core::sysml_cst::PackageDef, usize)> = vec![(pkg, depth)];
     while let Some((current_pkg, cur_depth)) = stack.pop() {
         if cur_depth > MAX_NORMALIZE_DEPTH {
             return Err(NormalizeDepthError::MaxDepthExceeded {
@@ -203,7 +203,7 @@ pub(crate) fn normalize_package_for_bijective_roundtrip(
 /// Realises: [REQ-BLUEPRINT-CHECK-10-SYSML-ROUNDTRIP]
 fn persist_and_verify_sysml_artifacts(
     blueprint_path: &Path,
-    parsed_pkg: &deap_core::sysml_ast::PackageDef,
+    parsed_pkg: &deap_core::sysml_cst::PackageDef,
     roundtrip_sysml: &str,
 ) -> Result<(PathBuf, PathBuf), Vec<String>> {
     let parent_dir = blueprint_path.parent().unwrap_or_else(|| Path::new("."));

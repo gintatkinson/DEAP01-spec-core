@@ -35,7 +35,7 @@
 
 use std::collections::BTreeSet;
 
-use deap_core::sysml_ast::{HazardDef, PackageDef, PartDef};
+use deap_core::sysml_cst::{HazardDef, PackageDef, PartDef};
 
 use super::{
     DimensionTemplate, FailureDimension, FmecaScoringConfig, RegistryFailureEntry,
@@ -84,13 +84,13 @@ pub(super) fn compute_negated_part_names(
     pkg: &PackageDef,
     all_parts: &[PartDef],
 ) -> BTreeSet<String> {
-    let pkg_sysml = crate::semantic::serializer::to_sysml(pkg);
+    let pkg_sysml = crate::salsa_db::to_sysml(pkg);
     let mut negated_parts = BTreeSet::new();
     scan_bang_negated_identifiers(&pkg_sysml, &mut negated_parts);
 
     let mut negated_stems: BTreeSet<String> =
         pkg.extract_negated_components().into_iter().collect();
-    negated_stems.extend(deap_core::sysml_ast::extract_negated_components(&pkg_sysml));
+    negated_stems.extend(deap_core::sysml_cst::extract_negated_components(&pkg_sysml));
     for part in all_parts {
         let comp_clean: String = part
             .name
@@ -101,7 +101,7 @@ pub(super) fn compute_negated_part_names(
         if !comp_clean.is_empty()
             && negated_stems.iter().any(|stem| {
                 comp_clean.contains(stem.as_str())
-                    || deap_core::sysml_ast::component_matches(&part.name, stem)
+                    || deap_core::sysml_cst::component_matches(&part.name, stem)
             })
         {
             negated_parts.insert(part.name.clone());
@@ -161,7 +161,7 @@ pub(super) fn registry_entry_matches_part(
     !comp.is_empty()
         && entry.dimension == dim
         && (comp.eq_ignore_ascii_case(part_name)
-            || deap_core::sysml_ast::component_matches(part_name, comp))
+            || deap_core::sysml_cst::component_matches(part_name, comp))
 }
 
 /// Determines whether an explicit `HazardDef` directly references `part_name` in its identifier or doc block.

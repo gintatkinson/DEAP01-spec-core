@@ -87,7 +87,7 @@ fn assert_target_modules_pure_and_documented(repo_root: &Path) -> Result<(), Box
         "crates/verify-baseline/src/checks/docstring_gate.rs",
         "crates/deap-core/src/source_ast.rs",
         "crates/compile-sysml/src/docstring.rs",
-        "crates/ingest-sysml/src/translators/code.rs",
+        "crates/ingest-sysml/src/lib.rs",
     ] {
         let resolved_files = resolve_module_rs_files(&repo_root.join(rel_mod));
         assert!(

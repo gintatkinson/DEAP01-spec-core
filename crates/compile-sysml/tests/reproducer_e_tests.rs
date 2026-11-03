@@ -33,7 +33,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-STPA-KATEX-OPERATOR-LOWERING], [REQ-STPA-MATLAB-SLDV-OPERATOR-LOWERING] | SysML v2: VerificationCaseDef(reproducer_e_tests)
 
-use deap_core::sysml_ast::{ActionDef, CalcDef, ConstraintDef, PackageDef, PartDef};
+use deap_core::sysml_cst::{ActionDef, CalcDef, ConstraintDef, PackageDef, PartDef};
 
 fn build_issue_698_safety_lowering_pkg() -> PackageDef {
     let supervisor = PartDef {

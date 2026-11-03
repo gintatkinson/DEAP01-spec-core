@@ -2,14 +2,14 @@
 //! Safety & Traceability: Realises: [REQ-0607]
 use super::render::render_unit;
 use crate::modular_codegen::{domain::bounds as bd, domain::module_graph as mg, lowering as l};
-use crate::semantic::digest::write_atomic;
+use crate::salsa_db::write_atomic;
 use crate::syn_codegen::{format_and_verify_rust_module_ast, verify_stage_fixed_point};
 pub use crate::syn_codegen::{
     verify_cfg_test_excluded_doc_tiers, FixedPointSynthesisError, StageTreeDigestManifest,
     VerifiedUnitBuffer,
 };
 use bd::{ModularityBounds, ModularityDiagnostic, ModularityErrorCode as Ec};
-use deap_core::{digest::compute_sha256, sysml_ast::PackageDef};
+use deap_core::{digest::compute_sha256, sysml_cst::PackageDef};
 use mg::{GeneratedFileDigest, GeneratedTreeManifest, ModuleGraph};
 use quote::ToTokens;
 use std::{collections::BTreeMap, fs, path::Path, path::PathBuf};

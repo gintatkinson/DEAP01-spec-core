@@ -16,9 +16,8 @@ use crate::docstring_cst::{
     collect_injectable_source_files, ingest_source_directory, resolve_source_package_name,
     sanitize_sysml_identifier, single_char_literal_byte_len, SourceLanguage,
 };
-use crate::semantic::digest::{generate_digest, write_atomic, write_digest_atomic};
-use crate::semantic::serializer::to_sysml;
-use deap_core::sysml_ast::PackageDef;
+use crate::salsa_db::{generate_digest, to_sysml, write_atomic, write_digest_atomic};
+use deap_core::sysml_cst::PackageDef;
 use std::fs;
 use std::path::{Path, PathBuf};
 

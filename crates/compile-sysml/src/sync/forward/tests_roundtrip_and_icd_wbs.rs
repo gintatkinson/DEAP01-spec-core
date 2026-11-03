@@ -32,7 +32,7 @@
 //! - Realises: [REQ-0604]
 
 use super::*;
-use deap_core::sysml_ast::{ActionDef, PackageDef, PartDef, StateDef, TransitionDef, UseCaseDef};
+use deap_core::sysml_cst::{ActionDef, PackageDef, PartDef, StateDef, TransitionDef, UseCaseDef};
 
 /// Builds the `SystemPackage` model with `ProcessorLifecycleState` and `ExecuteSubsystemWorkflow` for `DEFECT-07`.
 /// Realises: [REQ-0604]
@@ -133,8 +133,7 @@ fn assert_defect_07_reparsed_transitions_and_uc(
 #[test]
 fn test_defect_07_full_ast_roundtrip_sync_preserves_state_transitions_and_use_cases(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use crate::parser::grammar::SysmlParser;
-    use crate::semantic::serializer::to_sysml;
+    use crate::salsa_db::{to_sysml, SysmlParser};
     use crate::sync::reverse::{reverse_sync_specs_to_sysml, ReverseSyncOptions};
 
     let tmp_dir = std::env::temp_dir().join(format!(
@@ -292,8 +291,7 @@ fn assert_issue_507_reparsed_and_no_base_models(
 #[test]
 fn test_forward_to_reverse_to_forward_roundtrip_idempotency_and_parent_epic_links(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use crate::parser::grammar::SysmlParser;
-    use crate::semantic::serializer::to_sysml;
+    use crate::salsa_db::{to_sysml, SysmlParser};
     use crate::sync::reverse::{reverse_sync_specs_to_sysml, ReverseSyncOptions};
 
     let tmp_dir =

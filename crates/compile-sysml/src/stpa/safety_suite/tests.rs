@@ -35,7 +35,7 @@
 #[cfg(test)]
 mod suite_tests {
     use super::super::*;
-    use deap_core::sysml_ast::{ActionDef, PartDef};
+    use deap_core::sysml_cst::{ActionDef, PartDef};
 
     /// Verifies that `transpile_safety_suite` emits the exact 10 domain-agnostic safety artifacts,
     /// renders isolated KaTeX aligned blocks, and builds closed-loop STPA control structure topology diagrams.

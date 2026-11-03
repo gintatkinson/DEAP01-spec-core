@@ -5,11 +5,10 @@
 //! Bounds & Faults: Operates in O(N log N) time and O(N) space; fails closed via typed `DriverError` on missing, empty, or invalid schemas.
 
 use crate::driver::{DriverError, SchemaTarget, SCHEMA_REMEDIATION_MESSAGE};
-use crate::semantic::digest::{
+use crate::salsa_db::{
     compute_file_manifest, count_structural_elements, write_atomic, SchemaDigest,
+    SemanticValidator, SysmlSerializable,
 };
-use crate::semantic::serializer::SysmlSerializable;
-use crate::semantic::validator::SemanticValidator;
 use crate::{discover_sysml_files, parse_sysml, parse_sysml_tree};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -97,7 +96,7 @@ pub(crate) fn resolve_schema_targets_typed(
 /// Realises: [REQ-COMPILER-SYSML-PARSE-RESOLVED-TARGET]
 pub(crate) fn parse_resolved_schema_target(
     target: &SchemaTarget,
-) -> Result<(deap_core::sysml_ast::PackageDef, String), DriverError> {
+) -> Result<(deap_core::sysml_cst::PackageDef, String), DriverError> {
     match target {
         SchemaTarget::SingleFile(schema_file) => {
             let content = fs::read_to_string(schema_file).map_err(|e| {
@@ -150,7 +149,7 @@ pub(crate) fn parse_resolved_schema_target(
 pub(crate) fn load_and_validate_schema_typed(
     explicit_path: Option<PathBuf>,
     require_validation: bool,
-) -> Result<(SchemaTarget, deap_core::sysml_ast::PackageDef, String), DriverError> {
+) -> Result<(SchemaTarget, deap_core::sysml_cst::PackageDef, String), DriverError> {
     let target = resolve_schema_targets_typed(explicit_path)?;
     let (pkg, display_name) = parse_resolved_schema_target(&target)?;
 
@@ -180,7 +179,7 @@ pub(crate) fn load_and_validate_schema_typed(
 /// Realises: [REQ-COMPILER-SYSML-LOAD-PACKAGE-CLI]
 pub(crate) fn load_schema_package_typed(
     explicit_path: Option<PathBuf>,
-) -> Result<(SchemaTarget, deap_core::sysml_ast::PackageDef, String), DriverError> {
+) -> Result<(SchemaTarget, deap_core::sysml_cst::PackageDef, String), DriverError> {
     load_and_validate_schema_typed(explicit_path, true)
 }
 

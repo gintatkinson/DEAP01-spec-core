@@ -36,7 +36,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use deap_core::sysml_ast::{ActionDef, PartDef};
+use deap_core::sysml_cst::{ActionDef, PartDef};
 
 /// Extracts an `ActionDef` identifier from a Feature operation bullet `- `+ActionName(...) : RetType`` when valid and non-synthetic.
 /// Realises: [REQ-0604]

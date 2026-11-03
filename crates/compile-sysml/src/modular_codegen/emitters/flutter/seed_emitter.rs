@@ -9,7 +9,7 @@ use super::naming::{
     escape_dart_single_quoted, extract_bounds_from_doc, format_display_name, to_pascal_case,
 };
 use super::topology::{collect_package_slices, strip_surrounding_quotes};
-use deap_core::sysml_ast::{PackageDef, PartDef, SysmlModel};
+use deap_core::sysml_cst::{PackageDef, PartDef, SysmlModel};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Maps a SysML primitive attribute type identifier onto `"double"`, `"int"`, `"bool"`, or `"text"`.

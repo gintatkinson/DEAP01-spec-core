@@ -33,7 +33,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-0603], [REQ-STPA-UCA-MODULE] | SysML v2: PackageDef(stpa_uca_helpers)
 
-use deap_core::sysml_ast::{ActionDef, AttributeDef, PartDef};
+use deap_core::sysml_cst::{ActionDef, AttributeDef, PartDef};
 
 /// Resolved controller binding pairing an optional AST `PartDef` reference with its sanitized controller identifier.
 /// Realises: [REQ-STPA-UCA-RESOLVED-CONTROLLER]

@@ -10,7 +10,7 @@ use crate::docstring_schema_bind::{
     push_unique_schema_constraint, push_unique_schema_req, req_def_primary_id,
     schema_identifiers_match, MAX_AST_DEPTH,
 };
-use deap_core::sysml_ast::{ActionDef, ConstraintDef, PackageDef, PartDef, RequirementDef};
+use deap_core::sysml_cst::{ActionDef, ConstraintDef, PackageDef, PartDef, RequirementDef};
 
 /// Depth-bounded pre-order index of SysML v2 packages and parts up to `MAX_AST_DEPTH`.
 /// Realises: [REQ-FEAT-42-SCHEMA-LOOKUP-INDEX]
