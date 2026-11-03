@@ -1,11 +1,11 @@
-//! Table of Contents generation, heading extraction, and anchor slugification.
+//! Table of Contents generation, heading extraction, and anchor slugification (`[REQ-0401]`, `[FLS: fls_conops_toc]`).
 
 use deap_core::markdown_ast::parse_markdown_ast;
 use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 use std::collections::BTreeSet;
 
 /// [DOC-TIER: A] Converts a heading string into a standard GitHub Markdown anchor slug.
-/// Safety & Traceability: Conforms to DO-178C Level A / DO-330 TQL-4; Realises: [REQ-ASSEMBLE-CONOPS-TOC-SLUGIFY] | SysML v2: ActionDef(slugify)
+/// Safety & Traceability: Conforms to DO-178C Level A / DO-330 TQL-4; Realises: [REQ-ASSEMBLE-CONOPS-TOC-SLUGIFY] [FLS: fls_conops_toc] | SysML v2: ActionDef(slugify)
 /// Contract: Accepts raw heading `text: &str` and returns lowercase hyphenated anchor slug `String` stripped of formatting tokens.
 /// Bounds & Faults: O(N) time and space over `text.len()`; infallible deterministic character filtering.
 pub fn slugify(text: &str) -> String {
@@ -20,7 +20,7 @@ pub fn slugify(text: &str) -> String {
 }
 
 /// [DOC-TIER: A] Extracts markdown headings from content via the `deap_core::markdown_ast` (`pulldown-cmark`) section AST.
-/// Safety & Traceability: Conforms to DO-178C Level A / DO-330 TQL-4; Realises: [REQ-ASSEMBLE-CONOPS-TOC-EXTRACT-HEADINGS] | SysML v2: ActionDef(extract_headings)
+/// Safety & Traceability: Conforms to DO-178C Level A / DO-330 TQL-4; Realises: [REQ-ASSEMBLE-CONOPS-TOC-EXTRACT-HEADINGS] [FLS: fls_conops_toc] | SysML v2: ActionDef(extract_headings)
 /// Contract: Parses `content: &str` into `ParsedMarkdownAst` and returns `Vec<(usize, String, String)>` of `(level, title, slug)`.
 /// Bounds & Faults: O(N) time and space over `content.len()`; ignores `#` lines inside fenced code blocks via AST parsing.
 pub fn extract_headings(content: &str) -> Vec<(usize, String, String)> {
@@ -35,7 +35,7 @@ pub fn extract_headings(content: &str) -> Vec<(usize, String, String)> {
 }
 
 /// [DOC-TIER: A] Generates a Markdown Table of Contents from a list of extracted headings.
-/// Safety & Traceability: Conforms to DO-178C Level A / DO-330 TQL-4; Realises: [REQ-ASSEMBLE-CONOPS-TOC-GENERATE-TABLE-OF-CONTENTS] | SysML v2: ActionDef(generate_table_of_contents)
+/// Safety & Traceability: Conforms to DO-178C Level A / DO-330 TQL-4; Realises: [REQ-ASSEMBLE-CONOPS-TOC-GENERATE-TABLE-OF-CONTENTS] [FLS: fls_conops_toc] | SysML v2: ActionDef(generate_table_of_contents)
 /// Contract: Formats `headings` in `2..=max_depth` into an indented Markdown bullet list with `#slug` links.
 /// Bounds & Faults: O(N) time and space over `headings.len()`; saturating indentation prevents underflow.
 pub fn generate_table_of_contents(
@@ -50,7 +50,7 @@ pub fn generate_table_of_contents(
         }
         let indent = "  ".repeat(level.saturating_sub(2));
         let clean_title = title.replace(['`', '*'], "");
-        toc_lines.push(format!("{}- [{clean_title}](#{slug})", indent));
+        toc_lines.push(format!("{indent}- [{clean_title}](#{slug})"));
     }
 
     toc_lines.push(String::new());
@@ -58,7 +58,7 @@ pub fn generate_table_of_contents(
 }
 
 /// [DOC-TIER: A] Verifies internal anchor links (`#slug`) in the document against AST-extracted headings.
-/// Safety & Traceability: Conforms to DO-178C Level A / DO-330 TQL-4; Realises: [REQ-ASSEMBLE-CONOPS-TOC-VERIFY-MARKDOWN-LINKS] | SysML v2: ActionDef(verify_markdown_links)
+/// Safety & Traceability: Conforms to DO-178C Level A / DO-330 TQL-4; Realises: [REQ-ASSEMBLE-CONOPS-TOC-VERIFY-MARKDOWN-LINKS] [FLS: fls_conops_toc] | SysML v2: ActionDef(verify_markdown_links)
 /// Contract: Returns `Vec<String>` of diagnostic messages for every internal `#anchor` link missing from `extract_headings(content)`.
 /// Bounds & Faults: O(N log H) time and O(N) space over `content.len()`; deterministic link event stream traversal.
 pub fn verify_markdown_links(content: &str) -> Vec<String> {

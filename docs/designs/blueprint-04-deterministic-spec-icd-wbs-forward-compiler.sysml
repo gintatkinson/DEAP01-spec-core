@@ -8,12 +8,12 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
     attribute Tracked_Issues : String = "#497, #506, #507";
     attribute Generation_Mode : String = "subagent";
     attribute Specification_Source : String = "crates/compile-sysml/src/lib.rs:1-60 / #507";
-    doc /* `CmarkTable`, `FrontmatterDoc`, `ChecklistDoc`, `SpecSuiteBundle`, `IcdDocumentPair`, `WbsExportBundle`, and `ConopsUnitDoc` with `camino::Utf8PathBuf` paths and `toml_edit::DocumentMut` (`< 380` exec SLOC per submodule). */
-    attribute Layer_1_Domain_State_Data_Model : String = "Lossless Markdown AST, typed frontmatter DOM, and `salsa` query models across `deap-core` and `ingest-sysml` crates";
-    doc /* `parse_markdown_tables`, `parse_frontmatter_metadata`, `emit_lossless_markdown`, `project_agile_spec_suite`, `compile_logical_icd_matrix`, `synthesize_mil_std_881e_wbs`, `assemble_conops_master`, and `reconcile_markdown_backlog` with fail-closed diagnostics (`E0100..E0400`, `< 380` exec SLOC per submodule). */
-    attribute Layer_2_Logic_State_Management : String = "Event-driven `pulldown-cmark` extraction, `salsa` derived Spec/ICD/WBS/ConOps projection queries, and comment-safe reconciliation across `compile-sysml`, `reconcile-backlog`, and `assemble-conops` crates";
-    doc /* `compile-sysml`, `ingest-sysml`, `assemble-conops`, `reconcile-backlog`, and `verify-baseline check-blueprint` CLI actuators emitting deterministic specs, ICDs, ConOps master documents, WBS exports, and `.digest.json` receipts (`< 380` exec SLOC per submodule). */
-    attribute Layer_3_Presentation_Actuator_Interface_Binding : String = "Forward compiler CLI actuators, CommonMark file serialization, and baseline quality gates across all 6 crates including `verify-baseline` runner";
+    doc /* CmarkTable, FrontmatterDoc, ChecklistDoc, SpecSuiteBundle, IcdDocumentPair, WbsExportBundle, and ConopsUnitDoc with camino::Utf8PathBuf paths and toml_edit::DocumentMut (< 380 exec SLOC per submodule). */
+    attribute Layer_1_Domain_State_Data_Model : String = "Lossless Markdown AST, typed frontmatter DOM, and salsa query models across deap-core and ingest-sysml crates";
+    doc /* parse_markdown_tables, parse_frontmatter_metadata, emit_lossless_markdown, project_agile_spec_suite, compile_logical_icd_matrix, synthesize_mil_std_881e_wbs, assemble_conops_master, and reconcile_markdown_backlog with fail-closed diagnostics (E0100..E0400, < 380 exec SLOC per submodule). */
+    attribute Layer_2_Logic_State_Management : String = "Event-driven pulldown-cmark extraction, salsa derived Spec/ICD/WBS/ConOps projection queries, and comment-safe reconciliation across compile-sysml, reconcile-backlog, and assemble-conops crates";
+    doc /* compile-sysml, ingest-sysml, assemble-conops, reconcile-backlog, and verify-baseline check-blueprint CLI actuators emitting deterministic specs, ICDs, ConOps master documents, WBS exports, and .digest.json receipts (< 380 exec SLOC per submodule). */
+    attribute Layer_3_Presentation_Actuator_Interface_Binding : String = "Forward compiler CLI actuators, CommonMark file serialization, and baseline quality gates across all 6 crates including verify-baseline runner";
     doc /* project_agile_spec_suite(db, root_pkg) */
     action def project_agile_spec_suite;
     doc /* Evaluate salsa query_agile_specs(root_pkg) */
@@ -131,12 +131,12 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
         message StreamPulldownCmarkEventsViaPulldown from Asm to Asm;
         message reply_ConopsMasterWritten from Asm to CLI;
     }
-    doc /* Maximum deterministic execution bound for `--forward-sync` across all package subtrees. [unit: ms] */
+    doc /* Maximum deterministic execution bound for --forward-sync across all package subtrees. [unit: ms] */
     part def AgileSpecForwardProjector {
         attribute maxForwardLatencyMs : Integer = 25;
-        doc /* Enforces symmetric `in` and `out` `ActionDef` parameter emission across Mermaid and Markdown bullets. [unit: flag] */
+        doc /* Enforces symmetric in and out ActionDef parameter emission across Mermaid and Markdown bullets. [unit: flag] */
         attribute preserveTypedActionParams : Boolean = true;
-        doc /* Receives ordered `PackageDef`, `PartDef`, `InteractionDef`, and `UseCaseDef` AST slices. [protocol: MemoryBus] */
+        doc /* Receives ordered PackageDef, PartDef, InteractionDef, and UseCaseDef AST slices. [protocol: MemoryBus] */
         port in packageAstInPort : String {
             flow in packageAstInPort_flow : String;
         }
@@ -145,54 +145,54 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
             flow out specMarkdownOutPort_flow : String;
         }
     }
-    doc /* Tracks multi-line `in_html_comment` state to prevent commented example tables from spoofing frontmatter issue IDs. [unit: flag] */
+    doc /* Tracks multi-line in_html_comment state to prevent commented example tables from spoofing frontmatter issue IDs. [unit: flag] */
     part def BidirectionalBacklogReconciler {
         attribute trackHtmlCommentState : Boolean = true;
         doc /* Computes parent-inclusive Epic count so child-only slices never trigger single-epic wildcard matching. [unit: flag] */
         attribute parentInclusiveEpics : Boolean = true;
-        doc /* Reads and reconciles CommonMark metadata tables and bidirectional Epic/Feature checklists under `docs/`. [protocol: AtomicFsWrite] */
+        doc /* Reads and reconciles CommonMark metadata tables and bidirectional Epic/Feature checklists under docs/. [protocol: AtomicFsWrite] */
         port inout specDocsInOutPort : String;
-        doc /* Merges reverse-synchronized specification entities into their owning subsystem `PackageDef` subpackages. [protocol: AtomicFsWrite] */
+        doc /* Merges reverse-synchronized specification entities into their owning subsystem PackageDef subpackages. [protocol: AtomicFsWrite] */
         port out subpackageSyncOutPort : String {
             flow out subpackageSyncOutPort_flow : String;
         }
     }
-    doc /* Total number of generative LLM subagents invoked during specification, ICD, and WBS forward compilation (`C-FWD-01 == 0`). [unit: count] */
+    doc /* Total number of generative LLM subagents invoked during specification, ICD, and WBS forward compilation (C-FWD-01 == 0). [unit: count] */
     part def DeterministicSpecIcdWbsForwardCompiler {
         attribute llm_subagent_invocation_count : Integer = 0;
-        doc /* Percentage of declared SysML v2 AST packages, parts, ports, flows, interactions, and use cases projected into specifications (`C-FWD-02 == 100.0`). [unit: percent] */
+        doc /* Percentage of declared SysML v2 AST packages, parts, ports, flows, interactions, and use cases projected into specifications (C-FWD-02 == 100.0). [unit: percent] */
         attribute ast_node_coverage_percent : Real = 100;
-        doc /* Count of Check 13B E1-E5 Mermaid syntax or layout violations across all compiler-synthesized diagrams (`C-FWD-03 == 0`). [unit: count] */
+        doc /* Count of Check 13B E1-E5 Mermaid syntax or layout violations across all compiler-synthesized diagrams (C-FWD-03 == 0). [unit: count] */
         attribute mermaid_e1_e5_violation_count : Integer = 0;
-        doc /* Count of AST structural or subpackage placement divergences after a forward-then-reverse synchronization cycle (`C-FWD-04 == 0`). [unit: count] */
+        doc /* Count of AST structural or subpackage placement divergences after a forward-then-reverse synchronization cycle (C-FWD-04 == 0). [unit: count] */
         attribute forward_reverse_drift_count : Integer = 0;
-        doc /* Receives the parsed, type-checked `SysmlPackage` (`PackageDef`) AST and SHA-256 `SchemaDigest` from `deap-core`. [protocol: MemoryBus] */
+        doc /* Receives the parsed, type-checked SysmlPackage (PackageDef) AST and SHA-256 SchemaDigest from deap-core. [protocol: MemoryBus] */
         port in SysmlPackageAstInputPort : String {
             flow in SysmlPackageAstInputPort_flow : String;
         }
-        doc /* Emits deterministic `SpecSuiteBundle` Markdown specifications across `docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/`. [protocol: AtomicFsWrite] */
+        doc /* Emits deterministic SpecSuiteBundle Markdown specifications across docs/epics/, docs/features/, docs/user-stories/, and docs/use-cases/. [protocol: AtomicFsWrite] */
         port out MarkdownSpecSuiteOutputPort : String {
             flow out MarkdownSpecSuiteOutputPort_flow : String;
         }
-        doc /* Emits `IcdDocumentPair` (`ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`) under `docs/interfaces/`. [protocol: AtomicFsWrite] */
+        doc /* Emits IcdDocumentPair (ICD_01_SYSTEM_INTERFACE_MATRIX.md and ICD_02_MASTER_SIGNAL_DICTIONARY.md) under docs/interfaces/. [protocol: AtomicFsWrite] */
         port out IcdMatrixArtifactPort : String {
             flow out IcdMatrixArtifactPort_flow : String;
         }
-        doc /* Emits `WbsExportBundle` (`WBS_01`..`WBS_03` Markdown artifacts and RFC 4180 CSV / JSON AST exports) under `docs/management/`. [protocol: AtomicFsWrite] */
+        doc /* Emits WbsExportBundle (WBS_01..WBS_03 Markdown artifacts and RFC 4180 CSV / JSON AST exports) under docs/management/. [protocol: AtomicFsWrite] */
         port out WbsEnterpriseExportPort : String {
             flow out WbsEnterpriseExportPort_flow : String;
         }
     }
-    doc /* Maximum deterministic execution bound for `--emit-icd` interface matrix and signal dictionary compilation. [unit: ms] */
+    doc /* Maximum deterministic execution bound for --emit-icd interface matrix and signal dictionary compilation. [unit: ms] */
     part def LogicalIcdMatrixCompiler {
         attribute maxIcdLatencyMs : Integer = 10;
-        doc /* Orders all `PartDef` matrix axes and `ConnectionDef` channels via `BTreeMap` deterministic traversal. [unit: flag] */
+        doc /* Orders all PartDef matrix axes and ConnectionDef channels via BTreeMap deterministic traversal. [unit: flag] */
         attribute lexicographicalSort : Boolean = true;
-        doc /* Receives `PartDef`, `PortDef`, `ConnectionDef`, `FlowDef`, and `ItemDef` AST nodes. [protocol: MemoryBus] */
+        doc /* Receives PartDef, PortDef, ConnectionDef, FlowDef, and ItemDef AST nodes. [protocol: MemoryBus] */
         port in interconnectAstInPort : String {
             flow in interconnectAstInPort_flow : String;
         }
-        doc /* Emits `ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`. [protocol: AtomicFsWrite] */
+        doc /* Emits ICD_01_SYSTEM_INTERFACE_MATRIX.md and ICD_02_MASTER_SIGNAL_DICTIONARY.md. [protocol: AtomicFsWrite] */
         port out icdMarkdownOutPort : String {
             flow out icdMarkdownOutPort_flow : String;
         }
@@ -200,13 +200,13 @@ package BP_04_Deterministic_Specification_ICD_and_WBS_Forward_Compiler_Blueprint
     doc /* Canonical 4-level MIL-STD-881E decomposition depth (System, Subsystem, Work Package, Deliverable Task). [unit: levels] */
     part def MilStd881eWbsExporter {
         attribute wbsHierarchyDepth : Integer = 4;
-        doc /* Maximum deterministic execution bound for `--emit-wbs` Markdown and CSV/JSON export generation. [unit: ms] */
+        doc /* Maximum deterministic execution bound for --emit-wbs Markdown and CSV/JSON export generation. [unit: ms] */
         attribute maxWbsLatencyMs : Integer = 15;
-        doc /* Receives `PackageDef` AST hierarchy and synchronized `docs/` specification frontmatter metadata. [protocol: MemoryBus] */
+        doc /* Receives PackageDef AST hierarchy and synchronized docs/ specification frontmatter metadata. [protocol: MemoryBus] */
         port in wbsAstMetadataInPort : String {
             flow in wbsAstMetadataInPort_flow : String;
         }
-        doc /* Emits `WBS_01`..`WBS_03` Markdown registers and enterprise CSV/JSON AST exports. [protocol: AtomicFsWrite] */
+        doc /* Emits WBS_01..WBS_03 Markdown registers and enterprise CSV/JSON AST exports. [protocol: AtomicFsWrite] */
         port out wbsArtifactsOutPort : String {
             flow out wbsArtifactsOutPort_flow : String;
         }

@@ -34,7 +34,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use compile_sysml::sync::forward::{forward_sync_sysml_to_specs, ForwardSyncOptions};
+use compile_sysml::projections::forward::{forward_sync_sysml_to_specs, ForwardSyncOptions};
 use deap_core::sysml_cst::{
     ActionDef, AttributeDef, ConstraintDef, InteractionDef, PackageDef, PartDef, PortDef,
     RequirementDef, StateDef, TransitionDef,

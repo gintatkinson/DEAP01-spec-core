@@ -19,7 +19,7 @@
 //!
 //! ## 5. Algorithmic Complexity Bounds
 //! - Time Complexity: $O(1)$ module linkage; runtime complexity is bounded by the delegated
-//!   `assembler`, `params`, `sanitize`, and `toc` submodules ($O(N)$ in input byte length).
+//!   `cmark_assembler` and `toc` submodules ($O(N)$ in input byte length).
 //! - Space Complexity: $O(1)$ module overhead.
 //!
 //! ## 6. Failure Modes & Fault Tolerance
@@ -27,27 +27,34 @@
 //!   `Result` values without silent truncation or panics.
 //!
 //! ## 7. Realization & Traceability
-//! Realises: [REQ-ASSEMBLE-CONOPS-LIB], [DO-330-TQL-4-CONOPS-LIB]
+//! Realises: [REQ-ASSEMBLE-CONOPS-LIB], [DO-330-TQL-4-CONOPS-LIB] [FLS: fls_assemble_conops_lib]
 
-pub mod assembler;
-pub mod params;
-pub mod sanitize;
+pub mod cmark_assembler;
 pub mod toc;
 
-pub use assembler::{
-    assemble_conops, assemble_document, path_relative_from, relativize_markdown_links,
-    validate_unit_integrity, CANONICAL_CONOPS_UNITS, CANONICAL_MISSION_INTENT_UNITS,
+pub use cmark_assembler as assembler;
+pub use cmark_assembler as params;
+pub use cmark_assembler as sanitize;
+pub use cmark_assembler::{
+    allowed_envelopes, assemble_conops, assemble_conops_master, assemble_document,
+    bind_parameters, classify_domain_token, classify_performer_token, emit_lossless_markdown,
+    extract_subsystem_parts, extract_subsystem_parts_from_interface_schema,
+    extract_subsystem_parts_from_json, extract_subsystem_parts_from_markdown,
+    extract_subsystem_parts_from_sysml, extract_subsystem_parts_from_yaml, find_line_number,
+    find_raw_tokens, normalize_line_endings, parse_subsystem_ports_from_body, path_relative_from,
+    relativize_markdown_links, required_attributes, sanitize_level_1b_operational_text,
+    validate_node_envelopes, validate_part_envelopes, validate_process_layer,
+    validate_unit_integrity, wrap_mermaid_label, write_spec_file_atomic, Allocation,
+    CompilerError, ConopsUnitDoc, Domain, Envelope, LifecycleType, M2Type, MetamodelNode,
+    PerformerKind, Performers, ProcessNode, SubsystemPart, SubsystemPort,
+    SysMLParameterBindingEngine, ViewpointFamily, CANONICAL_CONOPS_UNITS,
+    CANONICAL_MISSION_INTENT_UNITS, DEFAULT_CONOPS_PARAMS,
 };
-pub use params::{
-    bind_parameters, extract_subsystem_parts, extract_subsystem_parts_from_sysml, find_line_number,
-    SubsystemPart, SubsystemPort, SysMLParameterBindingEngine, DEFAULT_CONOPS_PARAMS,
-};
-pub use sanitize::{sanitize_level_1b_operational_text, wrap_mermaid_label};
-pub use toc::{extract_headings, generate_table_of_contents, slugify, verify_markdown_links};
 pub use deap_core::markdown_ast::{
     format_markdown_cmark, parse_markdown_ast, MarkdownCodeBlockAst, MarkdownSectionAst,
     MarkdownTableAst, ParsedMarkdownAst,
 };
+pub use toc::{extract_headings, generate_table_of_contents, slugify, verify_markdown_links};
 
 /// [DOC-TIER: A] Parses and formats ConOps Markdown via the shared CommonMark AST adapter (`[REQ-0401]`, `[REQ-0402]`).
 ///
@@ -74,7 +81,7 @@ pub use deap_core::markdown_ast::{
 /// - Resource: Bounds stack and heap allocations within `parse_and_format_conops_markdown` (`ASSEMBLE-CONOPS-LIB`).
 ///
 /// ## 7. Realization & Traceability
-/// Realises: [REQ-0401], [REQ-0402] | SysML v2: ActionDef(parse_and_format_conops_markdown)
+/// Realises: [REQ-0401], [REQ-0402] [FLS: fls_assemble_conops_lib] | SysML v2: ActionDef(parse_and_format_conops_markdown)
 pub fn parse_and_format_conops_markdown(
     source: &str,
 ) -> Result<(ParsedMarkdownAst, String), String> {

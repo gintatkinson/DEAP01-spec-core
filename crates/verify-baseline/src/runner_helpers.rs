@@ -333,7 +333,7 @@ pub(crate) fn run_post_baseline_spec_audit(
             if !summary.passed {
                 let finding_msgs: Vec<String> =
                     summary.findings.iter().map(|f| f.to_string()).collect();
-                if is_strict {
+                if is_strict || options.only.is_some() {
                     write_defect_dossier(
                         repo_root,
                         "Specification Quality & Coverage Audit",

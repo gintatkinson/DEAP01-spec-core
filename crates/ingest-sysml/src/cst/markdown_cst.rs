@@ -4,8 +4,7 @@
 //! Realises: [REQ-0021] [REQ-0032] [REQ-SYSML-INGEST-MD]
 
 use crate::table::{
-    classify_table, clean_cell_value, extract_unit_from_header_or_val, is_table_delimiter_cell,
-    normalize_col, sanitize_identifier, MarkdownTable, TableType, NON_COMPONENT_SECTION_KEYWORDS,
+    classify_table, sanitize_identifier, TableType, NON_COMPONENT_SECTION_KEYWORDS,
 };
 use deap_core::{ConnectionDef, PackageDef, PartDef};
 use std::collections::BTreeMap;
@@ -109,105 +108,6 @@ fn resolve_h2_to_h4_target(raw_header: &str, hash_count: usize, explicit_comps: 
         || NON_COMPONENT_SECTION_KEYWORDS.iter().any(|&kw| padded_key.contains(&format!(" {kw} ")))
         || ["operational context", "executive summary", "command and control", "use cases", "operational use cases", "mathematical formulations", "normative model", "acceptance criteria"].iter().any(|&kw| clean_key.contains(kw)));
     if is_ac || is_func { None } else if explicit_comp || !explicit_comps { Some(comp_cand) } else if hash_count <= 2 { None } else { prev }
-}
-
-/// Accumulates Markdown section prose and tables during structural parsing. Realises: [REQ-INGEST-MARKDOWN]
-#[derive(Default)]
-struct SectionBuilder {
-    sec_header: String,
-    component_target: Option<String>,
-    sec_doc: Vec<String>,
-    tables: Vec<MarkdownTable>,
-    pending_table: Option<MarkdownTable>,
-    sections: Vec<ParsedSection>,
-}
-
-impl SectionBuilder {
-    /// Initializes a `MarkdownTable` with normalized headers and extracted header units. Realises: [REQ-INGEST-MARKDOWN]
-    fn new_table(raw_h: Vec<String>) -> MarkdownTable {
-        MarkdownTable {
-            normalized_headers: raw_h.iter().map(|c| normalize_col(c)).collect(),
-            units: raw_h.iter().map(|c| extract_unit_from_header_or_val(c).1).collect(),
-            raw_headers: raw_h, rows: Vec::new(),
-        }
-    }
-
-    /// Commits a non-empty pending table into the current section's table list. Realises: [REQ-INGEST-MARKDOWN]
-    fn flush_table(&mut self) {
-        if let Some(t) = self.pending_table.take().filter(|t| !t.raw_headers.is_empty() && !t.rows.is_empty()) {
-            self.tables.push(t);
-        }
-    }
-
-    /// Commits the current accumulated section prose and tables into `self.sections`. Realises: [REQ-INGEST-MARKDOWN]
-    fn flush_section(&mut self) {
-        self.flush_table();
-        if !self.sec_header.is_empty() || !self.tables.is_empty() || !self.sec_doc.is_empty() {
-            self.sections.push(ParsedSection {
-                component_target: self.component_target.clone(),
-                section_doc: self.sec_doc.join(" ").trim().replace("*/", "* /").replace("/*", "/ *"),
-                tables: std::mem::take(&mut self.tables),
-            });
-        }
-        self.sec_doc.clear();
-    }
-
-    /// Processes an H1-H4 Markdown heading line and updates section/component context. Realises: [REQ-INGEST-MARKDOWN]
-    fn handle_heading(&mut self, line_str: &str, pkg_name: &mut String, explicit_comps: bool) -> bool {
-        let hash_count = line_str.chars().take_while(|&c| c == '#').count();
-        let after_hashes = line_str.get(hash_count..).unwrap_or("");
-        if !after_hashes.starts_with(char::is_whitespace) || after_hashes.trim().is_empty() {
-            return false;
-        }
-        let raw_hdr = after_hashes.trim();
-        if hash_count == 1 {
-            self.flush_section();
-            let clean = strip_pkg_words(raw_hdr);
-            let cand = if clean.is_empty() { raw_hdr } else { &clean };
-            if !pkg_name.starts_with("BP_") {
-                *pkg_name = sanitize_identifier(cand, pkg_name);
-            }
-            self.sec_header = raw_hdr.to_string();
-            self.component_target = None;
-            return true;
-        }
-        if (2..=4).contains(&hash_count) {
-            self.flush_section();
-            self.sec_header = raw_hdr.to_string();
-            self.component_target = resolve_h2_to_h4_target(raw_hdr, hash_count, explicit_comps, self.component_target.take());
-            return true;
-        }
-        false
-    }
-
-    /// Parses a pipe-delimited Markdown table header, delimiter, or data row. Realises: [REQ-INGEST-MARKDOWN]
-    fn process_table_line(&mut self, line_str: &str, next_line: Option<&str>) -> usize {
-        if !line_str.contains('|') {
-            return 0;
-        }
-        let cells: Vec<String> = line_str.trim_matches('|').split('|').map(|c| c.trim().to_string()).collect();
-        let is_delim = !cells.is_empty() && cells.iter().all(|c| is_table_delimiter_cell(c));
-        if is_delim && self.pending_table.is_none() {
-            if let Some(hdr) = self.sec_doc.pop() {
-                self.pending_table = Some(Self::new_table(hdr.trim_matches('|').split('|').map(|c| c.trim().to_string()).collect()));
-                return 1;
-            }
-        } else if is_delim && self.pending_table.is_some() {
-            return 1;
-        } else if let Some(ref mut tbl) = self.pending_table {
-            let row = tbl.normalized_headers.iter().enumerate().map(|(idx, col)| (col.clone(), cells.get(idx).map_or_else(String::new, |c| clean_cell_value(c)))).collect();
-            tbl.rows.push(row);
-            return 1;
-        } else if next_line.is_some_and(|nl| nl.contains('|')) {
-            let next_cells: Vec<&str> = next_line.unwrap_or("").trim().trim_matches('|').split('|').map(str::trim).collect();
-            if !next_cells.is_empty() && next_cells.iter().all(|c| is_table_delimiter_cell(c)) {
-                self.flush_table();
-                self.pending_table = Some(Self::new_table(cells));
-                return 2;
-            }
-        }
-        0
-    }
 }
 
 /// Translates Level 0 OEM Markdown and Blueprint specifications into SysML v2 `PackageDef` ASTs.
@@ -323,53 +223,19 @@ impl MarkdownTranslator {
         }
     }
 
-    /// Internal structure parser decomposing Markdown headings, prose, and tables via `deap_core::markdown_ast`.
-    /// Realises: [REQ-SYSML-INGEST-MD/parse_markdown_structure]
+    /// Internal structure parser decomposing Markdown headings, prose, and tables via `cmark_ingestor`.
+    /// Realises: [REQ-SYSML-INGEST-MD/parse_markdown_structure], [REQ-0604]
     fn parse_markdown_structure(
         &self,
         content: &str,
         default_name: &str,
         frontmatter: &Frontmatter,
     ) -> (String, Vec<ParsedSection>) {
-        let ast = deap_core::markdown_ast::parse_markdown_ast(content);
-        let lines: Vec<&str> = content.lines().collect();
-        let mut pkg_name = frontmatter.title.as_deref().map_or_else(
-            || sanitize_identifier(default_name, "Markdown_Package"),
-            |t| sanitize_identifier(t, default_name),
-        );
-        let mut sb = SectionBuilder {
-            sections: Vec::with_capacity(ast.sections.len().max(1)),
-            ..Default::default()
-        };
-        let explicit_comps = ast.sections.iter().any(|s| (2..=4).contains(&usize::from(s.level)) && parse_comp_heading(&s.heading).0);
-
-        let (mut i, mut in_code_block) = (0, false);
-        while i < lines.len() {
-            let line_str = lines.get(i).copied().unwrap_or("").trim();
-            if line_str.starts_with("```") || line_str.starts_with("~~~") {
-                sb.flush_table();
-                in_code_block = !in_code_block;
-                i += 1;
-                continue;
-            }
-            if in_code_block || sb.handle_heading(line_str, &mut pkg_name, explicit_comps) {
-                i += 1;
-                continue;
-            }
-            let step = sb.process_table_line(line_str, lines.get(i + 1).copied());
-            if step > 0 {
-                i += step;
-                continue;
-            }
-            if sb.pending_table.is_some() && (!line_str.contains('|') || line_str.is_empty()) {
-                sb.flush_table();
-            }
-            if !line_str.is_empty() && !line_str.starts_with("<!--") && !line_str.starts_with("```") {
-                sb.sec_doc.push(line_str.to_string());
-            }
-            i += 1;
-        }
-        sb.flush_section();
-        (pkg_name, sb.sections)
+        crate::cmark_ingestor::parse_cmark_markdown_structure(
+            content,
+            default_name,
+            frontmatter,
+            resolve_h2_to_h4_target,
+        )
     }
 }

@@ -198,7 +198,7 @@ fn assert_issue_698_matlab_assertions(rta_md: &str, stpa_md: &str, sldv_m: &str)
 /// * Propagates missing-key errors or panics with diagnostic context on operator lowering failure.
 pub fn run_issue_698_katex_and_matlab_lowering_checks() -> Result<(), Box<dyn std::error::Error>> {
     let pkg = build_issue_698_safety_lowering_pkg();
-    let suite = compile_sysml::stpa::safety_suite::transpile_safety_suite(&pkg, None);
+    let suite = compile_sysml::projections::stpa::safety_suite::transpile_safety_suite(&pkg, None);
     let rta_md = suite
         .get("07_RTA_ARCHITECTURE.md")
         .ok_or("Missing 07_RTA_ARCHITECTURE.md in transpiled safety suite")?;

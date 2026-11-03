@@ -8,6 +8,7 @@
 pub mod checklist;
 mod checklist_hierarchy;
 mod checklist_placeholders;
+pub mod cmark_reconciler;
 pub mod create_issue;
 mod error;
 pub mod frontmatter;
@@ -19,6 +20,11 @@ pub mod tracker;
 mod tracker_github;
 mod tracker_normalize;
 
+pub use self::cmark_reconciler::{
+    count_total_epics_inclusive, emit_checklist_section_cmark, parse_frontmatter_via_cmark,
+    reconcile_checklists_via_cmark, reconcile_markdown_backlog, update_frontmatter_fields_via_cmark,
+    ReconcileReceipt,
+};
 pub use self::error::{
     collect_spec_files, write_atomic, ReconcileError, ReconcileOptions, ReconcileSummary,
 };

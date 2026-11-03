@@ -315,6 +315,8 @@ dependencies = [
  "logos",
  "prettyplease",
  "proc-macro2",
+ "pulldown-cmark",
+ "pulldown-cmark-to-cmark",
  "quote",
  "ra_ap_syntax",
  "ra_ap_text_edit",
@@ -323,6 +325,7 @@ dependencies = [
  "serde",
  "serde_json",
  "syn 2.0.119",
+ "toml_edit",
  "walkdir",
 ]
 

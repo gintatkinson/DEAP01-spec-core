@@ -209,6 +209,7 @@ pub(crate) fn run_checks_23_to_27(
     repo_root: &Path,
     effective_allow_missing: bool,
     is_strict: bool,
+    only_filter: Option<&str>,
 ) -> Result<(), ()> {
     match check_factual_grounding(repo_root, effective_allow_missing, is_strict) {
         Ok(ParityOutcome::PendingOrClean) => println!("Success: Check 23 verified (SysML model pending or landing zone clean)."),
@@ -250,7 +251,12 @@ pub(crate) fn run_checks_23_to_27(
         }
     }
 
-    match check_standards_measurement(repo_root, effective_allow_missing, is_strict) {
+    match crate::cmark_gates::parity::check_standards_measurement_filtered(
+        repo_root,
+        effective_allow_missing,
+        is_strict,
+        only_filter,
+    ) {
         Ok(_) => {
             println!("Success: Check 26 verified (Standards & SI 7D Parameter Metrology passed -- all parameter dimensions, units, and SDO baselines valid).");
         }

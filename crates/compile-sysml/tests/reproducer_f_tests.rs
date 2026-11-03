@@ -158,7 +158,7 @@ fn assert_issue_697_fixture_b_minimal() {
         ..Default::default()
     };
 
-    let minimal_ucas = compile_sysml::stpa::uca::expand_cartesian_stpa(&minimal_pkg);
+    let minimal_ucas = compile_sysml::projections::stpa::uca::expand_cartesian_stpa(&minimal_pkg);
     assert!(
         !minimal_ucas.is_empty(),
         "expand_cartesian_stpa on minimal PackageDef with 1 ActionDef must return non-empty UCAs"
@@ -177,7 +177,7 @@ fn assert_issue_697_fixture_b_minimal() {
     }
 
     let minimal_suite =
-        compile_sysml::stpa::safety_suite::transpile_safety_suite(&minimal_pkg, None);
+        compile_sysml::projections::stpa::safety_suite::transpile_safety_suite(&minimal_pkg, None);
     assert_eq!(minimal_suite.len(), 10);
     for (artifact_name, content) in &minimal_suite {
         assert!(
@@ -204,7 +204,7 @@ fn assert_issue_697_fixture_b_minimal() {
 /// * Propagates missing-key errors or panics with diagnostic context on placeholder regression.
 pub fn run_issue_697_uca_loss_and_hazard_log_checks() -> Result<(), Box<dyn std::error::Error>> {
     let pkg = build_issue_697_fixture_a_pkg();
-    let ucas = compile_sysml::stpa::uca::expand_cartesian_stpa(&pkg);
+    let ucas = compile_sysml::projections::stpa::uca::expand_cartesian_stpa(&pkg);
     assert_eq!(
         ucas.len(),
         8,
@@ -228,7 +228,7 @@ pub fn run_issue_697_uca_loss_and_hazard_log_checks() -> Result<(), Box<dyn std:
         );
     }
 
-    let suite = compile_sysml::stpa::safety_suite::transpile_safety_suite(&pkg, None);
+    let suite = compile_sysml::projections::stpa::safety_suite::transpile_safety_suite(&pkg, None);
     assert_issue_697_fixture_a_suite(&suite)?;
     assert_issue_697_fixture_b_minimal();
     Ok(())
@@ -255,7 +255,7 @@ pub fn run_issue_697_upstream_model_zero_pending_checks() -> Result<(), Box<dyn 
     let pkg = compile_sysml::parse_sysml(&model_src)
         .map_err(|err| format!("Failed to parse {}: {:?}", model_path.display(), err))?;
 
-    let suite = compile_sysml::stpa::safety_suite::transpile_safety_suite(&pkg, None);
+    let suite = compile_sysml::projections::stpa::safety_suite::transpile_safety_suite(&pkg, None);
     assert_eq!(
         suite.len(),
         10,

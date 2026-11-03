@@ -26,6 +26,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-SYSML-INGEST-LIB], [DO-330-TQL-4-INGEST-LIB]
 
+pub mod cmark_ingestor;
 pub mod cst;
 pub mod detectors;
 pub mod digest;
@@ -54,7 +55,7 @@ impl IngestExitCode {
 
 /// Translates a single Markdown requirement document into a canonical SysML v2 `PackageDef`. Realises: [REQ-SYSML-INGEST-CORE/translate_markdown]
 pub fn translate_markdown(content: &str, file_name: &str) -> Result<PackageDef, String> {
-    cst::markdown_cst::MarkdownTranslator::new().translate(content, file_name)
+    cmark_ingestor::ingest_markdown_via_cmark(content, file_name)
 }
 
 /// Translates a single YANG model into a canonical SysML v2 `PackageDef`. Realises: [REQ-SYSML-INGEST-CORE/translate_yang]

@@ -338,6 +338,13 @@ fn scan_blueprint_crates_tokens(repo_root: &Path, bp_rel: &str, text: &str, viol
             }
             let is_retired_legacy = path_part == "crates/deap-core/src/source_ast.rs"
                 || path_part == "crates/deap-core/src/workspace.rs"
+                || path_part == "crates/deap-core/src/markdown/ast.rs"
+                || path_part == "crates/deap-core/src/markdown_tests.rs"
+                || path_part.starts_with("crates/compile-sysml/src/sync/")
+                || path_part.starts_with("crates/compile-sysml/src/stpa/")
+                || path_part.starts_with("crates/assemble-conops/src/params/")
+                || path_part.starts_with("crates/assemble-conops/src/sanitize/")
+                || path_part.starts_with("crates/assemble-conops/src/assembler/")
                 || path_part == "crates/verify-baseline/src/checks/structural.rs"
                 || path_part.starts_with("crates/verify-baseline/src/checks/struct_check_");
             if is_retired_legacy {

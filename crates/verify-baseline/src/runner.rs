@@ -86,7 +86,12 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
 
     run_checks_10_to_16(&repo_root)?;
     run_checks_17_to_22(&repo_root, effective_allow_missing, is_strict)?;
-    run_checks_23_to_27(&repo_root, effective_allow_missing, is_strict)?;
+    run_checks_23_to_27(
+        &repo_root,
+        effective_allow_missing,
+        is_strict,
+        options.only.as_deref(),
+    )?;
     run_checks_28_to_30(&repo_root, effective_allow_missing, is_strict)?;
     run_checks_30a_to_30c(&repo_root, effective_allow_missing, is_strict)?;
     run_checks_31_to_35(&repo_root)?;

@@ -1,4 +1,4 @@
-//! CLI binary for `assemble-conops` -- Deterministic ConOps & Mission Intent Assembly Engine.
+//! CLI binary for `assemble-conops` -- Deterministic ConOps & Mission Intent Assembly Engine. [DOC-TIER: A]
 //!
 //! ## 1. Safety Intent & Regulatory Scope
 //! Provides the command-line entry point for deterministic assembly and verification of
@@ -14,7 +14,7 @@
 //!   `assemble_conops` returns `Ok(true)`, and returns `ExitCode::FAILURE` on `Ok(false)` or `Err`.
 //!
 //! ## 3. Preconditions
-//! - Invoked with valid CLI arguments parsed by `clap::Parser`.
+//! - Invoked with valid CLI arguments parsed by `clap::Command`.
 //! - Target workspace or explicit `--input-dir` / `--output-dir` paths reside on an accessible
 //!   local filesystem.
 //!
@@ -37,7 +37,7 @@
 //!   deterministically to `ExitCode::FAILURE` without panicking.
 //!
 //! ## 7. Realization & Traceability
-//! Realises: [REQ-ASSEMBLE-CONOPS-CLI], [DO-330-TQL-4-CONOPS-CLI]
+//! Realises: [REQ-ASSEMBLE-CONOPS-CLI], [DO-330-TQL-4-CONOPS-CLI] [FLS: fls_assemble_conops_cli]
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -47,7 +47,7 @@ use clap::{Arg, ArgAction, Command};
 
 use assemble_conops::assemble_conops;
 
-/// Executes deterministic struct `Args` within `crates/assemble-conops/src/main.rs`.
+/// [DOC-TIER: A] Executes deterministic struct `Args` within `crates/assemble-conops/src/main.rs`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `Args` in `crates/assemble-conops/src/main.rs`.
@@ -72,55 +72,36 @@ use assemble_conops::assemble_conops;
 /// - Resource: Bounds stack and heap allocations within `Args` (`ASSEMBLE-CONOPS-MAIN`).
 ///
 /// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-MAIN-ARGS] | SysML v2: PartDef(Args)
+/// Realises: [REQ-ASSEMBLE-CONOPS-MAIN-ARGS] [FLS: fls_assemble_conops_cli] | SysML v2: PartDef(Args)
 #[derive(Debug)]
 struct Args {
-    /// Target workspace or project directory (optional positional argument).
+    /// Target workspace or project directory (`[REQ-ASSEMBLE-CONOPS-MAIN-ARGS]`, `[FLS: fls_assemble_conops_cli]`).
     workspace: Option<PathBuf>,
 
-    /// Target workspace or project directory.
+    /// Target workspace or project directory flag (`[REQ-ASSEMBLE-CONOPS-MAIN-ARGS]`, `[FLS: fls_assemble_conops_cli]`).
     workspace_flag: Option<PathBuf>,
 
-    /// Input directory containing 'conops/' and 'mission_intent/' unit markdown directories (default: docs/conops/units).
+    /// Input directory containing 'conops/' and 'mission_intent/' unit markdown directories (`[REQ-ASSEMBLE-CONOPS-MAIN-ARGS]`, `[FLS: fls_assemble_conops_cli]`).
     input_dir: Option<PathBuf>,
 
-    /// Output directory where assembled CONOPS.md and MISSION_INTENT.md are written (default: docs/conops).
+    /// Output directory where assembled CONOPS.md and MISSION_INTENT.md are written (`[REQ-ASSEMBLE-CONOPS-MAIN-ARGS]`, `[FLS: fls_assemble_conops_cli]`).
     output_dir: Option<PathBuf>,
 
-    /// Verify unit integrity and link resolution without writing output files.
+    /// Verify unit integrity and link resolution without writing output files (`[REQ-ASSEMBLE-CONOPS-MAIN-ARGS]`, `[FLS: fls_assemble_conops_cli]`).
     verify: bool,
 
-    /// Path to JSON parameter dictionary or schema file (auto-detects .pipeline/schema-digest.json if not specified).
+    /// Path to JSON parameter dictionary or schema file (`[REQ-ASSEMBLE-CONOPS-MAIN-ARGS]`, `[FLS: fls_assemble_conops_cli]`).
     params: Option<PathBuf>,
 
-    /// Target operational domain. Auto-detected if not specified.
+    /// Target operational domain (`[REQ-ASSEMBLE-CONOPS-MAIN-ARGS]`, `[FLS: fls_assemble_conops_cli]`).
     domain: Option<String>,
 }
 
 impl Args {
-    /// Parses process command-line arguments into [`Args`] using explicit `clap::Command` builders.
-    ///
-    /// ## 1. Safety Intent & Regulatory Scope
-    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `Args::parse`.
-    ///
-    /// ## 2. Invariants & Mathematical Properties
-    /// - Constructs the CLI grammar without `clap_derive` macro lint-override emissions (`E0453`).
-    ///
-    /// ## 3. Preconditions
-    /// - Process environment supplies valid OS argument tokens via `std::env::args_os`.
-    ///
-    /// ## 4. Postconditions
-    /// - Returns a populated [`Args`] instance.
-    ///
-    /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: $O(A)$ where $A$ is the number of CLI argument tokens.
-    /// - Space Complexity: $O(A)$ for parsed `ArgMatches` and owned [`Args`] fields.
-    ///
-    /// ## 6. Failure Modes & Fault Tolerance
-    /// - Invalid flags are intercepted by `clap::Command::get_matches`, emitting usage diagnostics and exiting non-zero.
-    ///
-    /// ## 7. Realization & Traceability
-    /// Realises: [REQ-ASSEMBLE-CONOPS-MAIN-ARGS]
+    /// [DOC-TIER: A] Parses process command-line arguments into [`Args`] using explicit `clap::Command` builders.
+    /// Safety & Traceability: Conforms to DO-178C Level A / DO-330 TQL-4; Realises: [REQ-ASSEMBLE-CONOPS-MAIN-ARGS] [FLS: fls_assemble_conops_cli]
+    /// Contract: Constructs the CLI grammar via `clap::Command` and returns a populated [`Args`] instance.
+    /// Bounds & Faults: O(A) time and space over CLI argument tokens; invalid flags exit non-zero via clap.
     fn parse() -> Self {
         let mut matches = Command::new("assemble-conops")
             .author("Gint Atkinson")
@@ -171,35 +152,10 @@ impl Args {
     }
 }
 
-/// Inspects whether a candidate filesystem path is a valid ConOps unit root directory.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Prevents silent misrouting of ConOps assembly inputs by verifying that a candidate path
-/// either directly contains `conops/` or `mission_intent/` subdirectories or houses a domain-scoped
-/// child directory containing `conops/` under DO-330 TQL-4 tool qualification controls.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Pure Structural Predicate: Returns `true` if and only if `cand` is an existing directory
-///   satisfying `is_dir(cand/conops) || is_dir(cand/mission_intent) || exists d in read_dir(cand): is_dir(d/conops)`.
-/// - Side-Effect Free: Performs read-only filesystem metadata inspection without mutating state.
-///
-/// ## 3. Preconditions
-/// - `cand` references a valid, null-free OS path slice (`&Path`).
-///
-/// ## 4. Postconditions
-/// - Returns `true` when `cand` is a structurally valid ConOps input root; returns `false`
-///   otherwise.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(E)$ where $E$ is the number of immediate directory entries in `cand`.
-/// - Space Complexity: $O(1)$ auxiliary memory beyond a single `PathBuf` per directory entry.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-existent paths, permission denials on `fs::read_dir`, or corrupted directory entries
-///   are gracefully filtered and yield `false` without panicking.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-CLI-DISCOVERY], [DO-330-TQL-4-CONOPS-CLI]
+/// [DOC-TIER: A] Inspects whether a candidate filesystem path is a valid ConOps unit root directory.
+/// Safety & Traceability: Conforms to DO-178C Level A / DO-330 TQL-4; Realises: [REQ-ASSEMBLE-CONOPS-CLI-DISCOVERY] [FLS: fls_assemble_conops_cli]
+/// Contract: Returns `true` if `cand` contains `conops/`, `mission_intent/`, or a child directory containing `conops/`.
+/// Bounds & Faults: O(E) time over immediate directory entries; unreadable entries are skipped without panicking.
 fn check_candidate_input_dir(cand: &Path) -> bool {
     if !cand.is_dir() {
         return false;
@@ -208,7 +164,8 @@ fn check_candidate_input_dir(cand: &Path) -> bool {
         return true;
     }
     if let Ok(entries) = fs::read_dir(cand) {
-        for entry in entries.filter_map(|e| e.ok()) {
+        for entry_res in entries {
+            let Ok(entry) = entry_res else { continue };
             let path = entry.path();
             if path.is_dir() && path.join("conops").is_dir() {
                 return true;
@@ -218,41 +175,10 @@ fn check_candidate_input_dir(cand: &Path) -> bool {
     false
 }
 
-/// Executes the `assemble-conops` command-line interface and maps outcomes to process exit codes.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Serves as the deterministic CLI execution harness for `assemble_conops`, ensuring that
-/// workspace path resolution, input/output directory binding, and verification gates return
-/// unambiguous POSIX exit statuses suitable for CI/CD and DO-330 TQL-4 baseline gates.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Explicit Flag Precedence: `--workspace` takes precedence over positional `WORKSPACE`, and
-///   explicit `--input-dir` / `--output-dir` flags bypass heuristic candidate probing.
-/// - Total Exit Mapping: Every execution path terminates in either `ExitCode::SUCCESS` or
-///   `ExitCode::FAILURE` with zero unhandled exceptions.
-///
-/// ## 3. Preconditions
-/// - Process environment supplies valid command-line arguments compatible with `Args`.
-///
-/// ## 4. Postconditions
-/// - Returns `ExitCode::SUCCESS` if and only if `assemble_conops` completes with `Ok(true)`.
-/// - Returns `ExitCode::FAILURE` if `assemble_conops` returns `Ok(false)` or `Err(err)`, printing
-///   diagnostic details to `stderr` on error.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(D + N \log N)$ where $D$ is candidate directory probing cost and
-///   $N \log N$ is the downstream unit sorting and assembly cost.
-/// - Space Complexity: $O(M)$ where $M$ is the aggregate byte size of loaded ConOps and Mission
-///   Intent units.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - If canonicalization of the workspace path fails, falls back deterministically to the
-///   un-canonicalized path.
-/// - If current working directory retrieval fails, defaults `ws_ref` to `.`.
-/// - All library-level errors are caught, logged to `stderr`, and converted to `ExitCode::FAILURE`.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-ASSEMBLE-CONOPS-CLI], [DO-330-TQL-4-CONOPS-CLI]
+/// [DOC-TIER: A] Executes the `assemble-conops` command-line interface and maps outcomes to process exit codes.
+/// Safety & Traceability: Conforms to DO-178C Level A / DO-330 TQL-4; Realises: [REQ-ASSEMBLE-CONOPS-CLI] [FLS: fls_assemble_conops_cli]
+/// Contract: Resolves workspace/input/output directories, invokes `assemble_conops`, and returns `ExitCode::SUCCESS` or `ExitCode::FAILURE`.
+/// Bounds & Faults: O(D + N log N) time; logs errors to `stderr` and exits non-zero on failure.
 fn main() -> ExitCode {
     let args = Args::parse();
 
@@ -262,7 +188,10 @@ fn main() -> ExitCode {
     let workspace: Option<PathBuf> = if let Some(ws) = target_ws {
         Some(ws.canonicalize().unwrap_or(ws))
     } else if !explicit_io {
-        std::env::current_dir().ok()
+        match std::env::current_dir() {
+            Ok(dir) => Some(dir),
+            Err(_) => None,
+        }
     } else {
         None
     };

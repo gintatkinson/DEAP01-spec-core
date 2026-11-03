@@ -234,14 +234,14 @@ fn test_upstream_blueprint_to_spec_and_github_projection_zero_defects(
     let schema_text = fs::read_to_string(&target_schema)?;
     let pkg = compile_sysml::parse_sysml(&schema_text)?;
 
-    let opts = compile_sysml::sync::forward::ForwardSyncOptions {
+    let opts = compile_sysml::projections::forward::ForwardSyncOptions {
         schema_path: target_schema,
         docs_dir: temp_ws.root.join("docs"),
         out_dir: Some(temp_ws.root.join("docs")),
         dry_run: false,
         force: true,
     };
-    let generated = compile_sysml::sync::forward::forward_sync_sysml_to_specs(&pkg, &opts)?;
+    let generated = compile_sysml::projections::forward::forward_sync_sysml_to_specs(&pkg, &opts)?;
     if generated.len() < 208 {
         return Err(format!("Expected at least 208 forward-synced files, got {}", generated.len()).into());
     }

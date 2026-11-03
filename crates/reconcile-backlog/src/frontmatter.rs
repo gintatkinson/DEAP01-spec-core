@@ -34,7 +34,7 @@ pub struct Frontmatter {
 
 /// Applies a parsed `(key, val)` frontmatter cell pair to `fm`.
 /// Realises: [REQ-RECONCILE-BACKLOG-FRONTMATTER-PARSE-FRONTMATTER]
-fn apply_frontmatter_cell_pair(fm: &mut Frontmatter, key_raw: &str, val_raw: &str) {
+pub(crate) fn apply_frontmatter_cell_pair(fm: &mut Frontmatter, key_raw: &str, val_raw: &str) {
     let key = clean_markdown_key(key_raw);
     let val = clean_markdown_value(val_raw);
 
@@ -76,53 +76,12 @@ fn apply_frontmatter_cell_pair(fm: &mut Frontmatter, key_raw: &str, val_raw: &st
 /// Contract: Inspects AST sections and table rows before the first H2 heading outside fenced code blocks.
 /// Bounds & Faults: Time O(N), Space O(F) where N is `content.len()` and F is frontmatter field count.
 pub fn parse_frontmatter(content: &str) -> Result<Frontmatter, ReconcileError> {
-    let ast = parse_markdown_ast(content);
-    let h2_offset = ast
-        .sections
-        .iter()
-        .find(|s| s.level == 2)
-        .map(|s| s.start_offset)
-        .unwrap_or(content.len());
-    let frontmatter_slice = content.get(..h2_offset).unwrap_or(content);
-    let code_ranges = collect_code_block_ranges(frontmatter_slice);
-
-    let mut fm = Frontmatter::default();
-    let mut byte_offset = 0usize;
-
-    for raw_line in frontmatter_slice.split('\n') {
-        let line_len = raw_line.len();
-        let trimmed = raw_line.trim();
-        if !is_offset_in_ranges(byte_offset, &code_ranges)
-            && trimmed.starts_with('|')
-            && trimmed.ends_with('|')
-        {
-            let inner = trimmed.get(1..trimmed.len().saturating_sub(1)).unwrap_or("");
-            let cells: Vec<&str> = inner.split('|').collect();
-            if let (Some(&k), Some(&v)) = (cells.first(), cells.get(1)) {
-                let is_sep = cells.iter().all(|c| {
-                    let t = c.trim();
-                    !t.is_empty() && t.chars().all(|ch| ch == '-' || ch == ':' || ch == ' ')
-                });
-                if !is_sep {
-                    apply_frontmatter_cell_pair(&mut fm, k, v);
-                }
-            }
-        }
-        byte_offset = byte_offset.saturating_add(line_len).saturating_add(1);
-    }
-
-    if fm.title.is_none() {
-        if let Some(h1) = extract_h1_title(content) {
-            fm.title = Some(h1);
-        }
-    }
-
-    Ok(fm)
+    crate::cmark_reconciler::parse_frontmatter_via_cmark(content)
 }
 
 /// Extracts the first top-level H1 (`# Title`) heading from `content` using `deap_core::markdown_ast`.
 /// Realises: [REQ-RECONCILE-BACKLOG-FRONTMATTER-EXTRACT-H1-TITLE]
-fn extract_h1_title(content: &str) -> Option<String> {
+pub(crate) fn extract_h1_title(content: &str) -> Option<String> {
     let ast = parse_markdown_ast(content);
     let h2_offset = ast
         .sections

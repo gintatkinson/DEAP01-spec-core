@@ -171,22 +171,7 @@ pub fn extract_single_signal_id(s: &str) -> Option<String> {
 /// Strict Markdown table separator row validator (`^:?-+:?$`).
 /// Realises: [REQ-TABLE-SEPARATOR-VALIDATION]
 pub fn is_table_separator_line(line: &str) -> bool {
-    let trimmed = line.trim();
-    if !trimmed.starts_with('|') {
-        return false;
-    }
-    let cols: Vec<&str> = trimmed
-        .split('|')
-        .map(|c| c.trim())
-        .filter(|c| !c.is_empty())
-        .collect();
-    if cols.is_empty() {
-        return false;
-    }
-    cols.iter().all(|col| {
-        let c_trim = col.trim_matches(':');
-        !c_trim.is_empty() && c_trim.chars().all(|ch| ch == '-')
-    })
+    crate::cmark_gates::parity::is_table_separator_line_cmark(line)
 }
 
 /// Parses Markdown table headers and rows under a section header containing `section_kw`.
@@ -195,64 +180,7 @@ pub fn parse_markdown_table_rows(
     content: &str,
     section_kw: &str,
 ) -> (Vec<String>, Vec<Vec<String>>) {
-    let mut headers = Vec::new();
-    let mut rows = Vec::new();
-    let mut in_section = false;
-    let mut in_table = false;
-    let mut header_seen = false;
-
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('#') {
-            if trimmed.to_ascii_lowercase().contains(section_kw) {
-                in_section = true;
-                in_table = false;
-                header_seen = false;
-                continue;
-            } else if in_section {
-                if !rows.is_empty() {
-                    break;
-                }
-                in_section = false;
-                in_table = false;
-                header_seen = false;
-            }
-        }
-        if !in_section {
-            continue;
-        }
-        if trimmed.starts_with('|') {
-            if is_table_separator_line(trimmed) {
-                in_table = true;
-                continue;
-            }
-            let raw_cols: Vec<&str> = trimmed.split('|').map(|c| c.trim()).collect();
-            let col_count = raw_cols.len();
-            let start = usize::from(trimmed.starts_with('|') && col_count > 1);
-            let end = if trimmed.ends_with('|') && col_count > start {
-                col_count.saturating_sub(1)
-            } else {
-                col_count
-            };
-            let row_cols: Vec<String> = raw_cols
-                .get(start..end)
-                .unwrap_or(&[])
-                .iter()
-                .map(|&s| s.to_string())
-                .collect();
-            if !header_seen {
-                headers = row_cols.iter().map(|s| s.to_ascii_lowercase()).collect();
-                header_seen = true;
-                continue;
-            }
-            if in_table {
-                rows.push(row_cols);
-            }
-        } else if in_table && trimmed.is_empty() {
-            break;
-        }
-    }
-    (headers, rows)
+    crate::cmark_gates::parity::parse_section_table_rows_cmark(content, section_kw)
 }
 
 /// Metadata describing a declared port definition in `ICD_01`.

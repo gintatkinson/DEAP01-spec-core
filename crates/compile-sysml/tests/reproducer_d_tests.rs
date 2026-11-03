@@ -113,8 +113,8 @@ pub fn run_issue_695_non_uav_safety_suite_checks() -> Result<(), Box<dyn std::er
     };
 
     let temp = TempDirGuard::new("deap_issue_695_non_uav_safety_suite")?;
-    let suite = compile_sysml::stpa::safety_suite::transpile_safety_suite(&pkg, None);
-    compile_sysml::stpa::safety_suite::emit_safety_suite(&pkg, temp.path(), None)?;
+    let suite = compile_sysml::projections::stpa::safety_suite::transpile_safety_suite(&pkg, None);
+    compile_sysml::projections::stpa::safety_suite::emit_safety_suite(&pkg, temp.path(), None)?;
 
     assert_eq!(
         suite.len(),
@@ -256,7 +256,7 @@ fn assert_issue_695_regulatory_docs(reg_md: &str, stpa_md: &str) {
 /// * Propagates missing-key errors or panics with assertion diagnostics on regression.
 pub fn run_issue_695_ast_derived_rta_sldv_reg_checks() -> Result<(), Box<dyn std::error::Error>> {
     let pkg = build_issue_695_query_safety_pkg();
-    let suite = compile_sysml::stpa::safety_suite::transpile_safety_suite(&pkg, None);
+    let suite = compile_sysml::projections::stpa::safety_suite::transpile_safety_suite(&pkg, None);
     assert_zero_uav_physics(&suite);
 
     let rta_md = suite

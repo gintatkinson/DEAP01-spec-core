@@ -36,7 +36,7 @@ use compile_sysml::parse_sysml;
 use compile_sysml::salsa_db::{
     is_synthetic_forest_root, parse_sysml_tree, SemanticValidator, SymbolTable, SysmlSerializable,
 };
-use compile_sysml::sync::forward::{forward_sync_sysml_to_specs, ForwardSyncOptions};
+use compile_sysml::projections::forward::{forward_sync_sysml_to_specs, ForwardSyncOptions};
 
 /// Allocates a collision-free temporary directory for multi-file compilation tests.
 /// Realises: [REQ-SYSML-MULTI-FILE-NAMESPACE]

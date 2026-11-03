@@ -12,45 +12,13 @@ use std::path::{Component, Path, PathBuf};
 /// Splits a CommonMark pipe-delimited table row into trimmed cell strings while respecting `\|`.
 /// Realises: [REQ-BLUEPRINT-TABLE-ROW-SPLIT]
 pub fn split_markdown_table_row(line: &str) -> Option<Vec<String>> {
-    let trimmed = line.trim();
-    if !trimmed.starts_with('|') || !trimmed.ends_with('|') || trimmed.len() < 2 {
-        return None;
-    }
-    let interior = trimmed.strip_prefix('|')?.strip_suffix('|')?;
-    let mut cells = Vec::new();
-    let mut current = String::new();
-    let mut escaped = false;
-
-    for ch in interior.chars() {
-        if escaped {
-            current.push(ch);
-            escaped = false;
-        } else if ch == '\\' {
-            current.push(ch);
-            escaped = true;
-        } else if ch == '|' {
-            cells.push(current.trim().to_string());
-            current.clear();
-        } else {
-            current.push(ch);
-        }
-    }
-    cells.push(current.trim().to_string());
-    Some(cells)
+    crate::cmark_gates::blueprint::split_table_row_cmark(line)
 }
 
 /// Checks whether a parsed markdown table row is a valid CommonMark alignment separator row.
 /// Realises: [REQ-BLUEPRINT-TABLE-SEPARATOR]
 pub fn is_table_separator_row(cells: &[String], expected_cols: usize) -> bool {
-    if cells.len() != expected_cols {
-        return false;
-    }
-    cells.iter().all(|cell| {
-        let t = cell.trim();
-        !t.is_empty()
-            && t.chars().any(|c| c == '-')
-            && t.chars().all(|c| c == '-' || c == ':' || c.is_whitespace())
-    })
+    crate::cmark_gates::blueprint::is_table_separator_row_cmark(cells, expected_cols)
 }
 
 /// Strips outer whitespace, bold/italic asterisks (`*`), and backticks (`` ` ``) from a cell token.

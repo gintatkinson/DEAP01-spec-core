@@ -66,6 +66,16 @@ pub use markdown::{
     check_latex_katex_syntax, check_mermaid_syntax, strip_code_and_glfm, strip_fenced_code_blocks,
     strip_glfm_inline_math, strip_inline_code, ALLOWED_ALIGNMENT_ENVS, VALID_MERMAID_HEADERS,
 };
+pub use markdown_ast::{
+    cmark_options, collect_code_block_byte_ranges, emit_cmark_table, emit_lossless_markdown,
+    format_markdown_cmark, is_br_html_tag, is_gfm_delimiter_cell, is_offset_in_byte_ranges,
+    mask_html_comments_preserving_offsets, normalize_line_endings, parse_checklist_tasks,
+    parse_frontmatter_kv_rows, parse_frontmatter_metadata, parse_markdown_ast,
+    parse_markdown_tables, parse_single_gfm_row_cells, splice_markdown_byte_spans,
+    write_spec_file_atomic, ChecklistDoc, CmarkTable, CompilerError, FrontmatterDoc,
+    MarkdownCodeBlockAst, MarkdownKeyValueRow, MarkdownSectionAst, MarkdownTableAst,
+    MarkdownTaskItemAst, ParsedMarkdownAst, TaskListItem,
+};
 pub use rules::{
     CanonicalArchitectureBlueprint, CanonicalArchitectureBlueprintsCatalog, CodebaseRules,
     MetaConfig, TrackerRules, ValidationRules, CANONICAL_ARCHITECTURE_BLUEPRINTS, EXCLUDED_DIRS,

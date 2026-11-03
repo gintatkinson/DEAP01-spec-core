@@ -28,7 +28,7 @@ use crate::driver_mode_handlers::{
 use crate::driver_schema_loader::{
     load_and_validate_schema_typed, resolve_schema_targets_typed, run_compilation_gate_with_dry_run,
 };
-use crate::sync::ReverseSyncOptions;
+use crate::projections::ReverseSyncOptions;
 use std::path::{Path, PathBuf};
 
 /// Remediation message emitted when no `.sysml` schema file is found in `schema/` or `.pipeline/`.

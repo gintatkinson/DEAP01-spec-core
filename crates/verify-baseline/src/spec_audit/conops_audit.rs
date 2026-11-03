@@ -157,77 +157,7 @@ pub struct MarkdownTable {
 /// Extracts all CommonMark pipe tables from content without using regular expressions.
 /// Realises: [REQ-SPEC-AUDIT-CONOPS-AUDIT-EXTRACT-MARKDOWN-TABLES]
 pub fn extract_markdown_tables(content: &str) -> Vec<MarkdownTable> {
-    let mut tables = Vec::new();
-    let mut in_code_block = false;
-    let mut current_headers: Option<Vec<String>> = None;
-    let mut current_rows: Vec<TableRow> = Vec::new();
-    let mut table_start_line = 0;
-    let mut delimiter_expected = false;
-
-    for (idx, line) in content.lines().enumerate() {
-        let line_no = idx + 1;
-        let trimmed = line.trim();
-
-        if trimmed.starts_with("```") {
-            in_code_block = !in_code_block;
-            if let Some(headers) = current_headers.take() {
-                tables.push(MarkdownTable {
-                    headers,
-                    rows: std::mem::take(&mut current_rows),
-                    start_line: table_start_line,
-                });
-            }
-            continue;
-        }
-        if in_code_block {
-            continue;
-        }
-
-        if trimmed.starts_with('|') && trimmed.ends_with('|') && trimmed.len() >= 2 {
-            let inner = trimmed
-                .strip_prefix('|')
-                .and_then(|s| s.strip_suffix('|'))
-                .unwrap_or_default();
-            let cells: Vec<String> = inner.split('|').map(|c| c.trim().to_string()).collect();
-
-            let is_delimiter = cells.iter().all(|c| {
-                !c.is_empty()
-                    && c.chars()
-                        .all(|ch| ch == '-' || ch == ':' || ch.is_whitespace())
-            });
-            if is_delimiter {
-                delimiter_expected = false;
-                continue;
-            }
-
-            if current_headers.is_none() {
-                current_headers = Some(cells);
-                table_start_line = line_no;
-                delimiter_expected = true;
-            } else if !delimiter_expected {
-                current_rows.push(TableRow { cells, line_no });
-            }
-        } else {
-            if let Some(headers) = current_headers.take() {
-                tables.push(MarkdownTable {
-                    headers,
-                    rows: std::mem::take(&mut current_rows),
-                    start_line: table_start_line,
-                });
-            }
-            delimiter_expected = false;
-        }
-    }
-
-    if let Some(headers) = current_headers.take() {
-        tables.push(MarkdownTable {
-            headers,
-            rows: current_rows,
-            start_line: table_start_line,
-        });
-    }
-
-    tables
+    crate::cmark_gates::spec_audit::extract_conops_tables_cmark(content)
 }
 
 /// Checks whether `docs/conops/` exists on disk.

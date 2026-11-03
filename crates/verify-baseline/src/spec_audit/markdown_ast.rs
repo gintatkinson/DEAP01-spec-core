@@ -7,7 +7,6 @@
 pub use crate::spec_audit::markdown_placeholders::{
     find_unresolved_placeholders, is_metadata_header_table_row,
 };
-use crate::spec_audit::markdown_placeholders::normalize_table_metadata_key;
 use crate::spec_audit::SpecAuditError;
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use std::collections::BTreeMap;
@@ -104,72 +103,13 @@ fn offset_to_line(line_starts: &[usize], offset: usize) -> usize {
 /// Extracts YAML frontmatter key-value pairs from lines between leading `---` delimiters.
 /// Realises: [REQ-SPEC-AUDIT-MARKDOWN-AST-EXTRACT-YAML-FRONTMATTER]
 pub fn extract_yaml_frontmatter(content: &str) -> Option<BTreeMap<String, String>> {
-    let trimmed = content.trim_start();
-    if !trimmed.starts_with("---") {
-        return None;
-    }
-    let rest = trimmed.strip_prefix("---")?;
-    let end_idx = rest.find("\n---")?;
-    let fm_block = rest.get(..end_idx)?;
-
-    let mut map = BTreeMap::new();
-    for line in fm_block.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if let Some((k, v)) = line.split_once(':') {
-            let k = k
-                .trim()
-                .trim_matches(|c| c == '\'' || c == '"')
-                .to_lowercase();
-            let v = v.trim().trim_matches(|c| c == '\'' || c == '"');
-            if !k.is_empty() {
-                map.insert(k, v.to_string());
-            }
-        }
-    }
-
-    if map.is_empty() {
-        None
-    } else {
-        Some(map)
-    }
+    crate::cmark_gates::spec_audit::extract_yaml_frontmatter_cmark(content)
 }
 
 /// Extracts key-value pairs from the initial CommonMark two-column metadata table.
 /// Realises: [REQ-SPEC-AUDIT-MARKDOWN-AST-EXTRACT-TABLE-METADATA]
 pub fn extract_table_metadata(content: &str) -> BTreeMap<String, String> {
-    let mut table_metadata = BTreeMap::new();
-    for line in content.lines().take(50) {
-        let stripped = line.trim();
-        if !stripped.starts_with('|') || !stripped.ends_with('|') {
-            continue;
-        }
-        let inner = match stripped.strip_prefix('|').and_then(|s| s.strip_suffix('|')) {
-            Some(s) => s,
-            None => continue,
-        };
-        let cells: Vec<&str> = inner.split('|').map(|c| c.trim()).collect();
-        let (first_cell, second_cell) = match (cells.first(), cells.get(1)) {
-            (Some(&c0), Some(&c1)) => (c0, c1),
-            _ => continue,
-        };
-
-        let normalized_key = normalize_table_metadata_key(first_cell);
-        if normalized_key.is_empty()
-            || normalized_key == "attribute"
-            || normalized_key == "key"
-            || normalized_key == "field"
-        {
-            continue;
-        }
-        let val = second_cell
-            .trim()
-            .trim_matches(|c| c == '`' || c == '"' || c == '\'');
-        table_metadata.insert(normalized_key, val.to_string());
-    }
-    table_metadata
+    crate::cmark_gates::spec_audit::extract_table_metadata_cmark(content)
 }
 
 /// Extracts diagram type header from raw Mermaid code.

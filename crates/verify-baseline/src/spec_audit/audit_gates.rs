@@ -112,6 +112,9 @@ pub(crate) fn audit_single_spec_file(
                 Some(ph.line),
             ));
         }
+        findings.extend(
+            crate::cmark_gates::spec_audit::validate_file_si_metrology_cmark(&content, &rel_path),
+        );
     }
 
     if active_gates.uml {

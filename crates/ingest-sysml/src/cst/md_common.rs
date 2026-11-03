@@ -3,7 +3,7 @@
 //! **[DOC-TIER: A]**
 //! Realises: [REQ-SYSML-INGEST-MD], [REQ-TRANSLATORS-MARKDOWN-FRONTMATTER]
 
-use crate::table::{compose_grounded_doc, is_table_delimiter_cell, normalize_col, MarkdownTable};
+use crate::table::{compose_grounded_doc, MarkdownTable};
 
 /// Extracted YAML frontmatter metadata from a Markdown requirement or blueprint document.
 /// Realises: [REQ-TRANSLATORS-MARKDOWN-FRONTMATTER]
@@ -31,84 +31,11 @@ pub struct ParsedSection {
     pub tables: Vec<MarkdownTable>,
 }
 
-/// Attempts to parse a leading `---` YAML frontmatter block from `content`.
-/// Realises: [REQ-SYSML-INGEST-MD/parse_frontmatter]
-fn parse_yaml_frontmatter(content: &str) -> Option<(Frontmatter, &str)> {
-    let after_opening = content.trim_start().strip_prefix("---")?.trim_start_matches(['\r', '\n']);
-    let close_idx = after_opening.find("\n---")?;
-    let yaml_block = after_opening.get(..close_idx)?;
-    let rest_trimmed = after_opening.get(close_idx + 4..)?.trim_start_matches(['\r', '\n']);
-    let mut fm = Frontmatter::default();
-    for line in yaml_block.lines() {
-        if let Some((k, v)) = line.trim().split_once(':') {
-            let val = v.trim().trim_matches(['"', '\'']).trim();
-            match k.trim() {
-                "id" => fm.id = Some(val.to_string()),
-                "title" => fm.title = Some(val.to_string()),
-                "subsystem" => fm.subsystem = Some(val.to_string()),
-                "uuidv5" => fm.uuidv5 = Some(val.to_string()),
-                _ => {}
-            }
-        }
-    }
-    Some((fm, rest_trimmed))
-}
-
-/// Parses YAML frontmatter or top-level metadata table from a Markdown document.
-/// Realises: [REQ-SYSML-INGEST-MD/parse_frontmatter]
+/// Parses YAML frontmatter or top-level metadata table from a Markdown document via `cmark_ingestor`.
+/// Realises: [REQ-SYSML-INGEST-MD/parse_frontmatter], [REQ-0604]
+#[must_use]
 pub fn parse_frontmatter(content: &str) -> (Frontmatter, &str) {
-    if let Some(res) = parse_yaml_frontmatter(content) {
-        return res;
-    }
-    let (mut fm, mut blueprint_id, mut h1_title) = (Frontmatter::default(), None, None);
-    for line in content.lines() {
-        let l = line.trim();
-        if l.starts_with("## ") {
-            break;
-        }
-        if let Some(rest) = l.strip_prefix("# ") {
-            let t = rest.trim();
-            if !t.is_empty() && h1_title.is_none() {
-                h1_title = Some(t.to_string());
-            }
-            continue;
-        }
-        if l.starts_with('|') && l.contains('|') {
-            let cells: Vec<&str> = l.trim_matches('|').split('|').map(str::trim).collect();
-            if cells.len() == 2 && !cells.iter().all(|c| is_table_delimiter_cell(c)) {
-                let (Some(&raw_key), Some(&raw_val)) = (cells.first(), cells.get(1)) else { continue };
-                let key = normalize_col(raw_key);
-                let val = clean_meta_val(raw_val).trim().trim_matches(['"', '\'']).trim().to_string();
-                if val.is_empty() {
-                    continue;
-                }
-                match key.as_str() {
-                    "requirement_id" | "id" if fm.id.is_none() => {
-                        fm.id = Some(find_req_ids(&val).first().copied().unwrap_or(val.as_str()).to_string());
-                    }
-                    "blueprint_id" if blueprint_id.is_none() => blueprint_id = Some(val),
-                    "title" if fm.title.is_none() => fm.title = Some(val),
-                    "subsystem" if fm.subsystem.is_none() => fm.subsystem = Some(val),
-                    "uuidv5" | "deterministic_uuidv5" if fm.uuidv5.is_none() => fm.uuidv5 = Some(val),
-                    _ => {}
-                }
-            }
-        }
-    }
-    if fm.id.is_none() {
-        fm.id = blueprint_id.clone();
-    }
-    if let Some(bp_id) = blueprint_id {
-        let raw_title = fm.title.take().or(h1_title);
-        fm.title = Some(match raw_title {
-            Some(t) if !t.is_empty() && !t.starts_with(&bp_id) => format!("{bp_id} {t}"),
-            Some(t) if !t.is_empty() => t,
-            _ => bp_id,
-        });
-    } else if fm.id.is_some() && fm.title.is_none() {
-        fm.title = h1_title;
-    }
-    (fm, content)
+    crate::cmark_ingestor::parse_cmark_frontmatter(content)
 }
 
 /// Strips `[label](url)` Markdown links while retaining visible `label` text.

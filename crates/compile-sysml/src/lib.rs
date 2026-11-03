@@ -46,10 +46,11 @@ mod lib_tests;
 #[cfg(test)]
 mod lib_tests_b;
 pub mod modular_codegen;
+pub mod projections;
 pub mod salsa_db;
-pub mod stpa;
 pub mod syn_codegen;
-pub mod sync;
+pub use projections as sync;
+pub use projections::stpa;
 pub use cli::*;
 pub use deap_core::sysml_cst::*;
 pub use docstring::{inject_dart_file_docstrings, inject_rust_file_docstrings, run_docstring_injection, run_extract_source, DocstringExitCode, DocstringInjectionOptions, DocstringInjectionReport};
@@ -64,9 +65,13 @@ pub use salsa_db::{
     Span, Symbol, SymbolKind, SymbolTable, SysmlIncrementalDb, SysmlParser, SysmlSerializable,
     Token, TokenKind, UnaryOp,
 };
-pub use stpa::{compile_stpa_to_constraints, compile_stpa_to_constraints_filtered, emit_safety_suite, expand_cartesian_stpa, generate_fmeca_matrix, transpile_safety_suite, transpile_stpa, FmecaRow, FmecaScoringConfig, UnsafeControlAction};
+pub use projections::{
+    compile_stpa_to_constraints, compile_stpa_to_constraints_filtered, emit_safety_suite,
+    expand_cartesian_stpa, forward_sync_sysml_to_specs, generate_fmeca_matrix,
+    reverse_sync_specs_to_sysml, transpile_safety_suite, transpile_stpa, FmecaRow,
+    FmecaScoringConfig, ForwardSyncOptions, ReverseSyncOptions, UnsafeControlAction,
+};
 pub use syn_codegen::{format_and_verify_rust_module_ast, synthesize_prettyplease_unit, synthesize_typed_domain_struct_tokens, verify_stage_fixed_point, StageTreeDigestManifest, SynCodegenFixedPointReceipt};
-pub use sync::{forward_sync_sysml_to_specs, reverse_sync_specs_to_sysml, ForwardSyncOptions, ReverseSyncOptions};
 
 /// Parse textual SysML v2 source into a strongly-typed PackageDef AST.
 /// ## 1. Safety Intent & Regulatory Scope -- Canonical single-buffer SysML v2 parser under DO-330 TQL-4.

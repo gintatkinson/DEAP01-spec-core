@@ -35,7 +35,7 @@
 use std::fs;
 use std::process::Command;
 
-use compile_sysml::stpa::fmeca::FmecaRow;
+use compile_sysml::projections::stpa::fmeca::FmecaRow;
 use compile_sysml::FmecaScoringConfig;
 use deap_core::sysml_cst::{
     ActionDef, AttributeDef, OperationDef, PackageDef, PartDef, PortDef, StateDef,
@@ -181,7 +181,7 @@ fn assert_issue_693_fmeca_coverage_and_scores(rows: &[FmecaRow]) {
 pub fn run_issue_693_fmeca_software_ast_checks() -> Result<(), Box<dyn std::error::Error>> {
     let pkg = build_issue_693_query_engine_pkg();
     let scoring_cfg = FmecaScoringConfig::default();
-    let rows = compile_sysml::stpa::fmeca::generate_fmeca_matrix(&pkg, Some(&scoring_cfg));
+    let rows = compile_sysml::projections::stpa::fmeca::generate_fmeca_matrix(&pkg, Some(&scoring_cfg));
 
     assert!(
         !rows.is_empty(),

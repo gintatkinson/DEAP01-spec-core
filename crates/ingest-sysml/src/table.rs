@@ -81,7 +81,11 @@ fn strip_bracketed_content(text: &str) -> String {
     let (mut out, mut chars) = (String::with_capacity(text.len()), text.chars());
     while let Some(c) = chars.next() {
         if matches!(c, '(' | '[' | '{') {
-            let _ = chars.by_ref().find(|&inner| matches!(inner, ')' | ']' | '}'));
+            for inner in chars.by_ref() {
+                if matches!(inner, ')' | ']' | '}') {
+                    break;
+                }
+            }
         } else {
             out.push(c);
         }
@@ -250,15 +254,11 @@ pub fn extract_provenance_citation(row: &BTreeMap<String, String>, headers: &[St
 
 /// Composes a grounded SysML v2 documentation string preserving description, unit, and OEM citation. Realises: [REQ-SYSML-INGEST-TABLE/compose_grounded_doc]
 pub fn compose_grounded_doc(description: &str, citation: &str, unit: &str) -> String {
-    [
-        (!description.trim().is_empty()).then(|| description.trim().to_string()),
-        (!unit.trim().is_empty()).then(|| format!("[unit: {}]", unit.trim())),
-        (!citation.trim().is_empty()).then(|| format!("[Source: {}]", citation.trim())),
-    ]
-    .into_iter()
-    .flatten()
-    .collect::<Vec<_>>()
-    .join(" ")
+    let mut parts = Vec::with_capacity(3);
+    if !description.trim().is_empty() { parts.push(description.trim().to_string()); }
+    if !unit.trim().is_empty() { parts.push(format!("[unit: {}]", unit.trim())); }
+    if !citation.trim().is_empty() { parts.push(format!("[Source: {}]", citation.trim())); }
+    parts.join(" ")
 }
 
 /// Classifies table type based purely on structural column header patterns. Realises: [REQ-SYSML-INGEST-TABLE/classify_table]
