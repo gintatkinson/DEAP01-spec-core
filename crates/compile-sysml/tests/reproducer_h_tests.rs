@@ -35,8 +35,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use compile_sysml::projections::forward::{forward_sync_sysml_to_specs, ForwardSyncOptions};
-use deap_core::sysml_cst::{PackageDef, PartDef, UseCaseDef};
+use compile_sysml::sync::forward::{forward_sync_sysml_to_specs, ForwardSyncOptions};
+use deap_core::sysml_ast::{PackageDef, PartDef, UseCaseDef};
 
 use crate::reproducer_g_tests::build_issue_696_distributed_ledger_fixture;
 use crate::reproducer_tests::{

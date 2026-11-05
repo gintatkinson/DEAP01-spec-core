@@ -34,7 +34,7 @@ pub use crate::rust_cst::codemod::{
     SpanSpliceEdit, Utf8ByteSpan, ZeroTokenCodemodConfig,
 };
 pub use crate::rust_cst::source_bridge::*;
-use crate::sysml_cst::{
+use crate::sysml_ast::{
     ActionDef, AttributeDef, ConstraintDef, PackageDef, PartDef, PortDef, RequirementDef,
 };
 
@@ -268,6 +268,7 @@ pub fn ingest_source_directory(source_dir: &Path, language: SourceLanguage, pack
 }
 
 #[cfg(test)]
+#[allow(clippy::pedantic, clippy::nursery)]
 mod tests {
     use super::*;
     use crate::rust_cst::*;

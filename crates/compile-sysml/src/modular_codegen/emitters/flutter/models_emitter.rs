@@ -17,7 +17,7 @@
 
 use std::collections::BTreeSet;
 
-use deap_core::sysml_cst::{AttributeDef, PackageDef, PartDef, SysmlModel};
+use deap_core::sysml_ast::{AttributeDef, PackageDef, PartDef, SysmlModel};
 
 use super::contracts::TopologyNode;
 use super::naming::{

@@ -6,7 +6,7 @@
 
 use super::parity_check_discovery::TargetScanDir;
 use super::parity_gates::ParityOutcome;
-use deap_core::sysml_cst::{find_matching_brace, mask_string_literals, strip_sysml_comments};
+use deap_core::sysml_ast::{find_matching_brace, mask_string_literals, strip_sysml_comments};
 use deap_core::workspace::is_upstream_compiler;
 use std::collections::BTreeSet;
 use std::fs;
@@ -317,7 +317,7 @@ fn audit_schema_use_case_realizations(
     }
     let schema_dir = repo_root.join("schema");
     if schema_dir.is_dir() {
-        for p in deap_core::sysml_cst::UnifiedSchemaModelExtractor::discover_schema_files(&[
+        for p in deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[
             &schema_dir,
         ]) {
             if p.extension().is_some_and(|ext| ext == "sysml") {

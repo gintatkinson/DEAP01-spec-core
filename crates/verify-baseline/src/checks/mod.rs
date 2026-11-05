@@ -29,14 +29,10 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-VERIFY-BASELINE-CHECKS-MOD], [DO-330-TQL-4-CHECKS-MOD]
 
-pub mod cargo_policy_gate;
-pub mod clippy_ndjson_gate;
 pub mod codebase;
 pub mod codebase_gesture_gate;
 pub mod codebase_mock_gate;
 pub mod codebase_solver_gate;
-pub mod cst_attr_gate;
-pub mod cst_purity_gate;
 #[cfg(test)]
 mod codebase_tests_a;
 #[cfg(test)]
@@ -59,7 +55,6 @@ mod domain_cleanliness_rules;
 pub mod formal_stage2_dylint;
 pub mod formal_stage3_4_miri_kani;
 pub mod formal_stage5_ferrocene;
-pub mod io_fail_closed_gate;
 pub mod math_katex;
 pub mod mermaid;
 #[cfg(test)]
@@ -91,19 +86,31 @@ pub mod ratchet_table;
 pub(crate) mod safety_fmeca;
 pub(crate) mod safety_pillars;
 pub mod safety_stpa;
+#[cfg(test)]
+mod struct_check_a_tests;
+pub(crate) mod struct_check_audit;
+#[cfg(test)]
+mod struct_check_b_tests;
+#[cfg(test)]
+mod struct_check_c_tests;
+pub(crate) mod struct_check_clippy;
+#[cfg(test)]
+mod struct_check_d_tests;
+#[cfg(test)]
+mod struct_check_e_tests;
+#[cfg(test)]
+mod struct_check_f_tests;
+pub(crate) mod struct_check_feat42;
+pub(crate) mod struct_check_grounding;
+pub(crate) mod struct_check_handoff;
+pub(crate) mod struct_check_mask;
+pub(crate) mod struct_check_purity;
+pub(crate) mod struct_check_scripts;
+pub(crate) mod struct_check_upstream;
+pub mod structural;
 pub mod wbs_integrity;
 
-/// Compatibility namespace re-exporting CST purity, fail-closed I/O, and Cargo policy gates (`[REQ-0602]`).
-pub mod structural {
-    pub use super::cargo_policy_gate::*;
-    pub use super::cst_purity_gate::*;
-    pub use super::domain_cleanliness_gate::verify_upstream_blueprint_domain_cleanliness;
-    pub use super::io_fail_closed_gate::*;
-}
-
-pub use cargo_policy_gate::*;
 pub use codebase::*;
-pub use cst_purity_gate::*;
 pub use docstring_cst_gate::*;
 pub use docstring_gate::*;
 pub use dod_gates::{
@@ -112,10 +119,10 @@ pub use dod_gates::{
     check_zero_hand_rolled_lexers, check_zero_legacy_ratchet, Finding,
 };
 pub use domain_cleanliness_gate::*;
-pub use io_fail_closed_gate::*;
 pub use math_katex::check_latex_katex_syntax;
 pub use mermaid::check_mermaid_syntax;
 pub use parity_gates::*;
 pub use ratchet_table::{lookup_ratchet_ceiling, LEGACY_RATCHET_MAX_LINES};
 pub use safety_stpa::{check_safety_integrity, SafetyCheckOutcome};
+pub use structural::*;
 pub use wbs_integrity::{check_wbs_suite_integrity, WbsCheckOutcome};

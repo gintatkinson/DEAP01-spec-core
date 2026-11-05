@@ -26,7 +26,7 @@ pub use deap_core::{
 };
 
 use crate::docstring_compliance_check::any_placeholder_in_doc;
-use crate::salsa_db::write_atomic;
+use crate::semantic::digest::write_atomic;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};

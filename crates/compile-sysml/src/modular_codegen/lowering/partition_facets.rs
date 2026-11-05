@@ -19,7 +19,7 @@ use crate::modular_codegen::domain::{
     CompilationUnit, LayerRole, ModularityBounds, OutlinedActionPlan, OutlinedStateMachinePlan,
     UnitKind,
 };
-use deap_core::sysml_cst::{ActionDef, PartDef, StateDef};
+use deap_core::sysml_ast::{ActionDef, PartDef, StateDef};
 use std::collections::BTreeSet;
 
 /// Borrowed package lowering context shared across Level-2 facet and behavioral unit builders.

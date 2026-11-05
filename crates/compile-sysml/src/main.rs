@@ -40,6 +40,6 @@ use std::process;
 /// Realises: [REQ-COMPILER-SYSML-MAIN], [DO-330-TQL-4-CLI]
 fn main() {
     let exit_code =
-        compile_sysml::projections::forward::run_cli_with_emit_flags(|| execute_cli(Cli::parse()));
+        compile_sysml::sync::forward::run_cli_with_emit_flags(|| execute_cli(Cli::parse()));
     process::exit(exit_code);
 }

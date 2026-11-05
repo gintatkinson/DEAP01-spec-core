@@ -18,7 +18,7 @@
 //!
 //! ## 4. Postconditions
 //! - Exposes a cohesive, strongly-typed public surface unifying `diagnostics`,
-//!   `error`, `markdown`, `rules`, `source_ast`, `sysml_cst`, and `workspace`
+//!   `error`, `markdown`, `rules`, `source_ast`, `sysml_ast`, and `workspace`
 //!   modules without side effects on module load.
 //!
 //! ## 5. Algorithmic Complexity Bounds
@@ -34,7 +34,6 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-DEAP-CORE-LIB], [DO-330-TQL-4-CORE-LIB]
 
-pub mod cargo_manifest_ast;
 pub mod dart_cst;
 pub mod diagnostics;
 pub mod digest;
@@ -45,15 +44,9 @@ pub mod rules;
 pub mod rust_cst;
 pub mod salsa_db;
 pub mod source_ast;
+pub mod sysml_ast;
 pub mod sysml_cst;
 pub mod workspace;
-
-pub use cargo_manifest_ast::{
-    check_zero_shell_scripts, discover_cargo_manifests_with_metadata,
-    is_forbidden_regex_crate_name, is_governed_python_scan_extension, is_negated_script_mention,
-    load_workspace_rust_vfs, parse_cargo_lock_ast, parse_cargo_toml_ast, Check34Violation,
-    ForbiddenAstPattern, LockfileAstSummary, ManifestDependencyEntry, WorkspaceManifestAst,
-};
 
 pub use diagnostics::{
     emit_cli_ndjson_stream, format_ndjson_line, resolve_utf8_span, Applicability, DefectDossier,
@@ -65,16 +58,6 @@ pub use error::{CoreError, CoreResult};
 pub use markdown::{
     check_latex_katex_syntax, check_mermaid_syntax, strip_code_and_glfm, strip_fenced_code_blocks,
     strip_glfm_inline_math, strip_inline_code, ALLOWED_ALIGNMENT_ENVS, VALID_MERMAID_HEADERS,
-};
-pub use markdown_ast::{
-    cmark_options, collect_code_block_byte_ranges, emit_cmark_table, emit_lossless_markdown,
-    format_markdown_cmark, is_br_html_tag, is_gfm_delimiter_cell, is_offset_in_byte_ranges,
-    mask_html_comments_preserving_offsets, normalize_line_endings, parse_checklist_tasks,
-    parse_frontmatter_kv_rows, parse_frontmatter_metadata, parse_markdown_ast,
-    parse_markdown_tables, parse_single_gfm_row_cells, splice_markdown_byte_spans,
-    write_spec_file_atomic, ChecklistDoc, CmarkTable, CompilerError, FrontmatterDoc,
-    MarkdownCodeBlockAst, MarkdownKeyValueRow, MarkdownSectionAst, MarkdownTableAst,
-    MarkdownTaskItemAst, ParsedMarkdownAst, TaskListItem,
 };
 pub use rules::{
     CanonicalArchitectureBlueprint, CanonicalArchitectureBlueprintsCatalog, CodebaseRules,
@@ -114,20 +97,22 @@ pub use source_ast::{
     CstLexState, ExtractedMethodSignature, SourceAstItem, SourceField, SourceItemKind,
     SourceLanguage, SourceParam,
 };
-pub use sysml_cst::{
-    classify_keyword_kind, component_matches, compute_canonical_digest,
-    extract_negated_components, is_component_negated, lower_sysml_hir, lower_to_hir_db,
+pub use sysml_ast::{
+    component_matches, extract_negated_components, is_component_negated, lower_to_hir_db,
     parse_action_defs, parse_attribute_defs, parse_calc_defs, parse_connection_defs,
     parse_constraint_defs, parse_hazard_defs, parse_part_defs, parse_port_defs,
     parse_requirement_defs, parse_satisfied_requirements, parse_state_defs, parse_sysml,
-    parse_sysml_cst, parse_sysml_green, parse_sysml_model, token_to_syntax_kind, tokenize_sysml,
-    ActionDef, AstPersistenceEngine, AstSlice, AttributeDef, CalcDef, CapabilityDef,
-    ConnectionDef, ConstraintDef, CotAuditLog, CotAuditRecord, FieldDescriptor, FlowDef,
-    HazardDef, ImportDef, IncrementalAstCache, InteractionDef, InterfaceDef, ItemDef,
-    LexedSysmlToken, OperationDef, PackageDef, ParsedSysmlCst, PartDef, PortDef, RequirementDef,
-    RiskDef, SourceProgram, StateDef, SysmlCompilerDb, SysmlConstructSummary, SysmlCstDiagnostic,
-    SysmlLanguage, SysmlModel, SysmlSyntaxKind, SysmlSyntaxNode, SysmlSyntaxToken, SysmlToken,
+    parse_sysml_model, ActionDef, AstPersistenceEngine, AstSlice, AttributeDef, CalcDef,
+    CapabilityDef, ConnectionDef, ConstraintDef, CotAuditLog, CotAuditRecord, FieldDescriptor,
+    FlowDef, HazardDef, ImportDef, IncrementalAstCache, InteractionDef, InterfaceDef, ItemDef,
+    OperationDef, PackageDef, PartDef, PortDef, RequirementDef, RiskDef, StateDef, SysmlModel,
     TestCaseDef, TransitionDef, TypeDescriptor, UnifiedSchemaModelExtractor, UseCaseDef,
+};
+pub use sysml_cst::{
+    classify_keyword_kind, compute_canonical_digest, lower_sysml_hir, parse_sysml_cst,
+    parse_sysml_green, token_to_syntax_kind, tokenize_sysml, LexedSysmlToken, ParsedSysmlCst,
+    SourceProgram, SysmlCompilerDb, SysmlConstructSummary, SysmlCstDiagnostic, SysmlLanguage,
+    SysmlSyntaxKind, SysmlSyntaxNode, SysmlSyntaxToken, SysmlToken,
 };
 pub use workspace::{
     check_downstream_instructions_exist, check_gitignore_exists, check_no_ds_store_files,

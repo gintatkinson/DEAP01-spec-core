@@ -5,6 +5,9 @@
 //! Bounds & Faults: Deterministic sorted file walking; fails closed on unreadable files or metrology violations.
 
 use super::parity_check_discovery::TargetScanDir;
+use super::parity_check_icd_ast::{
+    is_metrology_placeholder, is_valid_si_unit, parse_markdown_table_rows,
+};
 use super::parity_gates::ParityOutcome;
 use deap_core::rules::EXCLUDED_DIRS;
 use deap_core::workspace::is_upstream_compiler;
@@ -116,10 +119,69 @@ pub fn check_standards_measurement(
     allow_missing_specs: bool,
     strict: bool,
 ) -> Result<ParityOutcome, Vec<String>> {
-    crate::cmark_gates::parity::check_standards_measurement_filtered(
-        repo_root,
-        allow_missing_specs,
-        strict,
-        None,
-    )
+    let is_upstream = is_upstream_compiler(repo_root);
+    let iface_dir = TargetScanDir::Interfaces.resolve(repo_root);
+    let feat_dir = TargetScanDir::Features.resolve(repo_root);
+    let conops_dir = TargetScanDir::Conops.resolve(repo_root);
+    let arch_dir = TargetScanDir::Architecture.resolve(repo_root);
+
+    if is_upstream && !iface_dir.is_dir() && !feat_dir.is_dir() {
+        return Ok(ParityOutcome::PendingOrClean);
+    }
+
+    let mut errors = Vec::new();
+    let scan_dirs = if is_upstream {
+        vec![iface_dir, feat_dir]
+    } else {
+        vec![iface_dir, feat_dir, conops_dir, arch_dir]
+    };
+    let target_files = collect_sorted_md_files(&scan_dirs, "Check 26", &mut errors);
+
+    if target_files.is_empty() && errors.is_empty() {
+        let _ = (allow_missing_specs, strict);
+        return Ok(ParityOutcome::PendingOrClean);
+    }
+
+    for path in target_files {
+        let rel = path
+            .strip_prefix(repo_root)
+            .unwrap_or(&path)
+            .display()
+            .to_string();
+        let content = match fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) => {
+                errors.push(format!(
+                    "Check 26 failed: Unable to read file '{}': {}",
+                    rel, e
+                ));
+                continue;
+            }
+        };
+        for table_kind in ["signal", "parameter", "metric"] {
+            let (headers, rows) = parse_markdown_table_rows(&content, table_kind);
+            if let Some(unit_col) = headers.iter().position(|h| h.contains("unit")) {
+                for row in &rows {
+                    if let Some(unit_val) = row.get(unit_col) {
+                        let clean = unit_val.trim().trim_matches(|c| c == '`' || c == '*');
+                        if clean.is_empty()
+                            || is_metrology_placeholder(clean)
+                            || !is_valid_si_unit(clean)
+                        {
+                            errors.push(format!(
+                                "Check 26 failed: Invalid or missing SI dimensional unit '{}' in '{}'",
+                                clean, rel
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(ParityOutcome::Verified)
+    } else {
+        Err(errors)
+    }
 }

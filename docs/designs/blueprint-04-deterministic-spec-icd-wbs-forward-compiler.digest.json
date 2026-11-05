@@ -212,25 +212,25 @@
     {
       "name": "AgileSpecForwardProjector",
       "node_type": "Part",
-      "doc": "Maximum deterministic execution bound for --forward-sync across all package subtrees. [unit: ms]",
+      "doc": "Maximum deterministic execution bound for `--forward-sync` across all package subtrees. [unit: ms]",
       "allocated_activities": []
     },
     {
       "name": "BidirectionalBacklogReconciler",
       "node_type": "Part",
-      "doc": "Tracks multi-line in_html_comment state to prevent commented example tables from spoofing frontmatter issue IDs. [unit: flag]",
+      "doc": "Tracks multi-line `in_html_comment` state to prevent commented example tables from spoofing frontmatter issue IDs. [unit: flag]",
       "allocated_activities": []
     },
     {
       "name": "DeterministicSpecIcdWbsForwardCompiler",
       "node_type": "Part",
-      "doc": "Total number of generative LLM subagents invoked during specification, ICD, and WBS forward compilation (C-FWD-01 == 0). [unit: count]",
+      "doc": "Total number of generative LLM subagents invoked during specification, ICD, and WBS forward compilation (`C-FWD-01 == 0`). [unit: count]",
       "allocated_activities": []
     },
     {
       "name": "LogicalIcdMatrixCompiler",
       "node_type": "Part",
-      "doc": "Maximum deterministic execution bound for --emit-icd interface matrix and signal dictionary compilation. [unit: ms]",
+      "doc": "Maximum deterministic execution bound for `--emit-icd` interface matrix and signal dictionary compilation. [unit: ms]",
       "allocated_activities": []
     },
     {

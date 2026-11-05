@@ -254,6 +254,7 @@ pub fn validate_mcdc_symbol_report_json(json_str: &str, relative_path: &str) -> 
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -265,7 +266,7 @@ mod tests {
         fn new() -> Self {
             let id = COUNTER.fetch_add(1, Ordering::Relaxed);
             let dir = std::env::temp_dir().join(format!("deap_stage5_{}_{id}", std::process::id()));
-            let _ = std::fs::create_dir_all(&dir);
+            std::fs::create_dir_all(&dir).expect("create temp dir");
             Self(dir)
         }
         fn path(&self) -> &Path {

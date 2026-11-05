@@ -13,7 +13,7 @@ use crate::docstring_cst::{summary_from_doc_lines, SourceItemKind, SourceParam};
 use crate::docstring_schema_bind::{
     extract_all_realises_ids, resolve_schema_context, schema_identifiers_match,
 };
-use deap_core::sysml_cst::PackageDef;
+use deap_core::sysml_ast::PackageDef;
 use std::collections::BTreeSet;
 
 /// Internal descriptor for a single AST item being enriched or compacted with a safety docstring.

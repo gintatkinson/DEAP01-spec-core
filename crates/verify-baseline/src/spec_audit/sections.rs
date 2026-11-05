@@ -66,9 +66,9 @@ impl SectionRule {
             .count();
 
         let level = if pat_hashes > 0 {
-            u8::try_from(pat_hashes).unwrap_or(u8::MAX)
+            pat_hashes as u8
         } else if disp_hashes > 0 {
-            u8::try_from(disp_hashes).unwrap_or(u8::MAX)
+            disp_hashes as u8
         } else {
             2
         };

@@ -48,7 +48,7 @@ pub fn load_sysml_symbol_index(repo_root: &Path) -> Result<SysmlSymbolIndex, Spe
 
     if schema_dir.is_dir() {
         let all_schemas =
-            deap_core::sysml_cst::UnifiedSchemaModelExtractor::discover_schema_files(&[
+            deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[
                 &schema_dir,
             ]);
         for p in all_schemas {
@@ -61,23 +61,23 @@ pub fn load_sysml_symbol_index(repo_root: &Path) -> Result<SysmlSymbolIndex, Spe
     }
 
     let combined_content = read_combined_sysml_schema(repo_root, &sysml_files)?;
-    let mut parts = deap_core::sysml_cst::parse_part_defs(&combined_content);
-    let ports = deap_core::sysml_cst::parse_port_defs(&combined_content);
-    let actions = deap_core::sysml_cst::parse_action_defs(&combined_content);
-    let constraints = deap_core::sysml_cst::parse_constraint_defs(&combined_content);
-    let requirements = deap_core::sysml_cst::parse_requirement_defs(&combined_content);
-    let attributes = deap_core::sysml_cst::parse_attribute_defs(&combined_content);
-    let top_states = deap_core::sysml_cst::parse_state_defs(&combined_content);
-    let test_cases = deap_core::sysml_cst::parse_test_case_defs(&combined_content);
+    let mut parts = deap_core::sysml_ast::parse_part_defs(&combined_content);
+    let ports = deap_core::sysml_ast::parse_port_defs(&combined_content);
+    let actions = deap_core::sysml_ast::parse_action_defs(&combined_content);
+    let constraints = deap_core::sysml_ast::parse_constraint_defs(&combined_content);
+    let requirements = deap_core::sysml_ast::parse_requirement_defs(&combined_content);
+    let attributes = deap_core::sysml_ast::parse_attribute_defs(&combined_content);
+    let top_states = deap_core::sysml_ast::parse_state_defs(&combined_content);
+    let test_cases = deap_core::sysml_ast::parse_test_case_defs(&combined_content);
 
     if !other_schema_files.is_empty() {
         let non_sysml_parts =
-            deap_core::sysml_cst::UnifiedSchemaModelExtractor::extract_subsystem_parts(
+            deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts(
                 &other_schema_files,
             );
         for nsp in non_sysml_parts {
             if !parts.iter().any(|p| p.name == nsp) {
-                parts.push(deap_core::sysml_cst::PartDef {
+                parts.push(deap_core::sysml_ast::PartDef {
                     name: nsp,
                     is_def: true,
                     ..Default::default()
@@ -98,7 +98,7 @@ pub fn load_sysml_symbol_index(repo_root: &Path) -> Result<SysmlSymbolIndex, Spe
         return Ok(SysmlSymbolIndex::new());
     }
 
-    let model = deap_core::sysml_cst::SysmlModel {
+    let model = deap_core::sysml_ast::SysmlModel {
         package_name: None,
         doc: None,
         attributes,

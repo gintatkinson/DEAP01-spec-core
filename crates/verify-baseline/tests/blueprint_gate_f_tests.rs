@@ -6,7 +6,7 @@ fn test_req_0604_ac02_logical_icd_matrix_and_signal_dictionary() {
     use compile_sysml::sync::forward::{
         compile_logical_icd_artifacts, emit_logical_icd_artifacts, try_compile_logical_icd_artifacts,
     };
-    use deap_core::sysml_cst::{ConnectionDef, PackageDef, PartDef, PortDef};
+    use deap_core::sysml_ast::{ConnectionDef, PackageDef, PartDef, PortDef};
 
     let mut pkg = PackageDef { name: "AvionicsSystem".to_string(), ..Default::default() };
     pkg.part_defs.push(PartDef {
@@ -68,7 +68,7 @@ fn test_req_0604_ac03_wbs_level4_and_enterprise_exports() {
     use compile_sysml::sync::forward::{
         compile_wbs_artifacts, emit_wbs_artifacts, try_compile_wbs_artifacts,
     };
-    use deap_core::sysml_cst::{PackageDef, PartDef, RequirementDef, TestCaseDef};
+    use deap_core::sysml_ast::{PackageDef, PartDef, RequirementDef, TestCaseDef};
 
     let mut root = PackageDef {
         name: "MissionSystem".to_string(),
@@ -175,7 +175,7 @@ fn test_req_0605_ac03_ac04_strict_owner_schema_isolation() {
     use compile_sysml::docstring::{
         collect_all_parts, inject_rust_file_docstrings, resolve_schema_context_strict,
     };
-    use deap_core::sysml_cst::{ConstraintDef, PackageDef, PartDef, RequirementDef};
+    use deap_core::sysml_ast::{ConstraintDef, PackageDef, PartDef, RequirementDef};
     use verify_baseline::checks::docstring_gate::audit_rust_source_docstrings;
 
     let schema_pkg = PackageDef {
@@ -253,7 +253,7 @@ fn test_req_0604_ac04_html_comment_reopen_and_inclusive_epic_count() {
         advance_html_comment_state, collect_package_story_numbers, count_total_epics_inclusive,
         execute_emit_cli_args, resolve_parent_epic_link, StoryMeta,
     };
-    use deap_core::sysml_cst::PackageDef;
+    use deap_core::sysml_ast::PackageDef;
 
     let pkg_root = PackageDef { name: "SystemRoot".to_string(), ..Default::default() };
     let pkg_conops = PackageDef { name: "ConOps".to_string(), ..Default::default() };

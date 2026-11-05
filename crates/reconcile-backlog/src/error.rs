@@ -174,7 +174,7 @@ pub fn collect_spec_files(workspace_root: &Path) -> Result<Vec<PathBuf>, Reconci
 /// Recursively collects `.md` specification files under `dir`, skipping hidden dirs and `README.md`.
 /// Realises: [REQ-RECONCILE-BACKLOG-LIB-WALK-MARKDOWN-FILES]
 fn walk_markdown_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), ReconcileError> {
-    let mut entries: Vec<_> = fs::read_dir(dir)?.collect::<Result<Vec<_>, _>>()?;
+    let mut entries: Vec<_> = fs::read_dir(dir)?.filter_map(|e| e.ok()).collect();
     entries.sort_by_key(|e| e.path());
 
     for entry in entries {

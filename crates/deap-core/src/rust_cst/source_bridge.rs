@@ -21,11 +21,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-0201], [REQ-0602]
 
-#![deny(
-    clippy::too_many_lines,
-    clippy::too_many_arguments,
-    clippy::undocumented_unsafe_blocks
-)]
+#![deny(clippy::all, clippy::pedantic, clippy::nursery)]
 
 use std::path::Path;
 
@@ -195,6 +191,7 @@ pub struct SourceField {
 
 /// Normalized AST item descriptor with line span and doc metadata. Realises: [REQ-0201]
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct SourceAstItem {
     pub kind: SourceItemKind,
     pub name: String,

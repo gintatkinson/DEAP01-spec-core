@@ -12,11 +12,15 @@ use crate::driver_schema_loader::{
     load_and_validate_schema_typed, load_schema_package_typed, resolve_schema_targets_typed,
     run_compilation_gate_with_dry_run,
 };
-use crate::salsa_db::{count_structural_elements, to_sysml, write_atomic};
-use crate::projections::{
-    compile_stpa_to_constraints_filtered, emit_safety_suite, forward_sync_sysml_to_specs,
-    reverse_sync_specs_to_sysml_with_dry_run, transpile_safety_suite, FmecaScoringConfig,
-    ForwardSyncOptions, ReverseSyncOptions,
+use crate::semantic::digest::{count_structural_elements, write_atomic};
+use crate::semantic::serializer::to_sysml;
+use crate::stpa::{
+    compile_stpa_to_constraints_filtered, emit_safety_suite, transpile_safety_suite,
+    FmecaScoringConfig,
+};
+use crate::sync::{
+    forward_sync_sysml_to_specs, reverse_sync_specs_to_sysml_with_dry_run, ForwardSyncOptions,
+    ReverseSyncOptions,
 };
 use crate::{export_mbd_artifacts, flatten_package_to_model, synthesize_mbd_bundle};
 use std::fs;

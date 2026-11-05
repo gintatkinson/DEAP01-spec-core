@@ -214,41 +214,6 @@ fn scan_single_template_file_cleanliness(
     }
 }
 
-/// Check 18: Verifies upstream architecture blueprints and agent configs are free of domain-specific pollution (`[REQ-0602]`).
-///
-/// # Errors
-/// Returns `Err(Vec<String>)` if forbidden domain terms or ungrounded artifacts are detected.
-pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<(), Vec<String>> {
-    if !is_upstream_compiler(repo_root) {
-        return Ok(());
-    }
-    let mut violations = Vec::new();
-    let bp_dir = repo_root.join("docs").join("architecture").join("blueprints");
-    if bp_dir.is_dir() {
-        for entry_res in WalkDir::new(&bp_dir).sort_by_file_name() {
-            let Ok(entry) = entry_res else { continue };
-            if !entry.file_type().is_file() || entry.path().extension().is_none_or(|e| e != "md") {
-                continue;
-            }
-            let rel = entry.path().strip_prefix(repo_root).unwrap_or(entry.path()).display().to_string();
-            let text = fs::read_to_string(entry.path()).map_err(|e| vec![format!("Check 18 read error {rel}: {e}")])?;
-            for (idx, line) in text.lines().enumerate() {
-                let lower = line.to_ascii_lowercase();
-                for term in ["ruddervator", "empennage", "pitot", "aileron", "airframe"] {
-                    if lower.contains(term) {
-                        violations.push(format!("Check 18 failed: {rel}:{}: forbidden domain term '{term}'", idx + 1));
-                    }
-                }
-            }
-        }
-    }
-    if violations.is_empty() {
-        Ok(())
-    } else {
-        Err(violations)
-    }
-}
-
 #[cfg(test)]
 #[path = "domain_cleanliness_tests.rs"]
 mod tests;

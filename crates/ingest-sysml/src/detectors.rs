@@ -209,8 +209,7 @@ fn find_files_with_ext(dir: &Path, ext: &str) -> Vec<PathBuf> {
         "target", "node_modules", "build", "Pods", "vendor", "dist", "ephemeral", "generated",
         "epics", "features", "user-stories", "use-cases", "safety", "conops", "interfaces", "management",
     ];
-    let mut out = Vec::new();
-    let iter = walkdir::WalkDir::new(dir)
+    walkdir::WalkDir::new(dir)
         .follow_links(false)
         .sort_by_file_name()
         .into_iter()
@@ -219,17 +218,15 @@ fn find_files_with_ext(dir: &Path, ext: &str) -> Vec<PathBuf> {
                 let n = e.file_name().to_string_lossy();
                 !n.starts_with(['.', '#']) && (!e.file_type().is_dir() || !EXCLUDED_DIRS.contains(&n.as_ref()))
             }
-        });
-    for entry_res in iter {
-        let Ok(entry) = entry_res else { continue };
-        let p = entry.path();
-        let low = entry.file_name().to_string_lossy().to_ascii_lowercase();
-        let is_digest = low == "digest.json" || [".digest.json", "-digest.json", "_digest.json"].iter().any(|s| low.ends_with(s));
-        if p.is_file() && !is_digest && p.extension().is_some_and(|e| e.to_string_lossy().eq_ignore_ascii_case(ext)) {
-            out.push(p.to_path_buf());
-        }
-    }
-    out
+        })
+        .flatten()
+        .filter_map(|entry| {
+            let p = entry.path();
+            let low = entry.file_name().to_string_lossy().to_ascii_lowercase();
+            let is_digest = low == "digest.json" || [".digest.json", "-digest.json", "_digest.json"].iter().any(|s| low.ends_with(s));
+            (p.is_file() && !is_digest && p.extension().is_some_and(|e| e.to_string_lossy().eq_ignore_ascii_case(ext))).then(|| p.to_path_buf())
+        })
+        .collect()
 }
 
 #[cfg(test)]

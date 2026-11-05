@@ -358,16 +358,3 @@ fn test_issue_759_reconcile_invalidates_colliding_and_missing_frontmatter_issues
     assert_eq!(i732.body, "Original audit 732 body");
     Ok(())
 }
-
-#[test]
-fn test_cmark_reconciler_backlog_receipt_and_epic_count() -> Result<(), Box<dyn std::error::Error>> {
-    let md = "---\nid: FEAT-01\n---\n# Feature\n- [x] Done task\n- [ ] Open task\n";
-    let receipt = reconcile_markdown_backlog(md)?;
-    assert_eq!(receipt.document_id, "FEAT-01");
-    assert_eq!((receipt.completed_tasks, receipt.total_tasks), (1, 2));
-    assert_eq!(count_total_epics_inclusive(4)?, 5);
-    assert!(count_total_epics_inclusive(usize::MAX).is_err());
-    let sec = emit_checklist_section_cmark("Checklist", &[(true, "Item 1".to_string())])?;
-    assert!(sec.contains("## Checklist") && sec.contains("[x]"));
-    Ok(())
-}

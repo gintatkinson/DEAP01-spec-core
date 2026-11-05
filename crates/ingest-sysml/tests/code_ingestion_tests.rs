@@ -4,7 +4,7 @@
 
 use compile_sysml::{parse_sysml, to_sysml, SemanticValidator};
 use deap_core::source_ast::SourceLanguage;
-use ingest_sysml::cst::code::CodeTranslator;
+use ingest_sysml::translators::code::CodeTranslator;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;

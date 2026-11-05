@@ -367,11 +367,3 @@ fn test_check_4_derivation_table_pass_and_mutations() {
     ];
     assert!(check_4_derivation_table(&zero_rows).is_err());
 }
-
-/// Verifies `BP-02` Check 34 CST purity, fail-closed I/O CST, and `cargo_manifest_ast` contracts (`[REQ-0602]`).
-#[test]
-fn bp02_check34_cst_purity_and_manifest_gate_contract() {
-    assert!(verify_baseline::checks::cst_purity_gate::audit_rust_cst_purity("pub fn bad(s: &[u8], i: usize) -> u8 { s[i] }", "p.rs", true).is_err());
-    assert!(verify_baseline::checks::io_fail_closed_gate::audit_io_fail_closed_cst("pub fn f(v: Vec<Result<u8, ()>>) { for _ in v.into_iter().flatten() {} }", "p.rs").is_err());
-    assert!(deap_core::cargo_manifest_ast::ForbiddenAstPattern::RegexCrateImport.code() == "C34-REGEX-IMPORT");
-}

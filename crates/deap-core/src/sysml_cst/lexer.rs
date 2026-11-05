@@ -23,11 +23,8 @@
 //! ## 7. Traceability
 //! Implements CST lexer layer for SysML parser pipeline.
 
-#![deny(
-    clippy::too_many_lines,
-    clippy::too_many_arguments,
-    clippy::undocumented_unsafe_blocks
-)]
+#![deny(clippy::all, clippy::pedantic, clippy::nursery)]
+#![allow(clippy::doc_markdown, clippy::missing_const_for_fn)]
 
 use std::ops::Range;
 

@@ -32,7 +32,7 @@ impl TempDir {
             "verify_contract_proj_{}_{}_{}",
             name, nanos, count
         ));
-        let _ = fs::create_dir_all(&path);
+        fs::create_dir_all(&path).expect("create temp dir");
         Self { path }
     }
 
@@ -54,8 +54,7 @@ impl Drop for TempDir {
 /// Verifies that `validate_contract_ab_and_dod` fails closed when Contract A, Contract B, or 3-Layer DoD is missing.
 /// Realises: [REQ-SPEC-CONTRACT-AB-DOD-GATE]
 #[test]
-fn test_contract_ab_and_dod_gate_fails_closed_when_missing_contract_a_or_b_or_3layer_dod(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn test_contract_ab_and_dod_gate_fails_closed_when_missing_contract_a_or_b_or_3layer_dod() {
     let missing_contracts_md = "\
 # FEAT-11: GitHub CLI Resilience & Subprocess Bounds
 
@@ -72,7 +71,7 @@ Resilience and subprocess timeout bounds.
 - [ ] **Layer 2 (Logic & State Management)**: Retry logic.
 - [ ] **Layer 3 (Presentation & Actuator Interface Binding)**: CLI output.
 ";
-    let doc1 = parse_markdown(missing_contracts_md)?;
+    let doc1 = parse_markdown(missing_contracts_md).expect("valid markdown");
     let errs1 = validate_contract_ab_and_dod(
         "feature",
         &doc1,
@@ -94,7 +93,7 @@ Resilience and subprocess timeout bounds.
 - **Contract A (Design-Time AST & Mathematical Formulation)**: AST lowering rules.
 - **Contract B (Runtime Verification & Execution Invariants)**: Execution bounds.
 ";
-    let doc2 = parse_markdown(missing_dod_md)?;
+    let doc2 = parse_markdown(missing_dod_md).expect("valid markdown");
     let errs2 = validate_contract_ab_and_dod(
         "use_case",
         &doc2,
@@ -102,14 +101,12 @@ Resilience and subprocess timeout bounds.
         "docs/use-cases/UC-10-execute-4-level-hierarchical-codegen-lowering-pipeline.md",
     );
     assert!(errs2.iter().any(|e| e.contains("3-Layer Definition of Done")));
-    Ok(())
 }
 
 /// Verifies that `validate_contract_ab_and_dod` passes when Contract A, Contract B, and 3-Layer DoD are present.
 /// Realises: [REQ-SPEC-CONTRACT-AB-DOD-GATE]
 #[test]
-fn test_contract_ab_and_dod_gate_passes_when_contract_a_b_and_3layer_dod_present(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn test_contract_ab_and_dod_gate_passes_when_contract_a_b_and_3layer_dod_present() {
     let compliant_md = "\
 # FEAT-01: Unified SysML v2 AST Extractor
 
@@ -127,7 +124,7 @@ fn test_contract_ab_and_dod_gate_passes_when_contract_a_b_and_3layer_dod_present
 - [ ] **Layer 2 (Logic & State Management)**: Extractor pipeline.
 - [ ] **Layer 3 (Presentation & Actuator Interface Binding)**: Diagnostic CLI output.
 ";
-    let doc = parse_markdown(compliant_md)?;
+    let doc = parse_markdown(compliant_md).expect("valid markdown");
     let errs = validate_contract_ab_and_dod(
         "feature",
         &doc,
@@ -135,25 +132,23 @@ fn test_contract_ab_and_dod_gate_passes_when_contract_a_b_and_3layer_dod_present
         "docs/features/FEAT-01-unified-sysml-v2-ast-extractor.md",
     );
     assert!(errs.is_empty(), "Expected compliant spec to pass, got: {:?}", errs);
-    Ok(())
 }
 
 /// Verifies that `validate_multi_file_schema_and_spec_realization_parity` fails closed on split schema files.
 /// Realises: [REQ-MULTI-FILE-SCHEMA-REALIZATION-GATE]
 #[test]
-fn test_multi_file_schema_parity_fails_closed_on_split_model_sysml_or_pipeline_schema_drift(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn test_multi_file_schema_parity_fails_closed_on_split_model_sysml_or_pipeline_schema_drift() {
     let tmp = TempDir::new("split_schema");
     let root = tmp.path();
-    fs::create_dir_all(root.join("schema"))?;
-    fs::create_dir_all(root.join(".pipeline"))?;
+    fs::create_dir_all(root.join("schema")).expect("schema dir");
+    fs::create_dir_all(root.join(".pipeline")).expect(".pipeline dir");
 
     let model_sysml = "package SysML_Model {\n  part def CoreEngine { attribute version : Integer; }\n}\n";
     let modular_sysml = "package ModularCodegen {\n  part def ModularityBoundsSpec { attribute max_sloc : Integer; }\n}\n";
     let combined = format!("{}\n{}", model_sysml, modular_sysml);
-    fs::write(root.join("schema/model.sysml"), model_sysml)?;
-    fs::write(root.join("schema/modular_codegen.sysml"), modular_sysml)?;
-    fs::write(root.join(".pipeline/schema.sysml"), &combined)?;
+    fs::write(root.join("schema/model.sysml"), model_sysml).expect("write model.sysml");
+    fs::write(root.join("schema/modular_codegen.sysml"), modular_sysml).expect("write modular");
+    fs::write(root.join(".pipeline/schema.sysml"), &combined).expect("write .pipeline/schema.sysml");
 
     let errs = validate_multi_file_schema_and_spec_realization_parity(root);
     assert!(
@@ -162,21 +157,20 @@ fn test_multi_file_schema_parity_fails_closed_on_split_model_sysml_or_pipeline_s
         "Expected failure for split schema/modular_codegen.sysml vs model.sysml, got: {:?}",
         errs
     );
-    Ok(())
 }
 
 /// Verifies that `validate_multi_file_schema_and_spec_realization_parity` fails closed when AST defs lack spec files.
 /// Realises: [REQ-MULTI-FILE-SCHEMA-REALIZATION-GATE]
 #[test]
-fn test_multi_file_schema_realization_fails_closed_on_unrealized_part_def_use_case_def_or_action_def(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn test_multi_file_schema_realization_fails_closed_on_unrealized_part_def_use_case_def_or_action_def()
+{
     let tmp = TempDir::new("unrealized_defs");
     let root = tmp.path();
-    fs::create_dir_all(root.join("schema"))?;
-    fs::create_dir_all(root.join(".pipeline"))?;
-    fs::create_dir_all(root.join("docs/features"))?;
-    fs::create_dir_all(root.join("docs/use-cases"))?;
-    fs::create_dir_all(root.join("docs/user-stories"))?;
+    fs::create_dir_all(root.join("schema")).expect("schema dir");
+    fs::create_dir_all(root.join(".pipeline")).expect(".pipeline dir");
+    fs::create_dir_all(root.join("docs/features")).expect("features dir");
+    fs::create_dir_all(root.join("docs/use-cases")).expect("use-cases dir");
+    fs::create_dir_all(root.join("docs/user-stories")).expect("user-stories dir");
 
     let sysml = "\
 package SysML_Model {
@@ -188,49 +182,46 @@ package SysML_Model {
     action def ExecuteFourLevelLoweringPipeline {}
 }
 ";
-    fs::write(root.join("schema/model.sysml"), sysml)?;
-    fs::write(root.join(".pipeline/schema.sysml"), sysml)?;
-    fs::write(root.join("docs/features/FEAT-01-core-engine.md"), "# FEAT-01: CoreEngine\nRealizes `CoreEngine`.")?;
-    fs::write(root.join("docs/use-cases/UC-01-parse-core.md"), "# UC-01: Parse Core\nRealizes `UC_01_Parse_Core`.")?;
-    fs::write(root.join("docs/user-stories/US-01-run-core.md"), "# US-01: Run Core\nRealizes `Act_01_Run_Core`.")?;
+    fs::write(root.join("schema/model.sysml"), sysml).expect("write model.sysml");
+    fs::write(root.join(".pipeline/schema.sysml"), sysml).expect("write .pipeline/schema.sysml");
+    fs::write(root.join("docs/features/FEAT-01-core-engine.md"), "# FEAT-01: CoreEngine\nRealizes `CoreEngine`.").expect("FEAT-01");
+    fs::write(root.join("docs/use-cases/UC-01-parse-core.md"), "# UC-01: Parse Core\nRealizes `UC_01_Parse_Core`.").expect("UC-01");
+    fs::write(root.join("docs/user-stories/US-01-run-core.md"), "# US-01: Run Core\nRealizes `Act_01_Run_Core`.").expect("US-01");
 
     let errs = validate_multi_file_schema_and_spec_realization_parity(root);
     assert!(errs.iter().any(|e| e.contains("ModularityBoundsSpec")));
     assert!(errs.iter().any(|e| e.contains("UC_02_Missing_UseCase")));
     assert!(errs.iter().any(|e| e.contains("ExecuteFourLevelLoweringPipeline")));
-    Ok(())
 }
 
 /// Verifies that `validate_multi_file_schema_and_spec_realization_parity` passes when unified and realized.
 /// Realises: [REQ-MULTI-FILE-SCHEMA-REALIZATION-GATE]
 #[test]
-fn test_multi_file_schema_realization_passes_when_unified_and_realized(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn test_multi_file_schema_realization_passes_when_unified_and_realized() {
     let tmp = TempDir::new("unified_realized");
     let root = tmp.path();
-    fs::create_dir_all(root.join("schema"))?;
-    fs::create_dir_all(root.join(".pipeline"))?;
-    fs::create_dir_all(root.join("docs/features"))?;
-    fs::create_dir_all(root.join("docs/use-cases"))?;
-    fs::create_dir_all(root.join("docs/user-stories"))?;
+    fs::create_dir_all(root.join("schema")).expect("schema dir");
+    fs::create_dir_all(root.join(".pipeline")).expect(".pipeline dir");
+    fs::create_dir_all(root.join("docs/features")).expect("features dir");
+    fs::create_dir_all(root.join("docs/use-cases")).expect("use-cases dir");
+    fs::create_dir_all(root.join("docs/user-stories")).expect("user-stories dir");
 
     let sysml = "package SysML_Model {\n  part def CoreEngine {}\n  use case def UC_01_Parse_Core {}\n  action def Act_01_Run_Core {}\n}\n";
-    fs::write(root.join("schema/model.sysml"), sysml)?;
-    fs::write(root.join(".pipeline/schema.sysml"), sysml)?;
-    fs::write(root.join("docs/features/FEAT-01-core-engine.md"), "# FEAT-01: CoreEngine\nRealizes `CoreEngine`.")?;
-    fs::write(root.join("docs/use-cases/UC-01-parse-core.md"), "# UC-01: Parse Core\nRealizes `UC_01_Parse_Core`.")?;
-    fs::write(root.join("docs/user-stories/US-01-run-core.md"), "# US-01: Run Core\nRealizes `Act_01_Run_Core`.")?;
+    fs::write(root.join("schema/model.sysml"), sysml).expect("write model.sysml");
+    fs::write(root.join(".pipeline/schema.sysml"), sysml).expect("write .pipeline/schema.sysml");
+    fs::write(root.join("docs/features/FEAT-01-core-engine.md"), "# FEAT-01: CoreEngine\nRealizes `CoreEngine`.").expect("FEAT-01");
+    fs::write(root.join("docs/use-cases/UC-01-parse-core.md"), "# UC-01: Parse Core\nRealizes `UC_01_Parse_Core`.").expect("UC-01");
+    fs::write(root.join("docs/user-stories/US-01-run-core.md"), "# US-01: Run Core\nRealizes `Act_01_Run_Core`.").expect("US-01");
 
     let errs = validate_multi_file_schema_and_spec_realization_parity(root);
     assert!(errs.is_empty(), "Expected unified and realized schema to pass, got: {:?}", errs);
-    Ok(())
 }
 
 /// Verifies that remote tracker projection parity fails closed on missing ID, `[AUDIT]` collision, drift, and premature resolution.
 /// Realises: [REQ-REMOTE-TRACKER-PROJECTION-PARITY-GATE]
 #[test]
-fn test_remote_tracker_projection_fails_closed_on_missing_issue_audit_collision_title_body_drift_and_premature_fixed_resolved(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn test_remote_tracker_projection_fails_closed_on_missing_issue_audit_collision_title_body_drift_and_premature_fixed_resolved()
+{
     let spec_md = "\
 # FEAT-01: Unified SysML v2 AST Extractor
 
@@ -245,7 +236,7 @@ fn test_remote_tracker_projection_fails_closed_on_missing_issue_audit_collision_
 - [ ] **Layer 2**: Parser logic.
 - [ ] **Layer 3**: CLI binding.
 ";
-    let doc = parse_markdown(spec_md)?;
+    let doc = parse_markdown(spec_md).expect("valid markdown");
     let empty_map = BTreeMap::new();
     let errs_missing = validate_spec_remote_tracker_projection(
         "docs/features/FEAT-01.md",
@@ -278,17 +269,15 @@ fn test_remote_tracker_projection_fails_closed_on_missing_issue_audit_collision_
     assert!(errs_collision.iter().any(|e| e.contains("title")));
     assert!(errs_collision.iter().any(|e| e.contains("body")));
     assert!(errs_collision.iter().any(|e| e.contains("status:fixed-resolved")));
-    Ok(())
 }
 
 /// Verifies that remote tracker projection parity passes when remote title, projected body, and status align.
 /// Realises: [REQ-REMOTE-TRACKER-PROJECTION-PARITY-GATE]
 #[test]
-fn test_remote_tracker_projection_passes_when_title_body_and_status_match(
-) -> Result<(), Box<dyn std::error::Error>> {
+fn test_remote_tracker_projection_passes_when_title_body_and_status_match() {
     let tmp = TempDir::new("tracker_match");
     let root = tmp.path();
-    fs::create_dir_all(root.join("docs/features"))?;
+    fs::create_dir_all(root.join("docs/features")).expect("features dir");
 
     let spec_md = "\
 # FEAT-01: Unified SysML v2 AST Extractor
@@ -304,7 +293,7 @@ fn test_remote_tracker_projection_passes_when_title_body_and_status_match(
 - [ ] **Layer 2**: Parser logic.
 - [ ] **Layer 3**: CLI binding.
 ";
-    fs::write(root.join("docs/features/FEAT-01.md"), spec_md)?;
+    fs::write(root.join("docs/features/FEAT-01.md"), spec_md).expect("write spec");
     let proj_ctx = (Some("org/repo"), "main", None);
     let projected_body = project_body_for_tracker_with_prefix(
         spec_md,
@@ -326,5 +315,4 @@ fn test_remote_tracker_projection_passes_when_title_body_and_status_match(
     );
     let errs = validate_workspace_remote_tracker_projection(root, &remote_map, proj_ctx);
     assert!(errs.is_empty(), "Expected matching remote projection to pass, got: {:?}", errs);
-    Ok(())
 }

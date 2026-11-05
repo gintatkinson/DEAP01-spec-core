@@ -30,7 +30,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-SYNC-FEAT-EPIC-AST-GROUNDED-699], [REQ-SYNC-ACRONYM-PRESERVATION-699] | SysML v2: VerificationCaseDef(reproducer_j_tests)
 
-use deap_core::sysml_cst::{
+use deap_core::sysml_ast::{
     ActionDef, AttributeDef, ConstraintDef, PackageDef, PartDef, PortDef, RequirementDef, StateDef,
     TransitionDef, UseCaseDef,
 };

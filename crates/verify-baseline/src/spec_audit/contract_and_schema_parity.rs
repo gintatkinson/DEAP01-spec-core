@@ -13,7 +13,7 @@ use crate::spec_audit::{
     extract_body_outside_code_blocks, validate_workspace_remote_tracker_projection, MarkdownDoc,
     RemoteTrackerIssue, SpecAuditFinding,
 };
-use deap_core::sysml_cst::{
+use deap_core::sysml_ast::{
     parse_action_defs, parse_part_defs, parse_port_defs, parse_requirement_defs,
     UnifiedSchemaModelExtractor,
 };

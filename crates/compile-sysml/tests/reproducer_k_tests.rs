@@ -35,7 +35,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use compile_sysml::projections::forward::{forward_sync_sysml_to_specs, ForwardSyncOptions};
+use compile_sysml::sync::forward::{forward_sync_sysml_to_specs, ForwardSyncOptions};
 
 use crate::reproducer_j_tests::{
     assert_issue_699_acronyms, assert_issue_699_feat_sections_and_bdd,

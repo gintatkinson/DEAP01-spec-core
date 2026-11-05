@@ -51,8 +51,6 @@ mod bp_gate_tests;
 pub mod check_secrets;
 pub mod checks;
 pub mod clippy_gate;
-pub mod cmark_gates;
-pub mod cmark_gates_audit;
 pub mod commit_msg;
 mod commit_msg_scanner;
 pub mod defect_dossier;

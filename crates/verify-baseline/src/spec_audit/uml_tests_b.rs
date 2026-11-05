@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use deap_core::sysml_cst::{ActionDef, OperationDef, PartDef, StateDef, SysmlModel};
+use deap_core::sysml_ast::{ActionDef, OperationDef, PartDef, StateDef, SysmlModel};
 
 use crate::spec_audit::diagram_ast::{StateDefAst, StateDiagramAst, StateTransitionAst};
 use crate::spec_audit::markdown_ast::{MarkdownDoc, MermaidBlock, ProseSegment};
@@ -236,18 +236,18 @@ fn test_feature_operation_coverage_scoping_ignores_prose_mentions() {
 fn test_user_story_test_case_accepts_assert_constraint_ids() {
     let mut model = SysmlModel::default();
     for name in ["Assert_UCA_33", "Assert_UCA_34"] {
-        model.constraints.push(deap_core::sysml_cst::ConstraintDef {
+        model.constraints.push(deap_core::sysml_ast::ConstraintDef {
             name: name.to_string(),
             is_assertion: true,
             ..Default::default()
         });
     }
-    model.test_cases.push(deap_core::sysml_cst::TestCaseDef {
+    model.test_cases.push(deap_core::sysml_ast::TestCaseDef {
         name: "TC_UCA_33_Verification".to_string(),
         verified_requirements: vec!["Assert_UCA_33".to_string(), "Assert_UCA_34".to_string()],
         ..Default::default()
     });
-    model.test_cases.push(deap_core::sysml_cst::TestCaseDef {
+    model.test_cases.push(deap_core::sysml_ast::TestCaseDef {
         name: "TC_Invalid_Target".to_string(),
         verified_requirements: vec!["NonExistentRequirement_99".to_string()],
         ..Default::default()
@@ -288,7 +288,7 @@ fn test_index_state_registers_transition_names_triggers_and_states(
                 StateDef { name: "Uninitialized".to_string(), ..Default::default() },
                 StateDef { name: "Active".to_string(), ..Default::default() },
             ],
-            transitions: vec![deap_core::sysml_cst::TransitionDef {
+            transitions: vec![deap_core::sysml_ast::TransitionDef {
                 name: Some("Uninitialized_to_Active_on_parse_token".to_string()),
                 source: Some("Uninitialized".to_string()),
                 target: Some("Active".to_string()),

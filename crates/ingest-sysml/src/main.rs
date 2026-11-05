@@ -17,11 +17,12 @@ use compile_sysml::{
 use deap_core::source_ast::{
     resolve_source_package_name, sanitize_sysml_identifier, SourceLanguage,
 };
-use deap_core::PackageDef;
-use ingest_sysml::cst::{
-    CodeTranslator, IDLTranslator, MarkdownTranslator, OpenAPITranslator, YangTranslator,
-};
+use deap_core::sysml_ast::PackageDef;
 use ingest_sysml::detectors::discover_schema_targets;
+use ingest_sysml::translators::{
+    code::CodeTranslator, idl::IDLTranslator, markdown::MarkdownTranslator,
+    openapi::OpenAPITranslator, yang::YangTranslator,
+};
 use ingest_sysml::{
     cache_ingested_sysml_model, collect_declared_part_names, filter_ast_to_realized_or_allowed,
     filter_ast_to_target_scope, verify_scope_and_negative_invariants, IngestExitCode,
@@ -261,16 +262,10 @@ fn persist_and_verify_ingested_model(args: &CliArgs, pkg: &PackageDef) -> Result
         let upstream_dir = ws_root.join(".pipeline").join("upstream");
         let schema_dir = ws_root.join("schema");
         if !upstream_dir.exists() && schema_dir.is_dir() {
-            let mut has_sysml = false;
-            if let Ok(entries) = fs::read_dir(&schema_dir) {
-                for entry_res in entries {
-                    let Ok(e) = entry_res else { continue };
-                    if e.path().is_file() && e.path().extension().is_some_and(|ext| ext == "sysml") {
-                        has_sysml = true;
-                        break;
-                    }
-                }
-            }
+            let has_sysml = fs::read_dir(&schema_dir)
+                .ok()
+                .map(|entries| entries.flatten().any(|e| e.path().is_file() && e.path().extension().is_some_and(|ext| ext == "sysml")))
+                .unwrap_or(false);
             if !has_sysml {
                 let model_out = schema_dir.join("model.sysml");
                 write_atomic(&model_out, &sysml_text).map_err(|e| {

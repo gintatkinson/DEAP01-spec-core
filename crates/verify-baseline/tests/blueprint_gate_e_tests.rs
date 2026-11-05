@@ -227,7 +227,7 @@ fn test_req_0604_ac01_and_ac05_operation_signatures_and_reverse_parsing() {
         format_markdown_operation_bullet, format_mermaid_operation_signature,
         forward_sync_sysml_to_specs, parse_markdown_operation_bullet, ForwardSyncOptions,
     };
-    use deap_core::sysml_cst::{ActionDef, AttributeDef, PackageDef, PartDef};
+    use deap_core::sysml_ast::{ActionDef, AttributeDef, PackageDef, PartDef};
 
     let action = ActionDef {
         name: "ComputeTrajectory".to_string(),

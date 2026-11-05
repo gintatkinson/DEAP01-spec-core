@@ -9,7 +9,7 @@ use crate::bp_gate_sysml::{
 
 fn build_nested_part_chain(
     nesting_depth: usize,
-) -> Result<deap_core::sysml_cst::PartDef, String> {
+) -> Result<deap_core::sysml_ast::PartDef, String> {
     let parsed = compile_sysml::parse_sysml(
         "package P { part def Node { attribute count : Integer; port link : TelemetryPort; } }",
     )
@@ -39,7 +39,7 @@ fn build_nested_part_chain(
 
 fn build_nested_package_chain(
     nesting_depth: usize,
-) -> Result<deap_core::sysml_cst::PackageDef, String> {
+) -> Result<deap_core::sysml_ast::PackageDef, String> {
     let template = compile_sysml::parse_sysml("package SubPkg { port def BusPort; }")
         .map_err(|e| format!("parse error: {e}"))?;
     let mut current = template.clone();

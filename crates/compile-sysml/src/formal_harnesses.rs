@@ -31,11 +31,8 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-0903], [REQ-1102], [BP-09], [BP-11]
 
-#![deny(
-    clippy::too_many_lines,
-    clippy::too_many_arguments,
-    clippy::undocumented_unsafe_blocks
-)]
+#![deny(clippy::all, clippy::pedantic, clippy::nursery)]
+#![allow(clippy::missing_errors_doc)]
 
 use deap_core::rust_cst::parse::parse_rust_source;
 use quote::quote;
@@ -58,6 +55,8 @@ pub struct KaniProofSpec {
 
 /// Synthesizes a deterministic `#[cfg(kani)]` proof harness module from `specs` (`REQ-0903`).
 /// Realises: [REQ-0903]
+#[allow(clippy::double_must_use)]
+#[must_use]
 pub fn synthesize_kani_proof_module(specs: &[KaniProofSpec]) -> Result<String, String> {
     if specs.is_empty() {
         return Err("kani proof specification slice must not be empty".to_string());
@@ -112,6 +111,8 @@ pub fn synthesize_kani_proof_module(specs: &[KaniProofSpec]) -> Result<String, S
 
 /// Synthesizes a Ring-2 FRB FFI boundary bridge module with `// SAFETY: [SC-...]` contract metadata (`REQ-1102`).
 /// Realises: [REQ-1102]
+#[allow(clippy::double_must_use)]
+#[must_use]
 pub fn synthesize_ring2_frb_ffi_bridge(bridge_name: &str, sc_id: &str) -> Result<String, String> {
     if !sc_id.starts_with("SC-") || sc_id.len() <= 3 {
         return Err(format!("safety contract ID `{sc_id}` must start with `SC-`"));
@@ -143,11 +144,12 @@ pub fn synthesize_ring2_frb_ffi_bridge(bridge_name: &str, sc_id: &str) -> Result
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_synthesize_kani_proof_module_valid_and_deterministic() -> Result<(), String> {
+    fn test_synthesize_kani_proof_module_valid_and_deterministic() {
         let specs = vec![KaniProofSpec {
             fn_name: "proof_attitude_clamp".to_string(),
             req_id: "REQ-0903".to_string(),
@@ -155,19 +157,18 @@ mod tests {
             min_bound: -100,
             max_bound: 100,
         }];
-        let out_a = synthesize_kani_proof_module(&specs)?;
-        let out_b = synthesize_kani_proof_module(&specs)?;
+        let out_a = synthesize_kani_proof_module(&specs).expect("must synthesize kani module");
+        let out_b = synthesize_kani_proof_module(&specs).expect("must be deterministic");
         assert_eq!(out_a, out_b);
         assert!(out_a.contains("#[cfg(kani)]"));
         assert!(out_a.contains("#[kani::proof]"));
         assert!(out_a.contains("pub fn proof_attitude_clamp()"));
         assert!(out_a.contains("[REQ-0903]"));
         assert!(out_a.contains("[SC-0903]"));
-        Ok(())
     }
 
     #[test]
-    fn test_synthesize_kani_proof_module_rejects_inverted_bounds() -> Result<(), String> {
+    fn test_synthesize_kani_proof_module_rejects_inverted_bounds() {
         let specs = vec![KaniProofSpec {
             fn_name: "proof_bad_bounds".to_string(),
             req_id: "REQ-0903".to_string(),
@@ -175,20 +176,18 @@ mod tests {
             min_bound: 50,
             max_bound: -10,
         }];
-        match synthesize_kani_proof_module(&specs) {
-            Err(err) if err.contains("min_bound") => Ok(()),
-            other => Err(format!("expected min_bound error, got {other:?}")),
-        }
+        let err = synthesize_kani_proof_module(&specs).expect_err("inverted bounds must fail");
+        assert!(err.contains("min_bound"));
     }
 
     #[test]
-    fn test_synthesize_ring2_frb_ffi_bridge_emits_safety_contract() -> Result<(), String> {
-        let code = synthesize_ring2_frb_ffi_bridge("frb_bridge_telemetry", "SC-1102")?;
+    fn test_synthesize_ring2_frb_ffi_bridge_emits_safety_contract() {
+        let code = synthesize_ring2_frb_ffi_bridge("frb_bridge_telemetry", "SC-1102")
+            .expect("must synthesize Ring-2 FFI bridge");
         assert!(code.contains("pub fn frb_bridge_telemetry(input: i64) -> i64"));
         assert!(code.contains("// SAFETY: [SC-1102]"));
         assert!(code.contains("unsafe {"));
         assert!(synthesize_ring2_frb_ffi_bridge("123invalid", "SC-1102").is_err());
         assert!(synthesize_ring2_frb_ffi_bridge("valid_name", "BAD-1102").is_err());
-        Ok(())
     }
 }

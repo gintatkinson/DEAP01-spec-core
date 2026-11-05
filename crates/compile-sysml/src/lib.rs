@@ -41,37 +41,34 @@ mod cli_integration;
 mod docstring_tests;
 pub mod flutter_codegen;
 pub mod formal_harnesses;
+pub mod lexer;
 #[cfg(test)]
 mod lib_tests;
 #[cfg(test)]
 mod lib_tests_b;
 pub mod modular_codegen;
-pub mod projections;
-pub mod salsa_db;
+pub mod parser;
+pub mod semantic;
+pub mod stpa;
 pub mod syn_codegen;
-pub use projections as sync;
-pub use projections::stpa;
+pub mod sync;
 pub use cli::*;
-pub use deap_core::sysml_cst::*;
+pub use deap_core::sysml_ast::*;
 pub use docstring::{inject_dart_file_docstrings, inject_rust_file_docstrings, run_docstring_injection, run_extract_source, DocstringExitCode, DocstringInjectionOptions, DocstringInjectionReport};
 pub use docstring_cst::*;
 pub use driver::*;
 pub use flutter_codegen::{emit_flutter_contracts, FlutterCodegenError, FlutterContractOptions, FlutterContractReport};
-pub use salsa_db::{
-    compute_file_manifest, count_structural_elements, discover_sysml_files, generate_digest,
-    merge_package_defs, parse_expression, parse_sysml_directory, parse_sysml_tree, to_sysml,
-    write_atomic, write_digest_atomic, BinaryOp, DiagnosticSeverity, Expr, ExpressionParser,
-    FileDigestEntry, ParseError, Scanner, SchemaDigest, SemanticDiagnostic, SemanticValidator,
-    Span, Symbol, SymbolKind, SymbolTable, SysmlIncrementalDb, SysmlParser, SysmlSerializable,
-    Token, TokenKind, UnaryOp,
-};
-pub use projections::{
-    compile_stpa_to_constraints, compile_stpa_to_constraints_filtered, emit_safety_suite,
-    expand_cartesian_stpa, forward_sync_sysml_to_specs, generate_fmeca_matrix,
-    reverse_sync_specs_to_sysml, transpile_safety_suite, transpile_stpa, FmecaRow,
-    FmecaScoringConfig, ForwardSyncOptions, ReverseSyncOptions, UnsafeControlAction,
-};
+pub use lexer::scanner::Scanner;
+pub use lexer::token::{Span, Token, TokenKind};
+pub use parser::expressions::{parse_expression, BinaryOp, Expr, ExpressionParser, UnaryOp};
+pub use parser::grammar::{discover_sysml_files, merge_package_defs, parse_sysml_directory, parse_sysml_tree, ParseError, SysmlParser};
+pub use semantic::digest::{compute_file_manifest, count_structural_elements, generate_digest, write_atomic, write_digest_atomic, FileDigestEntry, SchemaDigest};
+pub use semantic::serializer::{to_sysml, SysmlSerializable};
+pub use semantic::symbols::{Symbol, SymbolKind, SymbolTable};
+pub use semantic::validator::{DiagnosticSeverity, SemanticDiagnostic, SemanticValidator};
+pub use stpa::{compile_stpa_to_constraints, compile_stpa_to_constraints_filtered, emit_safety_suite, expand_cartesian_stpa, generate_fmeca_matrix, transpile_safety_suite, transpile_stpa, FmecaRow, FmecaScoringConfig, UnsafeControlAction};
 pub use syn_codegen::{format_and_verify_rust_module_ast, synthesize_prettyplease_unit, synthesize_typed_domain_struct_tokens, verify_stage_fixed_point, StageTreeDigestManifest, SynCodegenFixedPointReceipt};
+pub use sync::{forward_sync_sysml_to_specs, reverse_sync_specs_to_sysml, ForwardSyncOptions, ReverseSyncOptions};
 
 /// Parse textual SysML v2 source into a strongly-typed PackageDef AST.
 /// ## 1. Safety Intent & Regulatory Scope -- Canonical single-buffer SysML v2 parser under DO-330 TQL-4.
@@ -344,7 +341,7 @@ pub fn export_mbd_artifacts(model: &SysmlModel, out_dir: &std::path::Path) -> Re
     let mut written = Vec::with_capacity(4);
     for (file_name, label, content) in [("requirements.slreqx", "requirements", &bundle.slreq_xml), ("stateflow_chart.sfx", "Stateflow", &bundle.stateflow_sfx), ("simulink_bus.m", "Simulink bus", &bundle.simulink_bus_m), ("layer_contracts.json", "layer contracts", &bundle.layer_contracts_json)] {
         let path = out_dir.join(file_name);
-        crate::salsa_db::write_atomic(&path, content).map_err(|e| format!("Failed to write MBD {label} artifact '{}': {e}", path.display()))?;
+        crate::semantic::digest::write_atomic(&path, content).map_err(|e| format!("Failed to write MBD {label} artifact '{}': {e}", path.display()))?;
         written.push(path);
     }
     Ok(written)

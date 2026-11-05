@@ -17,7 +17,7 @@
 
 use std::collections::BTreeSet;
 
-use deap_core::sysml_cst::{PackageDef, SysmlModel};
+use deap_core::sysml_ast::{PackageDef, SysmlModel};
 
 use super::contracts::TopologyNode;
 use super::naming::{escape_dart_single_quoted, to_pascal_case};

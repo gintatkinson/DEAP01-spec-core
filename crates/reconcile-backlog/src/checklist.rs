@@ -14,7 +14,7 @@ pub use crate::checklist_placeholders::{
 };
 
 use crate::checklist_placeholders::is_placeholder_bullet;
-use crate::frontmatter::extract_issue_number;
+use crate::frontmatter::{collect_code_block_ranges, extract_issue_number, is_offset_in_ranges};
 use crate::tracker::IssueIndex;
 use crate::ReconcileError;
 use pulldown_cmark::{Event, Options, Parser, Tag};
@@ -145,7 +145,7 @@ pub fn reconcile_parent_checklists(
 
 /// Rewrites a single checklist line's checkbox marker to match `should_be_checked`.
 /// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-RECONCILE-CHECKLISTS-IN-CONTENT]
-pub(crate) fn update_checkbox_state_on_line(line: &str, should_be_checked: bool) -> Option<String> {
+fn update_checkbox_state_on_line(line: &str, should_be_checked: bool) -> Option<String> {
     let trimmed_start = line.trim_start();
     let indent_len = line.len().saturating_sub(trimmed_start.len());
     let indent = line.get(..indent_len).unwrap_or("");
@@ -276,5 +276,63 @@ pub fn reconcile_checklists_in_content(
     index: &IssueIndex,
     _parent_spec_type: Option<&str>,
 ) -> Result<(String, usize), ReconcileError> {
-    crate::cmark_reconciler::reconcile_checklists_via_cmark(content, index)
+    let (cleaned, _purged_count) = clean_unpopulated_placeholders_counted(content);
+    let line_ending = if cleaned.contains("\r\n") { "\r\n" } else { "\n" };
+    let code_ranges = collect_code_block_ranges(&cleaned);
+    let mut updated_count = 0usize;
+    let mut out_lines: Vec<String> = Vec::new();
+    let mut byte_offset = 0usize;
+
+    for raw_line in cleaned.split('\n') {
+        let line_len = raw_line.len();
+        let line = raw_line.strip_suffix('\r').unwrap_or(raw_line);
+        let in_code = is_offset_in_ranges(byte_offset, &code_ranges);
+
+        if !in_code {
+            if let Some((title, issue_num)) = extract_checklist_title_and_issue(line) {
+                let mut effective_line = line.to_string();
+                let mut line_changed = false;
+                let effective_issue = match issue_num {
+                    Some(num) if index.is_issue_valid_for_spec(num, &title, None) => Some(num),
+                    Some(stale_num) => {
+                        let found = index.find_issue_for_spec(&title, None);
+                        if let Some(new_num) = found {
+                            if let Some(repatched) = replace_stale_issue_in_checklist_line(
+                                &effective_line,
+                                stale_num,
+                                new_num,
+                            ) {
+                                effective_line = repatched;
+                                line_changed = true;
+                            }
+                        }
+                        found
+                    }
+                    None => index.find_issue_for_spec(&title, None),
+                };
+
+                if let Some(should_be_checked) =
+                    effective_issue.and_then(|num| index.is_issue_resolved(num))
+                {
+                    if let Some(rewritten) =
+                        update_checkbox_state_on_line(&effective_line, should_be_checked)
+                    {
+                        effective_line = rewritten;
+                        line_changed = true;
+                    }
+                }
+                if line_changed {
+                    out_lines.push(effective_line);
+                    updated_count += 1;
+                    byte_offset = byte_offset.saturating_add(line_len).saturating_add(1);
+                    continue;
+                }
+            }
+        }
+
+        out_lines.push(line.to_string());
+        byte_offset = byte_offset.saturating_add(line_len).saturating_add(1);
+    }
+
+    Ok((out_lines.join(line_ending), updated_count))
 }

@@ -8,7 +8,7 @@ use super::parity_check_discovery::{discover_sysml_model_text, TargetScanDir};
 use super::parity_check_icd_ast::collect_part_def_names;
 use super::parity_gates::{has_colon_method_syntax, DiagramType, ParityOutcome};
 use deap_core::rules::EXCLUDED_DIRS;
-use deap_core::sysml_cst::{
+use deap_core::sysml_ast::{
     parse_action_defs, parse_constraint_defs, parse_part_defs, parse_port_defs,
 };
 use deap_core::workspace::is_upstream_compiler;

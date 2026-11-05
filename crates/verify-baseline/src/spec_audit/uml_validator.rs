@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use deap_core::sysml_cst::{PackageDef, PartDef, StateDef, SysmlModel};
+use deap_core::sysml_ast::{PackageDef, PartDef, StateDef, SysmlModel};
 
 pub use crate::spec_audit::uml_compliance_gates::{
     validate_epic_statechart_heterogeneity, validate_parent_epic_alignment,

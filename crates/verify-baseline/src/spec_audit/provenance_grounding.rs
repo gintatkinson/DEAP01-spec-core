@@ -7,7 +7,7 @@ use crate::spec_audit::provenance::{
 };
 use crate::spec_audit::uml_validator::SysmlSymbolIndex;
 use crate::spec_audit::{SpecAuditError, SpecAuditFinding};
-use deap_core::sysml_cst::{AttributeDef, ConstraintDef};
+use deap_core::sysml_ast::{AttributeDef, ConstraintDef};
 
 /// Checks if a numeric span `[start..end]` in `line` is part of an identifier, label, or section number.
 /// Realises: [REQ-SPEC-AUDIT-PROVENANCE-FIND-NAKED-NUMERIC-QUANTITIES]

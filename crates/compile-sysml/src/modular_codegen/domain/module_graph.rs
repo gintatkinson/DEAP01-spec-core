@@ -15,7 +15,7 @@
 //! Realises: [REQ-0607]
 //! Anchors the domain-tier compilation unit DAG and cryptographic fixed-point manifest contract for `compile-sysml` modular code generation.
 
-use deap_core::sysml_cst::{CalcDef, PartDef, PortDef};
+use deap_core::sysml_ast::{CalcDef, PartDef, PortDef};
 
 use super::bounds::{ModularityDiagnostic, ModularityErrorCode};
 use super::layer_role::LayerRole;
