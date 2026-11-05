@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "release": "deap02-v2",
+  "release": "deap02-v2.1",
   "branch": "release/deap02-v2",
-  "source_commit": "2c09eba4edc2f39ff7d2b204bc950e6fb82ef4f1",
+  "source_commit": "9ea02572b2fcd4efe7b9f21216bbf2f95c314061",
   "binaries": [
     {
       "name": "assemble-conops",
@@ -27,7 +27,7 @@
     {
       "name": "verify-baseline",
       "path": "target/release/verify-baseline",
-      "sha256": "162caa35c77a44b97ff2acdc431c56c92800dd10fb499e3b675aeec45fda87c8"
+      "sha256": "f4de58118ebab432340af281f50d484a0ff4f1322eac1a098ef50f9c29543ba4"
     }
   ]
 }
