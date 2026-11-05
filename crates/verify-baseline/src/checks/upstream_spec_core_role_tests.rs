@@ -91,6 +91,10 @@ fn test_upstream_spec_core_passes_compiler_only_checks(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let repo = TempRepo::new("spec_core")?;
     write_canonical_blueprints(&repo)?;
+    repo.write(
+        "docs/architecture/blueprints/SYSML_SSOT_BIDIRECTIONAL_SYNCHRONIZATION_ARCHITECTURE.md",
+        "# Master\n\n- `crates/compile-sysml/src/lib.rs`\n",
+    )?;
     write_design_blueprint(
         &repo,
         "docs/designs/blueprint-01-spec-core.md",

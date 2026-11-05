@@ -258,16 +258,21 @@ fn validate_extracted_crates_token(
         return;
     }
 
+    let is_unbuilt_spec_core_path =
+        ctx.allow_unbuilt_workspace_paths && is_valid_workspace_crate_name(crate_name);
     let is_design_proposed_path = ctx.allow_proposed_design_paths
-        && (ctx.repo_root.join("crates").join(crate_name).is_dir()
-            || (ctx.allow_unbuilt_workspace_paths && is_valid_workspace_crate_name(crate_name)));
+        && (ctx.repo_root.join("crates").join(crate_name).is_dir() || is_unbuilt_spec_core_path);
     let decomposed_exists = cleaned.strip_suffix(".rs").is_some_and(|stem| {
         ctx.repo_root.join(format!("{stem}/mod.rs")).exists()
             || stem
                 .strip_suffix("_emitter")
                 .is_some_and(|s| ctx.repo_root.join(format!("{s}/mod.rs")).exists())
     });
-    if !is_design_proposed_path && !ctx.repo_root.join(cleaned).exists() && !decomposed_exists {
+    if !is_unbuilt_spec_core_path
+        && !is_design_proposed_path
+        && !ctx.repo_root.join(cleaned).exists()
+        && !decomposed_exists
+    {
         violations.push(format!(
             "{}:{}: non-existent workspace path '{}' referenced in architecture blueprint",
             ctx.rel_file, ctx.line_no, cleaned
