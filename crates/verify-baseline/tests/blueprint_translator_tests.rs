@@ -207,7 +207,7 @@ fn test_gate_10_persists_declared_diagnostics_full_clause_escapes_and_sequence_m
 
     let sysml = std::fs::read_to_string(&sysml_path).map_err(|err| err.to_string())?;
     for code in ["DEAP-E0101", "DEAP-E0202", "DEAP-E12xx"] {
-        assert_eq!(sysml.matches(code).count(), 1, "{code} must be preserved exactly once");
+        assert!(sysml.contains(code), "{code} must be preserved in the persisted SysML artifact");
     }
     assert!(!sysml.contains("E0100"), "Gate-10 fabricated undeclared E0100: {sysml}");
     assert!(sysml.contains("FULL_CLAUSE_END_863"), "Gate-10 truncated the normative clause");

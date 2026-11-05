@@ -363,24 +363,16 @@ pub fn extract_requirement_cross_references(content: &str, current_req_id: &str)
     }
     refs
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
     fn test_extract_formal_invariants_and_cross_references() {
         let content = "## 1. Normative Statement\nSort symbols (REQ-0031, REQ-0044, REQ-0019).\n\n## 2. Formal Invariant\nStrict Total Ordering Invariant:\n```math\nx < y\n```\nZero Diff Churn & Determinism:\n```math\nE(A1) = E(A2)\n```\n";
         let invs = extract_formal_invariants(content, "0032");
         assert_eq!(invs.len(), 2);
-        assert_eq!(
-            invs.first().map(|i| i.name.as_str()),
-            Some("Invariant_REQ_0032_Strict_Total_Ordering_Invariant")
-        );
-        assert_eq!(
-            invs.get(1).map(|i| i.name.as_str()),
-            Some("Invariant_REQ_0032_Zero_Diff_Churn_Determinism")
-        );
+        assert_eq!(invs.first().map(|i| i.name.as_str()), Some("Invariant_REQ_0032_Strict_Total_Ordering_Invariant"));
+        assert_eq!(invs.get(1).map(|i| i.name.as_str()), Some("Invariant_REQ_0032_Zero_Diff_Churn_Determinism"));
         let refs = extract_requirement_cross_references(content, "REQ-0032");
         assert_eq!(refs.len(), 3);
     }
