@@ -43,6 +43,7 @@ pub mod blueprint_gate;
 pub(crate) mod bp_gate_checks_a;
 pub(crate) mod bp_gate_checks_b;
 pub(crate) mod bp_gate_checks_c;
+pub(crate) mod bp_gate_contract;
 pub(crate) mod bp_gate_publish;
 pub(crate) mod bp_gate_sysml;
 pub(crate) mod bp_gate_tables;
