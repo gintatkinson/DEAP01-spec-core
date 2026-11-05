@@ -62,30 +62,15 @@ fn valid_blueprint_fixture_part_b() -> &'static str {
 <!-- test-target: crates/verify-baseline/tests/blueprint_gate_tests.rs -->
 - **Test-Target**: `crates/verify-baseline/tests/blueprint_gate_tests.rs`
 
-### AC-01: Nominal Frame Routing
-- **Given**: A valid inbound telemetry frame on `rawTelemetryIn`
-- **When**: `TelemetryRouter` processes the frame within the nominal period
-- **Then**: A verified `ValidatedFrame` is emitted on `validatedOut` within 1 tick
+### AC-01: Nominal Frame Routing\n- **Given**: A valid inbound telemetry frame on `rawTelemetryIn`\n- **When**: `TelemetryRouter` processes the frame within the nominal period\n- **Then**: A verified `ValidatedFrame` is emitted on `validatedOut` within 1 tick
 
-### AC-02: Redundant Channel Failover
-- **Given**: `isRedundant` is enabled and the primary channel reports link loss
-- **When**: The router evaluates channel health
-- **Then**: Frame dispatch switches deterministically to the secondary channel
+### AC-02: Redundant Channel Failover\n- **Given**: `isRedundant` is enabled and the primary channel reports link loss\n- **When**: The router evaluates channel health\n- **Then**: Frame dispatch switches deterministically to the secondary channel
 
-### AC-03: Negative Fail-Closed Rejection on Corrupted Frame
-- **Given**: An invalid telemetry frame with a corrupted header payload
-- **When**: `TelemetryRouter` executes frame validation
-- **Then**: The router must reject the frame fail-closed and return a non-zero error code
+### AC-03: Negative Fail-Closed Rejection on Corrupted Frame\n- **Given**: An invalid telemetry frame with a corrupted header payload\n- **When**: `TelemetryRouter` executes frame validation\n- **Then**: The router must reject the frame fail-closed and return a non-zero error code
 
-### AC-04: Watchdog Expiration Lockout
-- **Given**: `WatchdogMonitor` has elapsed `timeoutTicks` without a `heartbeatIn` pulse
-- **When**: The discrete step timer advances by 1 tick
-- **Then**: The monitor transitions to `FaultLocked` and halts outbound emission
+### AC-04: Watchdog Expiration Lockout\n- **Given**: `WatchdogMonitor` has elapsed `timeoutTicks` without a `heartbeatIn` pulse\n- **When**: The discrete step timer advances by 1 tick\n- **Then**: The monitor transitions to `FaultLocked` and halts outbound emission
 
-### AC-05: Diagnostic Bus Status Reporting
-- **Given**: A completed routing cycle with recorded retry counters
-- **When**: `diagBus` is polled by the maintenance scheduler
-- **Then**: A `DiagnosticPacket` reflecting the exact retry count is returned
+### AC-05: Diagnostic Bus Status Reporting\n- **Given**: A completed routing cycle with recorded retry counters\n- **When**: `diagBus` is polled by the maintenance scheduler\n- **Then**: A `DiagnosticPacket` reflecting the exact retry count is returned
 
 ## 6. Proposed Deterministic Implementation Contract
 
@@ -259,46 +244,8 @@ fn test_check_8_multi_target_reconciliation() {
 /// Verifies `check_9_rust_code_blocks` accepts declaration-only Rust blocks and rejects executable items.
 #[test]
 fn test_check_9_declaration_only_contract() {
-    let valid = [
-        "## 6. Proposed Deterministic Implementation Contract",
-        "```rust",
-        "use std::collections::BTreeMap;",
-        "",
-        "pub const MAX_RETRIES: u32 = 3;",
-        "",
-        "pub struct RouterConfig {",
-        "    pub max_retries: u32,",
-        "}",
-        "",
-        "pub enum RouterState {",
-        "    Idle,",
-        "    FaultLocked,",
-        "}",
-        "",
-        "pub union NumericValue {",
-        "    integer: u32,",
-        "    real: f64,",
-        "}",
-        "",
-        "pub type RouterResult = Result<u32, &'static str>;",
-        "",
-        "pub static DEFAULT_CONFIG: RouterConfig = RouterConfig { max_retries: MAX_RETRIES };",
-        "",
-        "pub trait RetryContract {",
-        "    fn validate_retry_count(retries: u32, limit: u32) -> RouterResult;",
-        "}",
-        "",
-        "mod nested {",
-        "    pub trait NestedContract {",
-        "        fn nested_check(value: u32) -> bool;",
-        "    }",
-        "}",
-        "",
-        "extern \"C\" {",
-        "    pub fn external_check(value: u32) -> u32;",
-        "}",
-        "```",
-    ];
+    let valid_src = "## 6. Proposed Deterministic Implementation Contract\n```rust\nuse std::collections::BTreeMap;\n\npub const MAX_RETRIES: u32 = 3;\n\npub struct RouterConfig {\n    pub max_retries: u32,\n}\n\npub enum RouterState {\n    Idle,\n    FaultLocked,\n}\n\npub union NumericValue {\n    integer: u32,\n    real: f64,\n}\n\npub type RouterResult = Result<u32, &'static str>;\n\npub static DEFAULT_CONFIG: RouterConfig = RouterConfig { max_retries: MAX_RETRIES };\n\npub trait RetryContract {\n    fn validate_retry_count(retries: u32, limit: u32) -> RouterResult;\n}\n\nmod nested {\n    pub trait NestedContract {\n        fn nested_check(value: u32) -> bool;\n    }\n}\n\nextern \"C\" {\n    pub fn external_check(value: u32) -> u32;\n}\n```";
+    let valid: Vec<&str> = valid_src.lines().collect();
     assert_eq!(check_9_rust_code_blocks(&valid), Ok(1));
 
     let fn_block = [
