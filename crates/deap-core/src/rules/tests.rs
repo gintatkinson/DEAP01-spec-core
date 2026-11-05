@@ -222,6 +222,54 @@ fn test_canonical_architecture_blueprint_enum_cardinality_and_catalog() {
         .contains("deap_sysml_v2_ingestion_engine_blueprint.md"));
 }
 
+/// Extracts the canonical architecture blueprint filenames listed in the constitution SSOT section.
+fn parse_constitution_canonical_blueprints(constitution: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut in_ssot_list = false;
+    for line in constitution.lines() {
+        if line.contains("canonical architecture blueprints") {
+            in_ssot_list = true;
+            continue;
+        }
+        if !in_ssot_list {
+            continue;
+        }
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("- `") {
+            match rest.strip_suffix('`') {
+                Some(name) => names.push(name.to_string()),
+                None => break,
+            }
+        } else if trimmed.is_empty() {
+            continue;
+        } else {
+            break;
+        }
+    }
+    names
+}
+
+#[test]
+fn test_constitution_canonical_blueprint_parity() -> Result<(), Box<dyn std::error::Error>> {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .ok_or("repo root")?;
+    let constitution =
+        std::fs::read_to_string(repo_root.join(".pipeline").join("constitution.md"))?;
+    let listed = parse_constitution_canonical_blueprints(&constitution);
+    let catalog: Vec<String> = CANONICAL_ARCHITECTURE_BLUEPRINTS
+        .iter()
+        .map(|name| name.to_string())
+        .collect();
+    assert_eq!(
+        listed, catalog,
+        "constitution canonical blueprint list must match the checker catalog"
+    );
+    assert_eq!(listed.len(), 13);
+    Ok(())
+}
+
 fn verify_canonical_architecture_blueprints_on_disk(repo_root: &Path) -> Result<(), String> {
     if !crate::workspace::is_upstream_compiler(repo_root) {
         return Ok(());
