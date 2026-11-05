@@ -1,33 +1,33 @@
 {
   "schema_version": 1,
-  "release": "deap02-v1",
-  "branch": "release/deap02",
-  "source_commit": "8e88555458ebd5ad2ac86a8cfb8880ded54c198e",
+  "release": "deap02-v2",
+  "branch": "release/deap02-v2",
+  "source_commit": "2c09eba4edc2f39ff7d2b204bc950e6fb82ef4f1",
   "binaries": [
     {
       "name": "assemble-conops",
       "path": "target/release/assemble-conops",
-      "sha256": "2b5a095b5cb8c727ef69ce4da242e03e3c97bd03a102a8e22b40dfc590441401"
+      "sha256": "3e0fe6451a83bfcc6eda95955afeac65d6bd1485e9025bf965f8b41829d76e86"
     },
     {
       "name": "compile-sysml",
       "path": "target/release/compile-sysml",
-      "sha256": "b64ba5b64a0c13e7f32934e2ce748b5f8abfbdc4904dc2dc4ba68ae1c03478b2"
+      "sha256": "e4d8cf1391be88f25254449cd414bd2fe7be5be158dff6449b0b193f67dd525d"
     },
     {
       "name": "ingest-sysml",
       "path": "target/release/ingest-sysml",
-      "sha256": "3c7a56ab579ce93949f4ea25602c66d5e26ede343a95994835bb4314fcdfb440"
+      "sha256": "6dfab92215481565baf0212cbacedc3379be4278fbe0cbf8316b6b9014820d67"
     },
     {
       "name": "reconcile-backlog",
       "path": "target/release/reconcile-backlog",
-      "sha256": "dc12ad28fd8e0a50630b115cd3c8c0d710ec902f7418b93a8eb2ead3967768a5"
+      "sha256": "36fbe8b77cbfe50e9db3dbb5cd4975001400a599fca4b85926a9ce29aa68dc52"
     },
     {
       "name": "verify-baseline",
       "path": "target/release/verify-baseline",
-      "sha256": "91f92e9a75cd3c5215e355a323b38f7063276e6ecb9a332d57273bee41927cd8"
+      "sha256": "162caa35c77a44b97ff2acdc431c56c92800dd10fb499e3b675aeec45fda87c8"
     }
   ]
 }
