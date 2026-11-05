@@ -107,6 +107,8 @@ pub(crate) mod struct_check_mask;
 pub(crate) mod struct_check_purity;
 pub(crate) mod struct_check_scripts;
 pub(crate) mod struct_check_upstream;
+#[cfg(test)]
+mod upstream_spec_core_role_tests;
 pub mod structural;
 pub mod wbs_integrity;
 

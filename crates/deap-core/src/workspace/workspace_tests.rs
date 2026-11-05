@@ -71,6 +71,22 @@ fn test_checks_10_11_12() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn test_is_upstream_compiler_workspace_role_classification(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let tmp = TempDir::new("upstream_workspace_role")?;
+    assert!(!is_upstream_compiler_workspace(&tmp.path));
+    fs::create_dir_all(tmp.path.join(".pipeline").join("upstream"))?;
+    assert!(is_upstream_compiler(&tmp.path));
+    assert!(!is_upstream_compiler_workspace(&tmp.path));
+    File::create(tmp.path.join("Cargo.toml"))?;
+    assert!(is_upstream_compiler_workspace(&tmp.path));
+    fs::remove_file(tmp.path.join("Cargo.toml"))?;
+    fs::create_dir_all(tmp.path.join("crates"))?;
+    assert!(is_upstream_compiler_workspace(&tmp.path));
+    Ok(())
+}
+
+#[test]
 fn test_checks_14_15_16() -> Result<(), Box<dyn std::error::Error>> {
     let tmp = TempDir::new("c14_15_16")?;
     assert!(check_downstream_instructions_exist(&tmp.path).is_err());

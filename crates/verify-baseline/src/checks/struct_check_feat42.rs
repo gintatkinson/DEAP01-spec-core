@@ -258,8 +258,9 @@ fn validate_extracted_crates_token(
         return;
     }
 
-    let is_design_proposed_path =
-        ctx.allow_proposed_design_paths && ctx.repo_root.join("crates").join(crate_name).is_dir();
+    let is_design_proposed_path = ctx.allow_proposed_design_paths
+        && (ctx.repo_root.join("crates").join(crate_name).is_dir()
+            || (ctx.allow_unbuilt_workspace_paths && is_valid_workspace_crate_name(crate_name)));
     let decomposed_exists = cleaned.strip_suffix(".rs").is_some_and(|stem| {
         ctx.repo_root.join(format!("{stem}/mod.rs")).exists()
             || stem

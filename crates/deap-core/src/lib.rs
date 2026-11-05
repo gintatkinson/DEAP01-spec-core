@@ -118,7 +118,8 @@ pub use workspace::{
     check_downstream_instructions_exist, check_gitignore_exists, check_no_ds_store_files,
     check_no_duplicate_master_blueprints, check_reconcile_backlog_tooling_exists,
     check_upstream_template_clean_landing_zones, filter_clippy_ndjson_stream, is_upstream_compiler,
-    run_stable_clippy_gate, validate_manifest_and_clippy_bundle, ClippyGateError,
+    is_upstream_compiler_workspace, run_stable_clippy_gate, validate_manifest_and_clippy_bundle,
+    ClippyGateError,
     ClippyNdjsonFinding, ManifestBundleDigest, StableClippyGateConfig, StageGateReceipt,
     MANDATORY_DENIED_CLIPPY_LINTS,
 };

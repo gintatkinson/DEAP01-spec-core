@@ -6,7 +6,7 @@
 
 use super::parity_check_discovery::{discover_sysml_model_text, TargetScanDir};
 use super::parity_gates::ParityOutcome;
-use deap_core::workspace::is_upstream_compiler;
+use deap_core::workspace::{is_upstream_compiler, is_upstream_compiler_workspace};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -142,7 +142,7 @@ pub fn check_architecture_viewpoint_diagrams(
     allow_missing_specs: bool,
     strict: bool,
 ) -> Result<ParityOutcome, Vec<String>> {
-    if is_upstream_compiler(repo_root) {
+    if is_upstream_compiler_workspace(repo_root) {
         let arch_views_dir = TargetScanDir::Architecture.resolve(repo_root).join("views");
         if !arch_views_dir.is_dir() {
             return Err(vec![
@@ -154,7 +154,7 @@ pub fn check_architecture_viewpoint_diagrams(
                 "Check 30C failed: Canonical SSOT Architecture Views Library is missing required view sv1_super_system.mmd (refs #276)".to_string(),
             ]);
         }
-    } else {
+    } else if !is_upstream_compiler(repo_root) {
         let model_text = discover_sysml_model_text(repo_root);
         let has_extracted = repo_root.join("schema").join("extracted").is_dir();
         if allow_missing_specs && !strict && model_text.is_none() && !has_extracted {

@@ -40,6 +40,14 @@ pub fn is_upstream_compiler(repo_root: &Path) -> bool {
     repo_root.join(".pipeline").join("upstream").is_dir()
 }
 
+/// Determines whether `repo_root` is an upstream compiler workspace with Tier-0 Rust source.
+/// Realises: [REQ-0601], [REQ-WS-UPSTREAM-WORKSPACE]
+#[must_use]
+pub fn is_upstream_compiler_workspace(repo_root: &Path) -> bool {
+    is_upstream_compiler(repo_root)
+        && (repo_root.join("Cargo.toml").is_file() || repo_root.join("crates").is_dir())
+}
+
 /// Check 10: Verifies that a `.gitignore` file exists in the repository root.
 /// Realises: [REQ-0601], [REQ-WS-C10], [FLS: fls_9ucqbbd0s2yo]
 pub fn check_gitignore_exists(repo_root: &Path) -> Result<(), CoreError> {

@@ -5,7 +5,7 @@
 //! Bounds & Faults: Single-pass file and line scan; fails closed with sorted diagnostic vectors.
 
 use deap_core::rules::CanonicalArchitectureBlueprint;
-use deap_core::workspace::is_upstream_compiler;
+use deap_core::workspace::{is_upstream_compiler, is_upstream_compiler_workspace};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -150,6 +150,7 @@ pub(crate) struct BlueprintLineScanCtx<'a> {
     pub(crate) rel_file: &'a str,
     pub(crate) line_no: usize,
     pub(crate) allow_proposed_design_paths: bool,
+    pub(crate) allow_unbuilt_workspace_paths: bool,
 }
 
 /// Scans a single architecture blueprint Markdown file for Check 37 grounding violations.
@@ -170,8 +171,11 @@ fn scan_blueprint_markdown_file(repo_root: &Path, md_path: &Path, violations: &m
     };
 
     let is_design_blueprint = rel.starts_with("docs/designs/");
+    let is_compiler_workspace = is_upstream_compiler_workspace(repo_root);
+    let is_spec_core = is_upstream_compiler(repo_root) && !is_compiler_workspace;
     let allow_proposed_design_paths =
-        is_design_blueprint && !is_approved_design_blueprint(&content);
+        is_design_blueprint && (is_spec_core || !is_approved_design_blueprint(&content));
+    let allow_unbuilt_workspace_paths = is_spec_core;
 
     for (idx, line) in content.lines().enumerate() {
         let line_no = idx.saturating_add(1);
@@ -188,6 +192,7 @@ fn scan_blueprint_markdown_file(repo_root: &Path, md_path: &Path, violations: &m
             rel_file: &rel,
             line_no,
             allow_proposed_design_paths,
+            allow_unbuilt_workspace_paths,
         };
         check_blueprint_line_crates_paths(ctx, line, violations);
     }

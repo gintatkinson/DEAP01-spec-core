@@ -45,6 +45,7 @@ pub use checks::{
     check_downstream_instructions_exist, check_gitignore_exists, check_no_ds_store_files,
     check_no_duplicate_master_blueprints, check_reconcile_backlog_tooling_exists,
     check_upstream_template_clean_landing_zones, is_upstream_compiler,
+    is_upstream_compiler_workspace,
 };
 pub use clippy_gate::{
     filter_clippy_ndjson_stream, run_stable_clippy_gate, validate_manifest_and_clippy_bundle,

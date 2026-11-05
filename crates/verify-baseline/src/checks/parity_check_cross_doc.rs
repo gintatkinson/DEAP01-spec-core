@@ -6,7 +6,7 @@
 
 use super::parity_check_discovery::TargetScanDir;
 use super::parity_gates::ParityOutcome;
-use deap_core::workspace::is_upstream_compiler;
+use deap_core::workspace::is_upstream_compiler_workspace;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
@@ -77,7 +77,7 @@ pub(crate) fn collect_connections_from_path(dir: &Path, conns: &mut BTreeSet<Str
 /// Realises: [REQ-PARITY-GATE-27]
 pub fn check_cross_document_diagram_parity(repo_root: &Path) -> Result<ParityOutcome, Vec<String>> {
     let arch_views_dir = TargetScanDir::Architecture.resolve(repo_root).join("views");
-    if is_upstream_compiler(repo_root) {
+    if is_upstream_compiler_workspace(repo_root) {
         if !arch_views_dir.is_dir() {
             return Err(vec![
                 "Canonical SSOT Architecture Views Library (docs/architecture/views/) is missing in upstream compiler workspace (mandating canonical architecture views library per refs #276)".to_string(),

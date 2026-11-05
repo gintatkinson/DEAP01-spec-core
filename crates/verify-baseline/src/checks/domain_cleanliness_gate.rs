@@ -9,7 +9,7 @@ use crate::checks::domain_cleanliness_rules::{
     is_m1_domain_dict_name, is_static_param_dict_name,
 };
 use deap_core::rules::EXCLUDED_DIRS;
-use deap_core::workspace::is_upstream_compiler;
+use deap_core::workspace::{is_upstream_compiler, is_upstream_compiler_workspace};
 use std::fs;
 use std::path::Path;
 use walkdir::WalkDir;
@@ -38,14 +38,16 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
         }
     }
 
-    let crates_dir = repo_root.join("crates");
-    if !crates_dir.is_dir() {
-        violations.push(
-            "Check 19 violation: Native Rust workspace crates/ directory missing in upstream compiler repository."
-                .to_string(),
-        );
-    } else {
-        scan_crates_for_domain_cleanliness(repo_root, &crates_dir, &mut violations);
+    if is_upstream_compiler_workspace(repo_root) {
+        let crates_dir = repo_root.join("crates");
+        if !crates_dir.is_dir() {
+            violations.push(
+                "Check 19 violation: Native Rust workspace crates/ directory missing in upstream compiler repository."
+                    .to_string(),
+            );
+        } else {
+            scan_crates_for_domain_cleanliness(repo_root, &crates_dir, &mut violations);
+        }
     }
 
     scan_templates_for_domain_cleanliness(repo_root, &mut violations);

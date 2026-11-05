@@ -120,6 +120,7 @@ fn test_issue_440_architecture_viewpoint_errors_format_as_check_30c(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let tmp = TempDir::new("arch_views")?;
     fs::create_dir_all(tmp.path.join(".pipeline").join("upstream"))?;
+    fs::write(tmp.path.join("Cargo.toml"), "[workspace]\n")?;
 
     let res = check_architecture_viewpoint_diagrams(&tmp.path, false, true);
     let errs = res.err().unwrap_or_default();

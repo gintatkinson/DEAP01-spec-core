@@ -14,6 +14,7 @@ fn test_defect_276_upstream_missing_architecture_views_library_fails(
     let tmp = TempDir::new("check27_upstream_missing_arch_views")?;
     let pipeline_upstream = tmp.path.join(".pipeline").join("upstream");
     fs::create_dir_all(&pipeline_upstream)?;
+    fs::write(tmp.path.join("Cargo.toml"), "[workspace]\n")?;
 
     let res = check_cross_document_diagram_parity(&tmp.path);
     assert!(
