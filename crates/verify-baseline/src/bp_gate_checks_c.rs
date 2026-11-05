@@ -305,6 +305,14 @@ fn validate_declaration_only_item(item: &syn::Item, errors: &mut Vec<String>) {
                         "Check 9 violation (Section 6 -- Declaration-Only Contract): trait method '{}' has a default body; Section 6 trait methods must be bodyless declarations",
                         trait_fn.sig.ident
                     )),
+                    syn::TraitItem::Const(trait_const) if trait_const.default.is_some() => errors.push(format!(
+                        "Check 9 violation (Section 6 -- Declaration-Only Contract): trait constant '{}' has a default value; Section 6 trait constants must be bodyless declarations",
+                        trait_const.ident
+                    )),
+                    syn::TraitItem::Type(trait_type) if trait_type.default.is_some() => errors.push(format!(
+                        "Check 9 violation (Section 6 -- Declaration-Only Contract): trait type '{}' has a default value; Section 6 trait types must be bodyless declarations",
+                        trait_type.ident
+                    )),
                     syn::TraitItem::Macro(_) => errors.push(
                         "Check 9 violation (Section 6 -- Declaration-Only Contract): trait macro items are forbidden".to_string(),
                     ),
