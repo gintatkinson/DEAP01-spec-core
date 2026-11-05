@@ -151,8 +151,8 @@ $$
 - **Then**: A `DiagnosticPacket` reflecting the exact retry count is returned
 ## 6. Proposed Deterministic Implementation Contract
 ```rust
-pub fn validate_retry_count(retries: u32, limit: u32) -> Result<u32, &'static str> {
-    if retries <= limit { Ok(retries) } else { Err(\"retry limit exceeded\") }
+pub trait RetryContract {
+    fn validate_retry_count(retries: u32, limit: u32) -> Result<u32, &'static str>;
 }
 ```
 ## 7. Source References

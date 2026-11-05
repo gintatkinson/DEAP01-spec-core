@@ -89,6 +89,52 @@ pub fn to_sysml<T: SysmlSerializable>(item: &T) -> String {
     item.to_sysml(0)
 }
 
+/// Escapes SysML v2 double-quoted string content while preserving literal escape sequences.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `escape_sysml_string_content`.
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves existing two-character escape sequences (`\r`, `\n`, `\t`, `\\`, `\"`) verbatim.
+/// - Escapes actual carriage-return, newline, and tab control characters into literal escape sequences.
+/// ## 3. Preconditions
+/// - `raw: &str` is any valid UTF-8 string slice.
+/// ## 4. Postconditions
+/// - Returns a `String` safe for insertion between SysML v2 double quotes with no unescaped quotes.
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N). Space Complexity: O(N).
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total function with zero panics, direct slice indexing, or fallible state.
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SEMANTIC-SERIALIZER-ESCAPE-SYSML-STRING-CONTENT] | SysML v2: ActionDef(escape_sysml_string_content)
+pub fn escape_sysml_string_content(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut chars = raw.chars();
+    let mut pending: Option<char> = None;
+    loop {
+        let Some(ch) = pending.take().or_else(|| chars.next()) else {
+            break;
+        };
+        match ch {
+            '\\' => match chars.next() {
+                Some(next @ ('r' | 'n' | 't' | '\\' | '"')) => {
+                    out.push('\\');
+                    out.push(next);
+                }
+                other => {
+                    out.push_str("\\\\");
+                    pending = other;
+                }
+            },
+            '"' => out.push_str("\\\""),
+            '\r' => out.push_str("\\r"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
 /// Internal depth-bounded serialization contract capping recursive AST container formatting at `MAX_AST_DEPTH`.
 /// Realises: [REQ-SEMANTIC-SERIALIZER-BOUNDED-TRAIT]
 pub(crate) trait BoundedSysmlSerializable {
@@ -125,20 +171,7 @@ impl SysmlSerializable for AttributeDef {
             .map(|v| {
                 let trimmed = v.trim();
                 if let Some(inner) = trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
-                    let mut escaped = String::with_capacity(trimmed.len().saturating_add(4));
-                    escaped.push('"');
-                    let mut prev_bs = false;
-                    for ch in inner.chars() {
-                        if ch == '"' && !prev_bs {
-                            escaped.push('\\');
-                            escaped.push('"');
-                        } else {
-                            escaped.push(ch);
-                        }
-                        prev_bs = ch == '\\' && !prev_bs;
-                    }
-                    escaped.push('"');
-                    format!(" = {}", escaped)
+                    format!(" = \"{}\"", escape_sysml_string_content(inner))
                 } else {
                     format!(" = {}", v)
                 }

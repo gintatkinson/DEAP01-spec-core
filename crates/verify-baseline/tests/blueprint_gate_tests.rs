@@ -137,12 +137,8 @@ pub struct RouterConfig {
     pub is_redundant: bool,
 }
 
-pub fn validate_retry_count(retries: u32, limit: u32) -> Result<u32, &'static str> {
-    if retries <= limit {
-        Ok(retries)
-    } else {
-        Err(\"retry limit exceeded\")
-    }
+pub trait RetryContract {
+    fn validate_retry_count(retries: u32, limit: u32) -> Result<u32, &'static str>;
 }
 ```
 

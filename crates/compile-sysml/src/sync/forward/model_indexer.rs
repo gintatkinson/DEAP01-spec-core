@@ -65,6 +65,33 @@ pub(crate) struct ForwardSyncIndex<'a> {
     pub(crate) rejected_fake_issue_paths: BTreeSet<String>,
 }
 
+/// Returns `true` when `pkg` directly declares specification content or specification metadata.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-MODEL-INDEX]
+fn is_specification_package(pkg: &PackageDef) -> bool {
+    let has_spec_metadata = pkg.attribute_defs.iter().any(|attr| {
+        attr.name.eq_ignore_ascii_case("Requirement_ID")
+            || attr.name.eq_ignore_ascii_case("Blueprint_ID")
+    });
+    has_spec_metadata
+        || !pkg.requirement_defs.is_empty()
+        || !pkg.part_defs.is_empty()
+        || !pkg.use_case_defs.is_empty()
+        || !pkg.action_defs.is_empty()
+}
+
+/// Collects the root package plus descendants of top-level specification packages in deterministic pre-order.
+/// Realises: [REQ-0604], [REQ-SYNC-FORWARD-MODEL-INDEX]
+fn collect_specification_packages(root: &PackageDef) -> Vec<&PackageDef> {
+    let mut packages = vec![root];
+    let include_all_descendants = is_specification_package(root);
+    for child in &root.packages {
+        if include_all_descendants || is_specification_package(child) {
+            packages.extend(child.get_all_packages());
+        }
+    }
+    packages
+}
+
 /// Selects the canonical root `PackageDef` from `all_packages` for `pkg`.
 /// Realises: [REQ-0604], [REQ-SYNC-FORWARD-MODEL-INDEX]
 fn select_root_package<'a>(
@@ -307,7 +334,7 @@ pub(crate) fn build_forward_sync_index<'a>(
         .unwrap_or_else(|| opts.docs_dir.clone());
     let today_iso = "1970-01-01";
 
-    let all_packages = pkg.get_all_packages();
+    let all_packages = collect_specification_packages(pkg);
     let mut all_requirements = Vec::new();
     for p in &all_packages {
         all_requirements.extend(p.requirement_defs.clone());

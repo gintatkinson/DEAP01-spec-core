@@ -208,10 +208,14 @@ impl<'a> Scanner<'a> {
                 if self.cursor >= self.source.len() {
                     return Err(format!("Unterminated escape in {desc} at {line}:{col}"));
                 }
-                let esc = match self.advance() {
-                    'n' => '\n', 'r' => '\r', 't' => '\t', other => other,
-                };
-                value.push(esc);
+                let escaped = self.advance();
+                match escaped {
+                    'n' | 'r' | 't' => {
+                        value.push('\\');
+                        value.push(escaped);
+                    }
+                    other => value.push(other),
+                }
             } else {
                 value.push(self.advance_char());
             }

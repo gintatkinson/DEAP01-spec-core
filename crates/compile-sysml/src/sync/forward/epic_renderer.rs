@@ -335,7 +335,7 @@ pub(crate) fn render_epic_security_and_governance(
 
     if clauses.is_empty() {
         format!(
-            "Package `{}` declares no package-scoped `RequirementDef` or `ConstraintDef` governance invariants in schema.",
+            "Package `{}` declares no package-scoped `requirement` or `constraint` governance invariants in schema.",
             p.name
         )
     } else {

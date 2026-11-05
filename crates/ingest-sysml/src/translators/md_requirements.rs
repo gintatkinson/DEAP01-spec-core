@@ -49,11 +49,67 @@ pub fn extract_normative_statement(content: &str) -> String {
     }
 }
 
-/// Extracts `(uuid, complexity, standard, diagnostics)` from frontmatter and pre-section tables.
+/// Returns `true` when `byte` can continue a diagnostic-code token.
+/// Realises: [REQ-TRANSLATORS-MARKDOWN-EXTRACT-DIAGNOSTIC-CODES]
+fn is_code_token_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_'
+}
+
+/// Extracts declared diagnostic codes from `content` in source order, deduplicated.
+/// Accepts `DEAP-E` codes and plain `E` codes (2-4 digits, optional `xx`/`XX` suffix) at token boundaries.
+/// Realises: [REQ-TRANSLATORS-MARKDOWN-EXTRACT-DIAGNOSTIC-CODES]
+pub fn extract_diagnostic_codes(content: &str) -> Vec<String> {
+    let declared_lines: Vec<&str> = non_fenced_lines(content, false)
+        .into_iter()
+        .filter(|line| {
+            let lower = line.to_ascii_lowercase();
+            lower.contains("diagnostic") || lower.contains("binding")
+        })
+        .collect();
+    let text = declared_lines.join("\n");
+    let bytes = text.as_bytes();
+    let (mut codes, mut index) = (Vec::new(), 0usize);
+    while index < bytes.len() {
+        let prefix_len = if bytes.get(index..).is_some_and(|rest| rest.starts_with(b"DEAP-E")) { 6 } else if bytes.get(index) == Some(&b'E') { 1 } else { index += 1; continue; };
+        let left_ok = index == 0 || !bytes.get(index - 1).is_some_and(|&b| is_code_token_byte(b));
+        let in_bad_prefix = index >= 5 && bytes.get(index - 5..index).is_some_and(|p| p == b"DEAP-");
+        if !left_ok || in_bad_prefix {
+            index += 1;
+            continue;
+        }
+        let mut cursor = index + prefix_len;
+        let digits_start = cursor;
+        while cursor < bytes.len() && cursor - digits_start < 4 && bytes.get(cursor).is_some_and(u8::is_ascii_digit) {
+            cursor += 1;
+        }
+        if cursor - digits_start < 2 || bytes.get(cursor).is_some_and(u8::is_ascii_digit) {
+            index += 1;
+            continue;
+        }
+        let is_x = |i: usize| bytes.get(i).is_some_and(|b| *b == b'x' || *b == b'X');
+        if is_x(cursor) && is_x(cursor + 1) {
+            cursor += 2;
+        }
+        if !bytes.get(cursor).is_none_or(|&b| !is_code_token_byte(b)) {
+            index += 1;
+            continue;
+        }
+        if let Some(code) = text.get(index..cursor) {
+            if !code.is_empty() && !codes.iter().any(|existing: &String| existing == code) {
+                codes.push(code.to_string());
+            }
+        }
+        index = cursor.max(index + 1);
+    }
+    codes
+}
+
+/// Extracts `(uuid, complexity, standard, diagnostics)` from frontmatter, pre-section tables, and
+/// declared document text. Returns all declared diagnostic codes joined by `, ` with no fallback.
 /// Realises: [REQ-TRANSLATORS-MARKDOWN-EXTRACT-REQ-METADATA]
 pub fn extract_req_metadata(content: &str, frontmatter: &Frontmatter) -> (String, String, String, String) {
     let mut uuid = frontmatter.uuidv5.clone().unwrap_or_default();
-    let (mut comp, mut std_str, mut diag) = (String::new(), String::new(), String::new());
+    let (mut comp, mut std_str) = (String::new(), String::new());
     for t in non_fenced_lines(content, false).into_iter().map(str::trim).take_while(|t| !t.starts_with("## ")) {
         let cells: Vec<&str> = t.split('|').map(str::trim).filter(|c| !c.is_empty()).collect();
         if let (true, Some(c0), Some(c1)) = (t.starts_with('|'), cells.first(), cells.get(1)) {
@@ -62,22 +118,14 @@ pub fn extract_req_metadata(content: &str, frontmatter: &Frontmatter) -> (String
                 comp = v;
             } else if (k.contains("standard") || k.contains("governing")) && std_str.is_empty() {
                 std_str = v;
-            } else if (k.contains("diagnostic") || k.contains("binding")) && diag.is_empty() {
-                diag = v;
             } else if (k.contains("uuid") || k.contains("anchor")) && uuid.is_empty() {
                 uuid = v;
             }
         }
     }
-    if comp.is_empty() {
-        comp = "Class P".to_string();
-    }
-    if std_str.is_empty() {
-        std_str = "IEEE 29148-2018 / RFC 2119".to_string();
-    }
-    if diag.is_empty() {
-        diag = "E0100".to_string();
-    }
+    if comp.is_empty() { comp = "Class P".to_string(); }
+    if std_str.is_empty() { std_str = "IEEE 29148-2018 / RFC 2119".to_string(); }
+    let diag = extract_diagnostic_codes(content).join(", ");
     (uuid, comp, std_str, diag)
 }
 
@@ -139,21 +187,13 @@ pub fn extract_acceptance_criteria(content: &str) -> Vec<(String, String, String
             .filter(|(_, v)| !v.is_empty())
             .map(|(k, v)| format!("{k}: {}", v.trim().trim_end_matches('.')))
             .collect();
-        let mut bdd = if !parts.is_empty() {
+        let bdd = if !parts.is_empty() {
             format!("{}.", parts.join(". "))
         } else if !fb.is_empty() {
             clean_bdd_text(&fb.join(" "))
         } else {
             format!("AC-{ac_num_str} verification criteria.")
         };
-        if bdd.len() > 600 {
-            let mut b600 = 600;
-            while b600 > 0 && !bdd.is_char_boundary(b600) {
-                b600 -= 1;
-            }
-            let pos = bdd[..b600].rfind(' ').filter(|&p| p > 400).unwrap_or(b600);
-            bdd = format!("{}.", bdd[..pos].trim_end().trim_end_matches(['\\', '.']));
-        }
         ac_list.push((ac_num_str, clean_ac_slug, bdd));
     }
     ac_list

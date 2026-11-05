@@ -37,6 +37,7 @@ use deap_core::sysml_ast::CalcDef;
 use super::pillars::{
     collect_declared_token_objectives, collect_token_classification_rows, RegulatoryObjectiveRow,
 };
+use super::topology_uca::requirement_diagnostics_suffix;
 use super::*;
 
 /// Appends uncovered `RequirementDef` safety objectives into `rows_by_idx`.
@@ -54,13 +55,18 @@ fn append_requirement_objectives(
             if !seen_reqs.insert(req.name.clone()) {
                 continue;
             }
-            let citation = format!("RequirementDef({})", sanitize_markdown_cell(&req.name));
+            let base_citation = format!("requirement({})", sanitize_markdown_cell(&req.name));
             if rows_by_idx
                 .values()
-                .any(|r| r.evidence.contains(&citation) || r.objective.contains(&req.name))
+                .any(|r| r.evidence.contains(&base_citation) || r.objective.contains(&req.name))
             {
                 continue;
             }
+            let citation = format!(
+                "{}{}",
+                base_citation,
+                requirement_diagnostics_suffix(req)
+            );
             while rows_by_idx.contains_key(&next_free_idx) {
                 next_free_idx = next_free_idx.saturating_add(1);
             }
@@ -99,7 +105,7 @@ fn append_constraint_objectives(
 ) {
     let mut next_free_idx = 1usize;
     for con in all_constraints {
-        let citation = format!("ConstraintDef({})", sanitize_markdown_cell(&con.name));
+        let citation = format!("constraint({})", sanitize_markdown_cell(&con.name));
         if rows_by_idx
             .values()
             .any(|r| r.evidence.contains(&citation) || r.objective.contains(&con.name))
@@ -143,7 +149,7 @@ fn append_calc_objectives(
 ) {
     let mut next_free_idx = 1usize;
     for calc in all_calcs {
-        let citation = format!("CalcDef({})", sanitize_markdown_cell(&calc.name));
+        let citation = format!("calc({})", sanitize_markdown_cell(&calc.name));
         if rows_by_idx
             .values()
             .any(|r| r.evidence.contains(&citation) || r.objective.contains(&calc.name))
@@ -159,10 +165,10 @@ fn append_calc_objectives(
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .map_or_else(
-                || format!("Evaluate calculation {}", sanitize_markdown_cell(&calc.name)),
+                || format!("Evaluate calc {}", sanitize_markdown_cell(&calc.name)),
                 |expr| {
                     format!(
-                        "Evaluate calculation {}: {}",
+                        "Evaluate calc {}: {}",
                         sanitize_markdown_cell(&calc.name),
                         sanitize_markdown_cell(expr)
                     )

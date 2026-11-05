@@ -17,8 +17,8 @@
 //! Realises: [REQ-0603, REQ-SEMANTIC-SERIALIZER-ACTIONDEF-TO-SYSML, REQ-SEMANTIC-SERIALIZER-STATEDEF-TO-SYSML]
 
 use super::serializer::{
-    format_doc_comment, format_real_literal, strip_enclosing_quotes, BoundedSysmlSerializable,
-    SysmlSerializable, MAX_AST_DEPTH,
+    escape_sysml_string_content, format_doc_comment, format_real_literal, strip_enclosing_quotes,
+    BoundedSysmlSerializable, SysmlSerializable, MAX_AST_DEPTH,
 };
 use deap_core::sysml_ast::{ActionDef, ConnectionDef, ConstraintDef, RequirementDef, StateDef};
 
@@ -129,10 +129,18 @@ impl SysmlSerializable for RequirementDef {
         }
         lines.push(format!("{}requirement def {} {{", pad, self.name));
         if !self.req_id.is_empty() {
-            lines.push(format!("{}    id = \"{}\";", pad, self.req_id));
+            lines.push(format!(
+                "{}    id = \"{}\";",
+                pad,
+                escape_sysml_string_content(&self.req_id)
+            ));
         }
         if !self.text.is_empty() {
-            lines.push(format!("{}    text = \"{}\";", pad, self.text));
+            lines.push(format!(
+                "{}    text = \"{}\";",
+                pad,
+                escape_sysml_string_content(&self.text)
+            ));
         }
         let child_indent = indent.saturating_add(4);
         for a in &self.attributes {

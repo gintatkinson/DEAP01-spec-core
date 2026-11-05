@@ -76,6 +76,28 @@ pub(super) fn format_attribute_anchor(attr: &AttributeDef) -> String {
     format!("attribute {}", clean_name)
 }
 
+/// Returns the `[diagnostics: <codes>]` suffix for a requirement declaring a non-empty `diagnostic_codes` attribute.
+/// Realises: [REQ-STPA-SAFETY-SUITE-RESOLVE-LOSS-ANCHORS]
+pub(super) fn requirement_diagnostics_suffix(req: &RequirementDef) -> String {
+    let codes: Vec<String> = req
+        .attributes
+        .iter()
+        .filter(|a| a.name.eq_ignore_ascii_case("diagnostic_codes"))
+        .filter_map(|a| a.default_value.as_deref())
+        .map(|v| v.trim().trim_matches(['"', '\'']).trim())
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
+        .collect();
+    if codes.is_empty() {
+        String::new()
+    } else {
+        format!(
+            " [diagnostics: {}]",
+            sanitize_markdown_cell(&codes.join(", "))
+        )
+    }
+}
+
 /// Resolves the cycled constraint or requirement guard anchor for `idx` across part and package scopes.
 /// Realises: [REQ-STPA-SAFETY-SUITE-RESOLVE-LOSS-ANCHORS]
 pub(super) fn resolve_guard_anchor(
@@ -93,22 +115,24 @@ pub(super) fn resolve_guard_anchor(
 
     if let Some(c) = get_cycled(active_constraints, idx) {
         if c.expression.trim().is_empty() {
-            format!("ConstraintDef {}", sanitize_markdown_cell(&c.name))
+            format!("constraint {}", sanitize_markdown_cell(&c.name))
         } else {
             format!(
-                "ConstraintDef {} ({})",
+                "constraint {} ({})",
                 sanitize_markdown_cell(&c.name),
                 sanitize_markdown_cell(&c.expression)
             )
         }
     } else if let Some(r) = get_cycled(scope.reqs, idx) {
+        let suffix = requirement_diagnostics_suffix(r);
         if r.req_id.trim().is_empty() {
-            format!("RequirementDef {}", sanitize_markdown_cell(&r.name))
+            format!("requirement {}{}", sanitize_markdown_cell(&r.name), suffix)
         } else {
             format!(
-                "RequirementDef {} ({})",
+                "requirement {} ({}){}",
                 sanitize_markdown_cell(&r.name),
-                sanitize_markdown_cell(&r.req_id)
+                sanitize_markdown_cell(&r.req_id),
+                suffix
             )
         }
     } else {

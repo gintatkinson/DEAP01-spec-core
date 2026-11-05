@@ -41,7 +41,7 @@ fn test_translate_req_0001_and_0032() -> Result<(), Box<dyn std::error::Error>> 
         assert_eq!((req.name.as_str(), req.req_id.as_str()), ("REQ_0001_Abstract_MBSE_Compiler_Mandate", "REQ-0001"));
         assert!(req.text.contains("abstract Model-Based Systems Engineering"));
         let doc = req.doc.as_ref().ok_or("missing doc")?;
-        assert!(doc.contains("UUIDv5: 5a4d7a99-0419-5c2b-ba0e-ccabdb05f1c9") && doc.contains("Diagnostics: E0100"));
+        assert!(doc.contains("UUIDv5: 5a4d7a99-0419-5c2b-ba0e-ccabdb05f1c9") && doc.contains("Diagnostics:"));
         let req_attr_names: Vec<&str> = req.attributes.iter().map(|a| a.name.as_str()).collect();
         for expected in ["uuidv5", "complexity_class", "governing_standard", "diagnostic_codes", "ac_01_pure_schema_driven_symbol_derivation"] {
             assert!(req_attr_names.contains(&expected), "missing {expected}");
@@ -301,5 +301,74 @@ Section prose with /* comment delimiter */ inside doc.
     assert!(acs.first().ok_or("missing AC-01")?.2.contains("Given: valid initial state"));
     let invs = extract_formal_invariants(fenced_req_md, "0524");
     assert_eq!(invs.first().ok_or("missing inv")?.name, "Invariant_REQ_0524_Real_Determinism_Invariant");
+    Ok(())
+}
+
+#[test]
+fn test_issue_863_declared_diagnostic_namespace_fidelity() -> Result<(), String> {
+    let content = r#"| Field | Value |
+| :--- | :--- |
+| Complexity Class | Class P |
+| Governing Standard | ISO/IEC/IEEE 29148:2018 |
+| Diagnostic Codes | DEAP-E0101, E0202 |
+
+## 1. Normative Statement
+The translator shall retain every declared diagnostic code in source order. Invalid tokens XDEAP-E9999 and DEAP-E99999 must not be harvested.
+
+## 3. Acceptance Criteria
+### AC-01: Diagnostic Code Retention
+- Given: the blueprint declares DEAP-E12xx
+- When: requirement metadata is extracted
+- Then: the declared namespace is retained verbatim
+- Diagnostic: DEAP-E12xx
+"#;
+    let fm = Frontmatter { id: Some("REQ-0863".to_string()), title: Some("Diagnostic Namespace Fidelity".to_string()), subsystem: Some("Subsystem 863".to_string()), uuidv5: Some("00000000-0000-0000-0000-000000000863".to_string()) };
+    let (_, _, _, diagnostics) = extract_req_metadata(content, &fm);
+    assert_eq!(diagnostics, "DEAP-E0101, E0202, DEAP-E12xx");
+    assert!(!diagnostics.contains("E0100") && !diagnostics.contains("E9999"));
+    let (_, _, _, empty_diagnostics) = extract_req_metadata("| Field | Value |\n| :--- | :--- |\n| Complexity Class | Class P |\n", &Frontmatter::default());
+    assert_eq!(empty_diagnostics, "");
+    Ok(())
+}
+
+#[test]
+fn test_issue_863_full_normative_statement_not_truncated() -> Result<(), String> {
+    let clause = format!("The system shall preserve {} terminal fidelity marker FULL_CLAUSE_END_863.", "complete requirement prose ".repeat(14));
+    let content = format!("## 1. Normative Statement\n{clause}\n\n## 2. Formal Invariant\n");
+    let text = extract_normative_statement(&content);
+    assert!(text.len() > 300, "normative statement was truncated to {} bytes", text.len());
+    assert!(text.ends_with("FULL_CLAUSE_END_863."), "missing terminal marker: {text}");
+    Ok(())
+}
+
+#[test]
+fn test_issue_863_literal_escape_sequences_preserved_in_acceptance_criteria() -> Result<(), String> {
+    let content = r#"## 3. Acceptance Criteria
+### AC-01: Escape Preservation
+- Given: a clause contains literal \r and another \r escape
+- When: the criteria are extracted
+- Then: both \r sequences remain two-character escapes and no CR control character appears
+- Diagnostic: DEAP-E12xx
+"#;
+    let bdd = extract_acceptance_criteria(content).first().ok_or("missing AC-01")?.2.clone();
+    assert!(bdd.matches("\\r").count() >= 2, "expected two literal backslash-r sequences: {bdd}");
+    assert!(!bdd.contains('\r'), "carriage-return control character leaked into AC prose");
+    let cleaned = clean_normative_text("The clause contains \\r and \\n and \\t literals.");
+    assert!(cleaned.contains("\\r") && cleaned.contains("\\n") && cleaned.contains("\\t"), "literal escapes lost: {cleaned}");
+    assert!(!cleaned.contains('\r') && !cleaned.contains('\n') && !cleaned.contains('\t'));
+    Ok(())
+}
+
+#[test]
+fn test_issue_863_duplicate_sequence_messages_retained_in_source_order() -> Result<(), String> {
+    let md = "```mermaid\nsequenceDiagram\n  participant Verifier\n  participant Compiler\n  Verifier->>Compiler: verify_lossless_cst(stage1_input)\n  Compiler-->>Verifier: lossless_cst_verified(stage1)\n  Verifier->>Compiler: verify_lossless_cst(stage2_input)\n  Compiler-->>Verifier: lossless_cst_verified(stage2)\n```\n";
+    let mut pkg = PackageDef { name: "Pkg863".to_string(), ..Default::default() };
+    extract_behavioral_ast_nodes(md, &mut pkg);
+    let interaction = pkg.interaction_defs.first().ok_or("missing interaction")?;
+    assert_eq!(interaction.messages.len(), 4, "duplicate messages were deduplicated: {:?}", interaction.messages);
+    let expected = ["verify_lossless_cst from Verifier to Compiler", "reply_lossless_cst_verified from Compiler to Verifier", "verify_lossless_cst from Verifier to Compiler", "reply_lossless_cst_verified from Compiler to Verifier"];
+    for (idx, exp) in expected.iter().enumerate() {
+        assert_eq!(interaction.messages.get(idx).map(String::as_str), Some(*exp), "message {idx} out of order");
+    }
     Ok(())
 }

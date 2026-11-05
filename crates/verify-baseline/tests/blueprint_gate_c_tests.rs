@@ -95,12 +95,8 @@ pub struct RouterConfig {
     pub is_redundant: bool,
 }
 
-pub fn validate_retry_count(retries: u32, limit: u32) -> Result<u32, &'static str> {
-    if retries <= limit {
-        Ok(retries)
-    } else {
-        Err(\"retry limit exceeded\")
-    }
+pub trait RetryContract {
+    fn validate_retry_count(retries: u32, limit: u32) -> Result<u32, &'static str>;
 }
 ```
 
@@ -132,7 +128,7 @@ fn test_check_8_bdd_and_test_target_pass_and_ac_mutations() {
         res,
         Ok((
             5,
-            "crates/verify-baseline/tests/blueprint_gate_tests.rs".to_string()
+            vec!["crates/verify-baseline/tests/blueprint_gate_tests.rs".to_string()]
         ))
     );
 
@@ -209,6 +205,128 @@ fn test_check_8_bdd_and_test_target_negative_and_target_mutations() {
     let m5_lines: Vec<&str> = invalid_crate_target.lines().collect();
     let m5_sec5 = m5_lines.get(s5_start..s5_end).unwrap_or(&[]);
     assert!(check_8_bdd_and_test_target(m5_sec5).is_err());
+}
+
+/// Verifies `check_8_bdd_and_test_target` reconciles multiple test-target declarations and rejects count/content mismatches.
+#[test]
+fn test_check_8_multi_target_reconciliation() {
+    let valid = valid_blueprint_fixture();
+    let second_pair = "<!-- test-target: crates/deap-core/tests/core_test.rs -->\n- **Test-Target**: `crates/deap-core/tests/core_test.rs`";
+    let multi = valid.replace(
+        "- **Test-Target**: `crates/verify-baseline/tests/blueprint_gate_tests.rs`",
+        &format!(
+            "- **Test-Target**: `crates/verify-baseline/tests/blueprint_gate_tests.rs`\n{second_pair}"
+        ),
+    );
+    let ranges = check_3_sections(&multi).unwrap_or_default();
+    let (s5_start, s5_end, _) = ranges.get(4).copied().unwrap_or((0, 0, ""));
+    let lines: Vec<&str> = multi.lines().collect();
+    let sec5 = lines.get(s5_start..s5_end).unwrap_or(&[]);
+    assert_eq!(
+        check_8_bdd_and_test_target(sec5),
+        Ok((
+            5,
+            vec![
+                "crates/verify-baseline/tests/blueprint_gate_tests.rs".to_string(),
+                "crates/deap-core/tests/core_test.rs".to_string(),
+            ]
+        ))
+    );
+
+    let mismatched_count = multi.replace(
+        "- **Test-Target**: `crates/deap-core/tests/core_test.rs`",
+        "",
+    );
+    let count_ranges = check_3_sections(&mismatched_count).unwrap_or_default();
+    let (c5_start, c5_end, _) = count_ranges.get(4).copied().unwrap_or((0, 0, ""));
+    let count_lines: Vec<&str> = mismatched_count.lines().collect();
+    assert!(
+        check_8_bdd_and_test_target(count_lines.get(c5_start..c5_end).unwrap_or(&[])).is_err()
+    );
+
+    let mismatched_content = multi.replace(
+        "<!-- test-target: crates/deap-core/tests/core_test.rs -->",
+        "<!-- test-target: crates/compile-sysml/tests/other_test.rs -->",
+    );
+    let content_ranges = check_3_sections(&mismatched_content).unwrap_or_default();
+    let (m5_start, m5_end, _) = content_ranges.get(4).copied().unwrap_or((0, 0, ""));
+    let content_lines: Vec<&str> = mismatched_content.lines().collect();
+    assert!(
+        check_8_bdd_and_test_target(content_lines.get(m5_start..m5_end).unwrap_or(&[])).is_err()
+    );
+}
+
+/// Verifies `check_9_rust_code_blocks` accepts declaration-only Rust blocks and rejects executable items.
+#[test]
+fn test_check_9_declaration_only_contract() {
+    let valid = [
+        "## 6. Proposed Deterministic Implementation Contract",
+        "```rust",
+        "use std::collections::BTreeMap;",
+        "",
+        "pub const MAX_RETRIES: u32 = 3;",
+        "",
+        "pub struct RouterConfig {",
+        "    pub max_retries: u32,",
+        "}",
+        "",
+        "pub enum RouterState {",
+        "    Idle,",
+        "    FaultLocked,",
+        "}",
+        "",
+        "pub union NumericValue {",
+        "    integer: u32,",
+        "    real: f64,",
+        "}",
+        "",
+        "pub type RouterResult = Result<u32, &'static str>;",
+        "",
+        "pub static DEFAULT_CONFIG: RouterConfig = RouterConfig { max_retries: MAX_RETRIES };",
+        "",
+        "pub trait RetryContract {",
+        "    fn validate_retry_count(retries: u32, limit: u32) -> RouterResult;",
+        "}",
+        "",
+        "mod nested {",
+        "    pub trait NestedContract {",
+        "        fn nested_check(value: u32) -> bool;",
+        "    }",
+        "}",
+        "",
+        "extern \"C\" {",
+        "    pub fn external_check(value: u32) -> u32;",
+        "}",
+        "```",
+    ];
+    assert_eq!(check_9_rust_code_blocks(&valid), Ok(1));
+
+    let fn_block = [
+        "## 6. Proposed Deterministic Implementation Contract",
+        "```rust",
+        "pub fn bad() {}",
+        "```",
+    ];
+    assert!(check_9_rust_code_blocks(&fn_block).is_err());
+
+    let impl_block = [
+        "## 6. Proposed Deterministic Implementation Contract",
+        "```rust",
+        "pub struct Foo;",
+        "impl Foo {}",
+        "```",
+    ];
+    assert!(check_9_rust_code_blocks(&impl_block).is_err());
+
+    let trait_default_block = [
+        "## 6. Proposed Deterministic Implementation Contract",
+        "```rust",
+        "pub trait BadTrait {",
+        "    fn bad_default(&self) {}",
+        "}",
+        "```",
+    ];
+    assert!(check_9_rust_code_blocks(&trait_default_block).is_err());
 }
 
 /// Verifies `check_9_rust_code_blocks` accepts clean Section 6 Rust blocks and rejects missing blocks, regex usage, panicking/indexing calls, or domain tokens.

@@ -145,9 +145,7 @@ fn parse_mermaid_sequence_line(trimmed: &str, lifelines: &mut Vec<String>, messa
             }
             format!("{act} from {sender} to {receiver}")
         };
-        if !messages.contains(&stmt) {
-            messages.push(stmt);
-        }
+        messages.push(stmt);
     }
 }
 

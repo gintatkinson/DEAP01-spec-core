@@ -113,7 +113,7 @@ pub(super) fn is_auto_epic_fallback_section(heading: &str, body: &str) -> bool {
             body.contains("declares structural definitions with no direct")
         }
         "## 5. Security & Governance" => body.contains(
-            "declares no package-scoped `RequirementDef` or `ConstraintDef` governance invariants in schema.",
+            "declares no package-scoped `requirement` or `constraint` governance invariants in schema.",
         ),
         _ => false,
     }

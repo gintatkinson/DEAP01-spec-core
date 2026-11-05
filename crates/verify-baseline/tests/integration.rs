@@ -41,6 +41,7 @@ pub mod blueprint_gate_f_tests;
 pub mod blueprint_gate_g_tests;
 pub mod blueprint_gate_h_tests;
 pub mod blueprint_gate_tests;
+pub mod blueprint_translator_tests;
 pub mod check_33_zero_python_tests;
 pub mod check_36_docstring_gate_b_tests;
 pub mod check_36_docstring_gate_c_tests;

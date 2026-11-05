@@ -141,13 +141,36 @@ pub fn collapse_whitespace(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// Strips LaTeX math formatting commands while preserving inner alphanumeric identifiers.
+/// Returns the escaped character when `after_slash` begins a literal two-character escape
+/// sequence (`\r`, `\n`, `\t`, `\\`, or `\"`) rather than a LaTeX command name.
+/// Realises: [REQ-TRANSLATORS-MARKDOWN-PRESERVE-LITERAL-ESCAPES]
+fn literal_escape_char(after_slash: &str) -> Option<char> {
+    let mut chars = after_slash.chars();
+    let ch = chars.next()?;
+    match ch {
+        'r' | 'n' | 't' => {
+            let next_is_command = chars.next().is_some_and(|next| next.is_ascii_alphabetic());
+            (!next_is_command).then_some(ch)
+        }
+        '\\' | '"' => Some(ch),
+        _ => None,
+    }
+}
+
+/// Strips LaTeX math formatting commands while preserving inner alphanumeric identifiers and
+/// literal escape sequences (`\r`, `\n`, `\t`, `\\`, `\"`).
 /// Realises: [REQ-TRANSLATORS-MARKDOWN-STRIP-LATEX-MATH-COMMANDS]
 pub fn strip_latex_math_commands(text: &str, cmds: Option<&[&str]>) -> String {
     let (mut out, mut rest) = (String::with_capacity(text.len()), text);
     while let Some(slash_idx) = rest.find('\\') {
         out.push_str(&rest[..slash_idx]);
         let after_slash = &rest[slash_idx + 1..];
+        if let Some(esc) = literal_escape_char(after_slash) {
+            out.push('\\');
+            out.push(esc);
+            rest = &after_slash[esc.len_utf8()..];
+            continue;
+        }
         let cmd_len = after_slash
             .chars()
             .take_while(|c| c.is_ascii_alphabetic())
@@ -175,32 +198,15 @@ pub fn strip_latex_math_commands(text: &str, cmds: Option<&[&str]>) -> String {
     out
 }
 
-/// Cleans normative requirement prose and bounds output length to 300 characters.
+/// Cleans normative requirement prose while preserving literal escape sequences.
 /// Realises: [REQ-TRANSLATORS-MARKDOWN-CLEAN-NORMATIVE-TEXT]
 pub fn clean_normative_text(raw: &str) -> String {
     let text = strip_markdown_links(raw).replace(['`', '$'], "");
-    let text = strip_latex_math_commands(&text, Some(&["mathbf", "mathcal", "text", "oint"]))
-        .replace('\\', "");
-    let mut cleaned = collapse_whitespace(&text)
+    let text = strip_latex_math_commands(&text, Some(&["mathbf", "mathcal", "text", "oint"]));
+    collapse_whitespace(&text)
         .replace("*/", "* /")
         .replace("/*", "/ *")
-        .replace('"', "\\\"");
-    if cleaned.len() > 300 {
-        let mut bound_300 = 300;
-        while bound_300 > 0 && !cleaned.is_char_boundary(bound_300) {
-            bound_300 -= 1;
-        }
-        let truncate_pos = match cleaned[..bound_300].rfind(' ') {
-            Some(pos) if pos > 200 => pos,
-            _ => bound_300,
-        };
-        let mut s = cleaned[..truncate_pos].trim_end().to_string();
-        if s.ends_with('\\') {
-            s.pop();
-        }
-        cleaned = s;
-    }
-    cleaned
+        .replace('"', "\\\"")
 }
 
 /// Sanitizes metadata table cell values.
@@ -217,7 +223,7 @@ pub fn clean_meta_val(val: &str) -> String {
 /// Realises: [REQ-TRANSLATORS-MARKDOWN-CLEAN-BDD-TEXT]
 pub fn clean_bdd_text(raw: &str) -> String {
     let text = strip_markdown_links(raw).replace(['`', '$'], "");
-    let text = strip_latex_math_commands(&text, None).replace('\\', "");
+    let text = strip_latex_math_commands(&text, None);
     collapse_whitespace(&text)
         .replace("*/", "* /")
         .replace("/*", "/ *")

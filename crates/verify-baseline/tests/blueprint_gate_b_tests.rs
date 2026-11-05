@@ -106,8 +106,8 @@ $$
 ## 6. Proposed Deterministic Implementation Contract
 
 ```rust
-pub fn validate_retry_count(retries: u32, limit: u32) -> Result<u32, &'static str> {
-    if retries <= limit { Ok(retries) } else { Err(\"exceeded\") }
+pub trait RetryContract {
+    fn validate_retry_count(retries: u32, limit: u32) -> Result<u32, &'static str>;
 }
 ```
 

@@ -473,40 +473,21 @@ pub enum AuditPillar {
     SemanticTraceability,
 }
 
-impl AuditPillar {
-    /// [REQ-0606] [FLS: fls_pillar_slice] Static slice of all canonical audit pillars.
-    /// Realises: [REQ-0606] for exhaustive pillar evaluation iterations.
-    pub const ALL: &'static [Self] = &[
-        Self::MemorySafety,
-        Self::ResourceLifecycle,
-        Self::Concurrency,
-        Self::TestIntegrity,
-        Self::SemanticTraceability,
-    ];
+/// [REQ-0606] [FLS: fls_pillar_slice] Static slice of all canonical audit pillars.
+/// Realises: [REQ-0606] for exhaustive pillar evaluation iterations.
+pub const ALL_AUDIT_PILLARS: &[AuditPillar] = &[
+    AuditPillar::MemorySafety,
+    AuditPillar::ResourceLifecycle,
+    AuditPillar::Concurrency,
+    AuditPillar::TestIntegrity,
+    AuditPillar::SemanticTraceability,
+];
 
-    /// [REQ-0606] [FLS: fls_pillar_as_str] Returns the canonical display string for the pillar.
-    /// Realises: [REQ-0606] for defect dossier headers and log reporting.
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::MemorySafety => "Memory Safety",
-            Self::ResourceLifecycle => "Resource Lifecycle",
-            Self::Concurrency => "Concurrency",
-            Self::TestIntegrity => "Test Integrity",
-            Self::SemanticTraceability => "Semantic Traceability",
-        }
-    }
-
-    /// [REQ-0606] [FLS: fls_pillar_code] Returns the diagnostic invariant violation code.
-    /// Realises: [REQ-0606] for structured defect classification codes.
-    pub const fn diagnostic_code(self) -> &'static str {
-        match self {
-            Self::MemorySafety => "E0601",
-            Self::ResourceLifecycle => "E0602",
-            Self::Concurrency => "E0603",
-            Self::TestIntegrity => "E0604",
-            Self::SemanticTraceability => "E0605",
-        }
-    }
+/// [REQ-0606] [FLS: fls_pillar_contract] Bodyless pillar display and diagnostic code contract.
+/// Realises: [REQ-0606] for defect dossier headers and structured classification codes.
+pub trait AuditPillarContract {
+    fn as_str(self) -> &'static str;
+    fn diagnostic_code(self) -> &'static str;
 }
 
 /// [REQ-0606] [FLS: fls_uml_kind] Deterministic UML diagram archetype for Section 4.
@@ -552,178 +533,22 @@ pub struct AuditCodeArgs {
     pub dry_run: bool,
 }
 
-/// [REQ-0606] [FLS: fls_audit_rust_cst] Evaluates Rust source files using ra_ap_syntax typed AST.
-/// Realises: [REQ-0606] without regex or stringly-typed text matching.
-pub fn audit_rust_cst(path: &Utf8Path, source: &str) -> Result<Vec<AuditFinding>, String> {
-    let parsed = SourceFile::parse(source);
-    let mut findings = Vec::new();
-    let root = parsed.tree();
-    for fn_def in root.syntax().descendants().filter_map(ast::Fn::cast) {
-        if let Some(param_list) = fn_def.param_list() {
-            if param_list.params().count() > 5 {
-                findings.push(AuditFinding {
-                    slug: format!("fn-param-arity-{}", path.file_stem().unwrap_or("item")),
-                    file_path: path.as_str().to_string(),
-                    start_line: 1,
-                    end_line: 1,
-                    pillar: AuditPillar::MemorySafety,
-                    severity: DossierSeverity::Important,
-                    symptom: "Function parameter arity exceeds maximum permitted bound".to_string(),
-                    test_target: "crates/verify-baseline/tests/blueprint_gate_tests.rs".to_string(),
-                    whys: [
-                        ("param count exceeds bound".to_string(), "violates convention".to_string()),
-                        ("callee signature bloated".to_string(), "registers spilled".to_string()),
-                        ("coupling too high".to_string(), "poor cohesion".to_string()),
-                        ("refactor needed".to_string(), "bundle in struct".to_string()),
-                        ("root cause unbundled args".to_string(), "missing parameter object".to_string()),
-                    ],
-                    correctness_trace: "Inspected Fn::param_list AST element".to_string(),
-                    invariant_violated: "max_param_count <= 5".to_string(),
-                    uml_kind: UmlDiagramKind::ClassDiagram,
-                    caller_symbol: "CallerMod".to_string(),
-                    callee_symbol: "CalleeFn".to_string(),
-                    affected_callers: Vec::new(),
-                    language_tag: "rust".to_string(),
-                    proposed_correction_code: "// Refactor parameters into a typed struct".to_string(),
-                });
-            }
-        }
-    }
-    Ok(findings)
+/// [REQ-0606] [FLS: fls_audit_contract] Declaration-only static audit and dossier synthesis contract.
+/// Realises: [REQ-0606] without executable function bodies or impl blocks.
+pub trait DeterministicAuditContract {
+    fn audit_rust_cst(path: &Utf8Path, source: &str) -> Result<Vec<AuditFinding>, String>;
+    fn audit_dart_cst(path: &Utf8Path, source: &str) -> Result<Vec<AuditFinding>, String>;
+    fn resolve_dylint_driver_path(workspace_root: &Utf8Path) -> Result<Utf8PathBuf, String>;
+    fn run_stage2_mir_analysis(
+        workspace_root: &Utf8Path,
+        target_path: &Utf8Path,
+    ) -> Result<Vec<AuditFinding>, String>;
+    fn synthesize_defect_dossier_markdown(finding: &AuditFinding) -> Result<String, String>;
+    fn synthesize_section_4_uml(finding: &AuditFinding) -> Result<String, String>;
+    fn run_audit_code(workspace_root: &Utf8Path, args: &AuditCodeArgs) -> Result<(), i32>;
 }
 
-/// [REQ-0606] [FLS: fls_audit_dart_cst] Evaluates Dart source files via isolated logos and rowan CST.
-/// Realises: [REQ-0606] in deap_core::dart_cst without contaminating core Rust pipelines.
-pub fn audit_dart_cst(path: &Utf8Path, _source: &str) -> Result<Vec<AuditFinding>, String> {
-    if !path.as_str().ends_with(".dart") {
-        return Ok(Vec::new());
-    }
-    Ok(Vec::new())
-}
 
-/// [REQ-0606] [FLS: fls_resolve_driver] Resolves cross-platform Stage-2 dylint driver dynamic library path.
-/// Realises: [REQ-0606] via std::env::consts without hardcoding dylib, so, or dll extensions.
-pub fn resolve_dylint_driver_path(workspace_root: &Utf8Path) -> Result<Utf8PathBuf, String> {
-    let filename = format!("{DLL_PREFIX}{STAGE2_DRIVER_NAME}{DLL_SUFFIX}");
-    let candidate = workspace_root.join("target").join("release").join(&filename);
-    if candidate.exists() {
-        return Ok(candidate);
-    }
-    let debug_candidate = workspace_root.join("target").join("debug").join(&filename);
-    if debug_candidate.exists() {
-        return Ok(debug_candidate);
-    }
-    Ok(candidate)
-}
-
-/// [REQ-0606] [FLS: fls_run_mir_analysis] Executes out-of-tree Stage-2 dylint driver for MIR receipts.
-/// Realises: [REQ-0606] keeping core workspace crates free of rustc_private features.
-pub fn run_stage2_mir_analysis(
-    workspace_root: &Utf8Path,
-    target_path: &Utf8Path,
-) -> Result<Vec<AuditFinding>, String> {
-    let driver_path = resolve_dylint_driver_path(workspace_root)?;
-    if !driver_path.exists() {
-        return Ok(Vec::new());
-    }
-    let output = Command::new("cargo")
-        .args(["dylint", "--lib", STAGE2_DRIVER_NAME, "--", "--path", target_path.as_str()])
-        .output()
-        .map_err(|e| format!("Failed to spawn Stage-2 dylint driver: {e}"))?;
-    if !output.status.success() {
-        return Ok(Vec::new());
-    }
-    Ok(Vec::new())
-}
-
-/// [REQ-0606] [FLS: fls_synthesize_dossier] Synthesizes 7-section defect dossier via pulldown-cmark-to-cmark.
-/// Realises: [REQ-0606] ensuring valid CommonMark AST structure and 12-check compliance.
-pub fn synthesize_defect_dossier_markdown(finding: &AuditFinding) -> Result<String, String> {
-    let file_loc = format!("{}:{}-{}", finding.file_path, finding.start_line, finding.end_line);
-    let uml_block = synthesize_section_4_uml(finding)?;
-    let mut raw = String::with_capacity(4096);
-    raw.push_str(DossierSection::ContextAndReferences.header());
-    raw.push_str(&format!("\n\n<!-- test-target: {} -->\n\n", finding.test_target));
-    raw.push_str(&format!("- **File**: `{}`\n", file_loc));
-    raw.push_str(&format!("- **Pillar**: {}\n", finding.pillar.as_str()));
-    raw.push_str(&format!("- **Symptom**: {}\n", finding.symptom));
-    raw.push_str(&format!("- **Test-Target**: `{}`\n\n", finding.test_target));
-    raw.push_str(DossierSection::RootCauseAnalysis.header());
-    raw.push_str("\n\n");
-    for (idx, (q, r)) in finding.whys.iter().enumerate() {
-        raw.push_str(&format!("{}. **Why {}?** Because {}.\n", idx + 1, q.trim(), r.trim()));
-    }
-    raw.push_str(&format!("\n{}\n\n{}\n\n- **Violated Invariant**: `{}` (`{}`)\n\n",
-        DossierSection::CorrectnessAnalysis.header(),
-        finding.correctness_trace,
-        finding.invariant_violated,
-        finding.pillar.diagnostic_code()));
-    raw.push_str(&format!("{}\n\n{}\n\n", DossierSection::UmlDiagrams.header(), uml_block));
-    raw.push_str(&format!("{}\n\n- `caller` -- direct reference\n\n", DossierSection::AffectedCallers.header()));
-    raw.push_str(&format!("{}\n\n```{}\n{}\n```\n\n",
-        DossierSection::ProposedCorrection.header(),
-        finding.language_tag,
-        finding.proposed_correction_code.trim()));
-    raw.push_str(&format!("{}\n\nDiscovered in deterministic static audit -- new finding.\n\n",
-        DossierSection::RelationshipToExistingIssues.header()));
-    raw.push_str(&format!("## Audit Source\n\nAdversarial {} Audit\nSEVERITY: {}\nFILE_LOCATION: {}\n",
-        finding.pillar.as_str(), finding.severity.as_str(), file_loc));
-
-    let events: Vec<Event> = Parser::new(&raw).collect();
-    let mut buf = String::with_capacity(raw.len());
-    cmark(events.iter(), &mut buf).map_err(|e| format!("Markdown serialization failed: {e}"))?;
-    Ok(buf)
-}
-
-/// [REQ-0606] [FLS: fls_synthesize_uml] Emits a Check 13B-compliant Mermaid diagram with zero semicolons.
-/// Realises: [REQ-0606] for Section 4 architectural visualization.
-pub fn synthesize_section_4_uml(finding: &AuditFinding) -> Result<String, String> {
-    if !finding.severity.requires_mermaid() {
-        return Ok(format!("N/A -- {} severity.", finding.severity.as_str()));
-    }
-    match finding.uml_kind {
-        UmlDiagramKind::SequenceDiagram => Ok(format!(
-            "```mermaid\nsequenceDiagram\n    participant Caller as {}\n    participant Target as {}\n    Caller->>Target: Invoke at line {}\n    Target-->>Caller: Violates {}\n```",
-            finding.caller_symbol, finding.callee_symbol, finding.start_line, finding.invariant_violated
-        )),
-        UmlDiagramKind::ClassDiagram => Ok(format!(
-            "```mermaid\nclassDiagram\n    class {} {{\n        +String fileLocation\n        +Boolean verifyInvariant()\n    }}\n    class {} {{\n        +Integer lineSpan\n        +Boolean enforceGuard()\n    }}\n    {} --> {} : audits\n```",
-            finding.caller_symbol, finding.callee_symbol, finding.caller_symbol, finding.callee_symbol
-        )),
-    }
-}
-
-/// [REQ-0606] [FLS: fls_run_audit_code] Orchestrates end-to-end static audit, dossier emission, and SSOT sync.
-/// Realises: [REQ-0606] enforcing all 12 checks and zero-subagent execution.
-pub fn run_audit_code(workspace_root: &Utf8Path, args: &AuditCodeArgs) -> Result<(), i32> {
-    let source_text = fs::read_to_string(&args.path).map_err(|_| 1)?;
-    let mut findings = audit_rust_cst(&args.path, &source_text).map_err(|_| 1)?;
-    let mir_findings = run_stage2_mir_analysis(workspace_root, &args.path).map_err(|_| 1)?;
-    findings.extend(mir_findings);
-    let defects_dir = workspace_root.join(".pipeline").join("defects");
-    fs::create_dir_all(&defects_dir).map_err(|_| 1)?;
-
-    for finding in &findings {
-        let dossier_md = synthesize_defect_dossier_markdown(finding).map_err(|_| 1)?;
-        let validation = validate_defect_dossier(&dossier_md).map_err(|_| 1)?;
-        let dossier_path = defects_dir.join(format!("DEFECT-{}.md", finding.slug));
-        fs::write(&dossier_path, &dossier_md).map_err(|_| 1)?;
-        let title = derive_defect_title(&validation.file_location, &validation.symptom);
-        let check_args = DefectDossierArgs {
-            body_file: Some(dossier_path.clone().into_std_path_buf()),
-            title: Some(title),
-            repo: args.repo.clone(),
-            label: Some(validation.suggested_label),
-            provider: "github".to_string(),
-            dry_run: args.dry_run || (!args.publish && args.issue.is_none()),
-            publish: args.publish,
-            issue: args.issue,
-            target: Some(dossier_path.into_std_path_buf()),
-        };
-        run_check_defect(&check_args)?;
-    }
-    Ok(())
-}
 ```
 
 ### 6.5 Dogfooding Pipeline Ingestion & Verification Protocol

@@ -357,7 +357,7 @@ sequenceDiagram
 │       └── cot_audit_log.json      # Dual-LLM Chain-of-Thought CotAuditLog records
 └── docs/                           # Persistent engineering deliverables
     ├── architecture/
-    │   └── blueprints/             # 12 canonical master architecture blueprints
+    │   └── blueprints/             # 13 canonical master architecture blueprints
     ├── epics/                      # Agile Epics derived from AST capabilities
     ├── features/                   # Agile Features with BDD acceptance criteria
     ├── user-stories/               # BDD User Stories

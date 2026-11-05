@@ -12,7 +12,11 @@ use bd::{ModularityBounds, ModularityDiagnostic, ModularityErrorCode as Ec};
 use deap_core::{digest::compute_sha256, sysml_ast::PackageDef};
 use mg::{GeneratedFileDigest, GeneratedTreeManifest, ModuleGraph};
 use quote::ToTokens;
-use std::{collections::BTreeMap, fs, path::Path, path::PathBuf};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Component, Path, PathBuf},
+};
 
 /// Canonical `(relative_path, rust_source, file_digest)` triple returned for each synthesized Rust unit.
 /// Realises: [REQ-0607]
@@ -74,6 +78,92 @@ pub fn digest_rust_source(rel: &str, src: &str) -> Result<GeneratedFileDigest, M
     })
 }
 
+/// Resolves the canonical projected crate source prefix from a root package `Target_Crates` attribute.
+/// Realises: [REQ-0607]
+fn target_crate_prefix(pkg: &PackageDef) -> Result<Option<String>, ModularityDiagnostic> {
+    let Some(raw) = pkg
+        .attribute_defs
+        .iter()
+        .find(|a| a.name.eq_ignore_ascii_case("Target_Crates"))
+        .and_then(|a| a.default_value.as_deref())
+    else {
+        return Ok(None);
+    };
+    let first = raw
+        .split([',', ';'])
+        .next()
+        .unwrap_or(raw)
+        .trim()
+        .trim_matches(['"', '\'', '`'])
+        .trim();
+    if first.is_empty() {
+        return Ok(None);
+    }
+    let crate_root = first.trim_end_matches('/');
+    let crate_root = crate_root.strip_suffix("/src").unwrap_or(crate_root);
+    let Some(crate_name) = crate_root.strip_prefix("crates/") else {
+        return Err(ModularityDiagnostic::new(
+            Ec::BoundsViolationE0704,
+            "Target_Crates",
+            format!("Target_Crates entry '{first}' must be a 'crates/<name>' workspace path"),
+        ));
+    };
+    let crate_name = crate_name.trim_matches('/');
+    let valid = !crate_name.is_empty()
+        && !crate_name.contains('/')
+        && !crate_name.contains('\\')
+        && !crate_name.contains("..")
+        && crate_name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if !valid {
+        return Err(ModularityDiagnostic::new(
+            Ec::BoundsViolationE0704,
+            "Target_Crates",
+            format!("Target_Crates entry '{first}' contains an unsafe crate segment"),
+        ));
+    }
+    Ok(Some(format!("crates/{crate_name}/src/")))
+}
+
+/// Rejects emitted unit paths that are empty, absolute, traverse parents, or contain backslashes.
+/// Realises: [REQ-0607]
+fn validate_unit_relative_path(rel: &str) -> Result<(), ModularityDiagnostic> {
+    let violation = if rel.trim().is_empty() {
+        Some("relative path must not be empty")
+    } else if rel.contains('\\') {
+        Some("relative path must not contain backslashes")
+    } else if Path::new(rel).is_absolute() {
+        Some("relative path must not be absolute")
+    } else if Path::new(rel)
+        .components()
+        .any(|c| matches!(c, Component::ParentDir))
+    {
+        Some("relative path must not contain parent-directory traversal ('..')")
+    } else {
+        None
+    };
+    violation.map_or(Ok(()), |message| {
+        Err(ModularityDiagnostic::new(
+            Ec::BoundsViolationE0704,
+            rel,
+            message,
+        ))
+    })
+}
+
+/// Applies the projected crate source prefix to every unit relative path not already prefixed.
+/// Realises: [REQ-0607]
+fn apply_relative_path_prefix(graph: &ModuleGraph, prefix: &str) -> ModuleGraph {
+    let mut projected = graph.clone();
+    for unit in &mut projected.units {
+        if !unit.relative_path.starts_with(prefix) {
+            unit.relative_path = format!("{prefix}{}", unit.relative_path);
+        }
+    }
+    projected
+}
+
 /// Conforms to DO-178C Level A.
 /// Realises: [REQ-0607]
 pub fn synthesize_modular_rust_files(
@@ -85,6 +175,10 @@ pub fn synthesize_modular_rust_files(
     let (ml, mi) = (bounds.max_file_lines, bounds.max_items_per_file);
     let mv = bounds.max_cyclomatic_complexity;
     for (rel, u) in by_path {
+        if let Err(diag) = validate_unit_relative_path(rel) {
+            diags.push(diag);
+            continue;
+        }
         let src = render_unit(u);
         match digest_rust_source(rel, &src) {
             Ok(d) => {
@@ -112,6 +206,11 @@ pub fn emit_modular_rust_tree(
     options: &ModularRustOptions,
 ) -> Result<GeneratedTreeManifest, Vec<ModularityDiagnostic>> {
     let graph = l::lower_package_to_module_graph(pkg, &options.bounds)?;
+    let graph = match target_crate_prefix(pkg) {
+        Ok(Some(prefix)) => apply_relative_path_prefix(&graph, &prefix),
+        Ok(None) => graph,
+        Err(diag) => return Err(vec![diag]),
+    };
     let units = synthesize_modular_rust_files(&graph, &options.bounds)?;
     let stage1_map: BTreeMap<String, String> = units
         .iter()

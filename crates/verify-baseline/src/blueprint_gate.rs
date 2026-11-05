@@ -101,6 +101,7 @@ pub struct BlueprintReport {
     pub components: Vec<ComponentSpec>,
     pub ac_count: usize,
     pub test_target: String,
+    pub test_targets: Vec<String>,
     pub errors: Vec<String>,
 }
 
@@ -213,9 +214,10 @@ fn evaluate_blueprint_sections(
     }
     if let Some(&(s5_start, s5_end, _)) = ranges.get(4) {
         match check_8_bdd_and_test_target(lines.get(s5_start..s5_end).unwrap_or(&[])) {
-            Ok((count, target)) => {
+            Ok((count, targets)) => {
                 report.ac_count = count;
-                report.test_target = target;
+                report.test_target = targets.join(", ");
+                report.test_targets = targets;
             }
             Err(errs) => errors.extend(errs),
         }

@@ -70,7 +70,7 @@ fn render_calc_and_requirement_obligations(pkg: &PackageDef, base_pkg: &str, out
                         .map(|p| sanitize_markdown_cell(&p.name))
                         .collect::<Vec<_>>()
                         .join(", ");
-                    format!("{}({}) (Derived: AST CalcDef)", clean_name, param_names)
+                    format!("{}({}) (Derived: AST calc)", clean_name, param_names)
                 });
             out.push_str(&format!("| {} | {} |\n", clean_name, expr));
         }
@@ -149,7 +149,7 @@ pub(super) fn render_safety_constraints(
                     .filter(|s| !s.is_empty())
                     .map(sanitize_markdown_cell)
                     .unwrap_or_else(|| {
-                        format!("{} == true (Derived: AST ConstraintDef)", clean_name)
+                        format!("{} == true (Derived: AST constraint)", clean_name)
                     })
             } else {
                 sanitize_markdown_cell(&c.expression)
@@ -274,7 +274,7 @@ fn emit_hazard_log_rows(
             },
             |c| {
                 format!(
-                    "Enforced by ConstraintDef {} (Derived)",
+                    "Enforced by constraint {} (Derived)",
                     sanitize_markdown_cell(&c.name)
                 )
             },

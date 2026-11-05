@@ -47,6 +47,7 @@ pub mod reproducer_h_tests;
 pub mod reproducer_i_tests;
 pub mod reproducer_j_tests;
 pub mod reproducer_k_tests;
+pub mod remediation_863_tests;
 pub mod reproducer_tests;
 pub mod self_hosting_bootstrap;
 pub mod upstream_projection_acceptance_test;
