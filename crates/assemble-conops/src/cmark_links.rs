@@ -3,7 +3,10 @@
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+use deap_core::markdown_ast::parse_markdown_ast;
+
 use super::cmark_engine::SysMLParameterBindingEngine;
+use super::cmark_sanitize::sanitize_level_1b_operational_text;
 
 /// [DOC-TIER: A] Scans text for unresolved parameter tokens matching `{{KEY}}` or `{{KEY:default}}`.
 /// Safety & Traceability: Conforms to DO-178C Level A / DO-330 TQL-4; Realises: [REQ-ASSEMBLE-CONOPS-ASSEMBLER-FIND-RAW-TOKENS] [FLS: fls_conops_cmark]
@@ -299,4 +302,69 @@ pub fn relativize_markdown_links(text: &str, output_file: &Path, workspace_dir: 
         }
     }
     result
+}
+
+/// Extracts the Section 4 (or Section 8 architecture fallback) Markdown slice via CommonMark AST (`[REQ-0401]`, `[FLS: fls_conops_cmark]`).
+fn extract_conops_section4_slice(assembled: &str) -> &str {
+    let ast = parse_markdown_ast(assembled);
+    for (idx, sec) in ast.sections.iter().enumerate() {
+        if sec.level > 2 { continue; }
+        let heading_trim = sec.heading.trim();
+        let heading_lower = heading_trim.to_ascii_lowercase();
+        let is_sec4 = heading_trim.starts_with("4.")
+            || heading_trim.starts_with("4 ")
+            || heading_trim == "4"
+            || heading_lower.contains("system operational architecture")
+            || heading_lower.contains("system architecture")
+            || heading_lower.contains("physical subsystem decomposition");
+        if is_sec4 {
+            let end = ast.sections.get(idx + 1..)
+                .and_then(|rest| rest.iter().find(|next| next.level <= sec.level))
+                .map_or(assembled.len(), |next| next.start_offset);
+            return assembled.get(sec.start_offset..end).unwrap_or("");
+        }
+    }
+    ""
+}
+
+/// Checks whether `needle` appears in `haystack` bounded by non-identifier ASCII characters (`[REQ-0401]`, `[FLS: fls_conops_cmark]`).
+fn contains_whole_identifier(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() { return false; }
+    let bytes = haystack.as_bytes();
+    let mut offset = 0usize;
+    while let Some(pos) = haystack.get(offset..).and_then(|s| s.find(needle)) {
+        let start = offset.saturating_add(pos);
+        let end = start.saturating_add(needle.len());
+        let before_ok = start == 0 || bytes.get(start.saturating_sub(1)).is_none_or(|b| !(b.is_ascii_alphanumeric() || *b == b'_'));
+        let after_ok = bytes.get(end).is_none_or(|b| !(b.is_ascii_alphanumeric() || *b == b'_'));
+        if before_ok && after_ok { return true; }
+        offset = start.saturating_add(1);
+    }
+    false
+}
+
+/// Validates ConOps Section 4 AST part coverage with whole-identifier matching (`[REQ-0401]`, `[FLS: fls_conops_cmark]`).
+pub(super) fn validate_conops_section4_part_coverage(
+    assembled: &str,
+    meta_title: &str,
+    param_engine: &SysMLParameterBindingEngine,
+) -> Option<String> {
+    let lower = meta_title.to_lowercase();
+    if !(lower.contains("concept of operations") || lower.contains("conops")) || param_engine.ast_part_names.is_empty() {
+        return None;
+    }
+    let section4 = extract_conops_section4_slice(assembled);
+    let missing: Vec<String> = param_engine.ast_part_names.iter().filter(|p| {
+        let clean_p = sanitize_level_1b_operational_text(p);
+        !contains_whole_identifier(section4, p.as_str())
+            && (clean_p.is_empty() || !contains_whole_identifier(section4, &clean_p))
+    }).cloned().collect();
+    if missing.is_empty() {
+        None
+    } else {
+        Some(format!(
+            "ConOps Section 4 AST Part Coverage Gate failed: Missing declared AST part def(s): {} in Section 4.",
+            missing.join(", ")
+        ))
+    }
 }

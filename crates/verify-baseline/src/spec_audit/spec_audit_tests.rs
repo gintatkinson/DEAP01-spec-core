@@ -265,3 +265,30 @@ fn test_resolve_behavioral_triggers_path_falls_back_to_ancestor_workspace(
     let _ = fs::remove_dir_all(&temp_root);
     Ok(())
 }
+
+#[test]
+fn test_issue_867_load_sysml_symbol_index_ignores_markdown_when_sysml_present(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_nanos();
+    let temp_dir = std::env::temp_dir().join(format!("test_issue_867_symbol_index_{}", ts));
+    let schema_dir = temp_dir.join("schema");
+    let extracted_dir = schema_dir.join("extracted");
+    fs::create_dir_all(&extracted_dir)?;
+
+    fs::write(
+        schema_dir.join("model.sysml"),
+        "package TestPkg {\n    part def PrimarySensor;\n}\n",
+    )?;
+    fs::write(
+        extracted_dir.join("notes.md"),
+        "| Subsystem | Function |\n| :--- | :--- |\n| MarkdownNoisePart | Noise |\n",
+    )?;
+
+    let index = load_sysml_symbol_index(&temp_dir)?;
+    let _ = fs::remove_dir_all(&temp_dir);
+    assert!(index.part_names.contains("PrimarySensor"));
+    assert!(!index.part_names.contains("MarkdownNoisePart"));
+    Ok(())
+}

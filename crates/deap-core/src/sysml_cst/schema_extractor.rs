@@ -10,7 +10,8 @@ use super::model_parser::{
     extract_parts_from_json, extract_parts_from_yaml_lines, strip_all_block_comments_and_strings,
     strip_sysml_comments,
 };
-use super::parts_and_ports::SupportedExtensionsCatalog;
+use super::parts_and_ports::{PartDef, SupportedExtensionsCatalog};
+use crate::markdown_ast::parse_markdown_ast;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -158,6 +159,26 @@ impl UnifiedSchemaModelExtractor {
         part_names
     }
 
+    /// Extracts declared `part def` (`is_def == true`) identifiers recursively from SysML v2 text.
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-SYSML-PART-DEFS-ONLY]
+    #[must_use]
+    pub fn extract_sysml_part_defs_only(content: &str) -> BTreeSet<String> {
+        let clean = strip_sysml_comments(content);
+        let top_parts = parse_part_defs(&clean);
+        let mut def_names = BTreeSet::new();
+        let mut stack: Vec<&PartDef> = top_parts.iter().rev().collect();
+        while let Some(part) = stack.pop() {
+            if part.is_def
+                && !part.name.is_empty()
+                && is_valid_subsystem_identifier(&part.name)
+            {
+                def_names.insert(part.name.clone());
+            }
+            stack.extend(part.parts.iter().rev());
+        }
+        def_names
+    }
+
     /// Scans comment-free SysML lines for `part def` and `part` usage identifiers.
     /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-SUBSYSTEM-PARTS-TEXT]
     fn scan_sysml_part_statements(comment_free: &str, part_names: &mut BTreeSet<String>) {
@@ -198,58 +219,61 @@ impl UnifiedSchemaModelExtractor {
         }
     }
 
-    /// Scans Markdown tables for subsystem, component, segment, part, or unit identifiers.
+    /// Classifies normalized Markdown table column headers representing subsystem or part identifiers.
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-SUBSYSTEM-PARTS-TEXT]
+    fn is_subsystem_table_header(header: &str) -> bool {
+        let normalized: String = header
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_ascii_lowercase();
+        matches!(
+            normalized.as_str(),
+            "subsystem"
+                | "subsystems"
+                | "subsystem name"
+                | "subsystem_name"
+                | "subsystem id"
+                | "subsystem_id"
+                | "subsystem part"
+                | "component"
+                | "components"
+                | "component name"
+                | "component_name"
+                | "component id"
+                | "component_id"
+                | "part"
+                | "parts"
+                | "part name"
+                | "part_name"
+                | "part def"
+                | "module"
+                | "modules"
+                | "module name"
+                | "module_name"
+        )
+    }
+
+    /// Scans Markdown AST tables (excluding code fences, unit columns, and prose) for subsystem identifiers.
     /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-SUBSYSTEM-PARTS-TEXT]
     fn scan_markdown_table_parts(content: &str, part_names: &mut BTreeSet<String>) {
-        let mut in_table = false;
-        let mut col_subsys_idx = None;
-        for line in content.lines() {
-            let trimmed = line.trim();
-            if trimmed.starts_with('|') && trimmed.ends_with('|') {
-                let cells: Vec<&str> = trimmed
-                    .split('|')
-                    .map(str::trim)
-                    .filter(|c| !c.is_empty())
-                    .collect();
-                if cells.is_empty() {
+        let ast = parse_markdown_ast(content);
+        for table in &ast.tables {
+            let Some(col_idx) = table
+                .headers
+                .iter()
+                .position(|h| Self::is_subsystem_table_header(h))
+            else {
+                continue;
+            };
+            for row in &table.rows {
+                let Some(cell) = row.get(col_idx) else {
                     continue;
+                };
+                let candidate = cell.trim();
+                if is_valid_subsystem_identifier(candidate) {
+                    part_names.insert(candidate.to_string());
                 }
-                if cells.iter().all(|c| c.chars().all(|ch| ch == '-' || ch == ':' || ch.is_whitespace())) {
-                    in_table = true;
-                    continue;
-                }
-                if !in_table {
-                    col_subsys_idx = None;
-                    for (idx, cell) in cells.iter().enumerate() {
-                        let clower = cell.to_ascii_lowercase();
-                        if clower.contains("subsystem")
-                            || clower.contains("component")
-                            || clower.contains("segment")
-                            || clower.contains("part")
-                            || clower.contains("unit")
-                        {
-                            col_subsys_idx = Some(idx);
-                            break;
-                        }
-                    }
-                } else if let Some(idx) = col_subsys_idx {
-                    if let Some(raw_cand) = cells.get(idx).copied() {
-                        let clean_cand = raw_cand
-                            .replace(['`', '*', '_', '[', ']'], "")
-                            .trim()
-                            .to_string();
-                        let clean_ident: String = clean_cand
-                            .chars()
-                            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-                            .collect();
-                        if is_valid_subsystem_identifier(&clean_ident) {
-                            part_names.insert(clean_ident);
-                        }
-                    }
-                }
-            } else {
-                in_table = false;
-                col_subsys_idx = None;
             }
         }
     }

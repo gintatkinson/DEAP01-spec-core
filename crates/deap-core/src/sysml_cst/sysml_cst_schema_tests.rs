@@ -235,4 +235,70 @@ fn test_parse_state_defs_enforces_max_ast_depth_and_plus_one_bounds() -> Result<
     assert!(cursor.sub_states.is_empty());
     Ok(())
 }
+
+#[test]
+fn test_issue_867_scan_markdown_table_parts_ignores_units_part_numbers_and_fences() {
+    let md = concat!(
+        "# Extracted Spec\n\n",
+        "| Param ID | Subsystem / Scope | Parameter Name | Value | Units |\n",
+        "| :--- | :--- | :--- | :--- | :--- |\n",
+        "| `P-01` | Airframe | Voltage | 28.0 | V |\n",
+        "| `P-02` | Propulsion | Power | 100 | W |\n\n",
+        "| Interface | Connector / Part No | Spec |\n",
+        "| :--- | :--- | :--- |\n",
+        "| Output | Custom 8-pin | Pins 1-3 |\n\n",
+        "| Subsystem | Component |\n",
+        "| :--- | :--- |\n",
+        "| Magnetometers + Baro | Dual sensor |\n\n",
+        "```markdown\n",
+        "| Subsystem | Role |\n",
+        "| :--- | :--- |\n",
+        "| FakeCodeBlockPart | Ignored |\n",
+        "```\n\n",
+        "| Subsystem | Function |\n",
+        "| :--- | :--- |\n",
+        "| ValidGuidanceModule | Control loop |\n",
+    );
+    let md_parts = UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".md", md);
+    assert!(
+        md_parts.contains("ValidGuidanceModule"),
+        "Expected ValidGuidanceModule in {md_parts:?}"
+    );
+    for noise in [
+        "V",
+        "W",
+        "Custom",
+        "Magnetometers",
+        "Dual",
+        "Airframe",
+        "Propulsion",
+        "FakeCodeBlockPart",
+    ] {
+        assert!(
+            !md_parts.contains(noise),
+            "Unexpected non-part token '{noise}' extracted into {md_parts:?}"
+        );
+    }
+}
+
+#[test]
+fn test_issue_867_extract_sysml_part_defs_only_excludes_usages_and_includes_nested_defs() {
+    let sysml = concat!(
+        "package AvionicsPkg {\n",
+        "    doc /* part def DocGhostPart; */\n",
+        "    abstract part def AbstractController {\n",
+        "        part def NestedSensor {\n",
+        "            part leaf_usage : LeafType;\n",
+        "        }\n",
+        "    }\n",
+        "    part def DerivedUnit :> BasePkg::BaseUnit, MixinUnit [1..2] {\n",
+        "        out port bus : BasePkg::BusPort;\n",
+        "    }\n",
+        "    part topUsage : DerivedUnit;\n",
+        "}\n",
+    );
+    let defs = UnifiedSchemaModelExtractor::extract_sysml_part_defs_only(sysml);
+    let actual: Vec<&str> = defs.iter().map(String::as_str).collect();
+    assert_eq!(actual, vec!["AbstractController", "DerivedUnit", "NestedSensor"]);
+}
 }

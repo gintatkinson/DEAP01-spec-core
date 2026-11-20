@@ -21,7 +21,7 @@ pub fn find_line_number(content: &str, byte_offset: usize) -> Option<usize> {
 }
 
 /// Checks whether a `LexedSysmlToken` is non-trivia (`[REQ-0401]`, `[FLS: fls_conops_cmark]`).
-fn is_non_trivia(tok: &LexedSysmlToken<'_>) -> bool {
+pub(super) fn is_non_trivia(tok: &LexedSysmlToken<'_>) -> bool {
     !matches!(tok.token, SysmlToken::Whitespace | SysmlToken::LineComment | SysmlToken::BlockComment)
 }
 
@@ -96,9 +96,26 @@ pub fn parse_subsystem_ports_from_body(content: &str, body: &str, body_offset: u
         cursor += 1;
         let mut type_name = "Port".to_string();
         if non_trivia.get(cursor).is_some_and(|t| t.token == SysmlToken::Colon) {
-            if let Some(&t_tok) = non_trivia.get(cursor + 1).filter(|t| !matches!(t.token, SysmlToken::Semi | SysmlToken::LBrace | SysmlToken::RBrace)) {
-                type_name = t_tok.slice.trim_matches('\'').to_string();
-                cursor += 2;
+            let mut t_cur = cursor.saturating_add(1);
+            if non_trivia.get(t_cur).is_some_and(|t| t.token == SysmlToken::Tilde) {
+                t_cur = t_cur.saturating_add(1);
+            }
+            if let Some(&t_tok) = non_trivia.get(t_cur).filter(|t| {
+                !matches!(t.token, SysmlToken::Semi | SysmlToken::LBrace | SysmlToken::RBrace)
+            }) {
+                let mut qtype = t_tok.slice.trim_matches('\'').to_string();
+                t_cur = t_cur.saturating_add(1);
+                while non_trivia.get(t_cur).is_some_and(|t| t.token == SysmlToken::ColonColon) {
+                    if let Some(&seg) = non_trivia.get(t_cur.saturating_add(1)) {
+                        qtype.push_str("::");
+                        qtype.push_str(seg.slice.trim_matches('\''));
+                        t_cur = t_cur.saturating_add(2);
+                    } else {
+                        break;
+                    }
+                }
+                type_name = qtype;
+                cursor = t_cur;
             }
         }
         ports.push(SubsystemPort {
@@ -112,7 +129,7 @@ pub fn parse_subsystem_ports_from_body(content: &str, body: &str, body_offset: u
 }
 
 /// Extracts attributes, mass, power, and action names from a `part def` body (`[REQ-0401]`, `[FLS: fls_conops_cmark]`).
-fn extract_part_body_attributes(body: &str) -> (BTreeMap<String, String>, Option<f64>, Option<f64>, Vec<String>) {
+pub(super) fn extract_part_body_attributes(body: &str) -> (BTreeMap<String, String>, Option<f64>, Option<f64>, Vec<String>) {
     let (mut attributes, mut mass_kg, mut power_w, mut actions) = (BTreeMap::new(), None, None, Vec::new());
     if !body.is_empty() {
         for (attr_name, raw_val) in find_all_attributes(body) {
@@ -133,87 +150,7 @@ fn extract_part_body_attributes(body: &str) -> (BTreeMap<String, String>, Option
     (attributes, mass_kg, power_w, actions)
 }
 
-/// Resolves the `{ ... }` body slice and next token index starting at `cur` (`[REQ-0401]`, `[FLS: fls_conops_cmark]`).
-fn resolve_part_body_span<'a>(content: &'a str, tokens: &[LexedSysmlToken<'_>], cur: usize, part_pos: usize, idx: usize) -> Option<(&'a str, usize, usize)> {
-    if tokens.get(cur).is_some_and(|t| t.token == SysmlToken::LBrace) {
-        let open_end = tokens.get(cur)?.span.end;
-        let (mut depth, mut close_idx) = (0usize, None);
-        for (k, t) in tokens.iter().enumerate().skip(cur) {
-            if t.token == SysmlToken::LBrace { depth += 1; }
-            else if t.token == SysmlToken::RBrace {
-                depth = depth.saturating_sub(1);
-                if depth == 0 { close_idx = Some(k); break; }
-            }
-        }
-        if let Some(r_idx) = close_idx {
-            let close_start = tokens.get(r_idx)?.span.start;
-            Some((content.get(open_end..close_start).unwrap_or(""), open_end, r_idx + 1))
-        } else {
-            Some((content.get(open_end..).unwrap_or(""), open_end, tokens.len()))
-        }
-    } else if tokens.get(cur).is_some_and(|t| t.token == SysmlToken::Semi) {
-        Some(("", part_pos, cur + 1))
-    } else {
-        Some(("", part_pos, idx + 1))
-    }
-}
-
-/// Parses a single `part` or `part def` declaration starting at token `idx` (`[REQ-0401]`, `[FLS: fls_conops_cmark]`).
-fn parse_part_from_tokens(content: &str, filepath: &str, tokens: &[LexedSysmlToken<'_>], idx: usize) -> Option<(SubsystemPart, usize)> {
-    let part_pos = tokens.get(idx)?.span.start;
-    let mut cur = idx + 1;
-    while tokens.get(cur).is_some_and(|t| !is_non_trivia(t)) { cur += 1; }
-    if tokens.get(cur).is_some_and(|t| t.token == SysmlToken::DefKw) {
-        cur += 1;
-        while tokens.get(cur).is_some_and(|t| !is_non_trivia(t)) { cur += 1; }
-    }
-    let name_tok = tokens.get(cur)?;
-    if !matches!(name_tok.token, SysmlToken::Ident | SysmlToken::UnrestrictedName) || name_tok.slice == "def" { return None; }
-    let name = name_tok.slice.trim_matches('\'').to_string();
-    cur += 1;
-    while tokens.get(cur).is_some_and(|t| !is_non_trivia(t)) { cur += 1; }
-    if tokens.get(cur).is_some_and(|t| matches!(t.token, SysmlToken::Colon | SysmlToken::ColonGt)) {
-        for _ in 0..2 {
-            cur += 1;
-            while tokens.get(cur).is_some_and(|t| !is_non_trivia(t)) { cur += 1; }
-        }
-    }
-    let (body, body_offset, next_idx) = resolve_part_body_span(content, tokens, cur, part_pos, idx)?;
-    let doc = tokenize_sysml(body).into_iter().find(|t| t.token == SysmlToken::BlockComment).map(|t| {
-        let inner = t.slice.trim().strip_prefix("/*").unwrap_or(t.slice).strip_suffix("*/").unwrap_or(t.slice).trim();
-        inner.strip_prefix("doc").unwrap_or(inner).trim().to_string()
-    }).unwrap_or_default();
-    let ports = if body.is_empty() { Vec::new() } else { parse_subsystem_ports_from_body(content, body, body_offset, filepath) };
-    let (attributes, mass_kg, power_w, actions) = extract_part_body_attributes(body);
-    Some((
-        SubsystemPart {
-            name, doc, ports, mass_kg, power_w, actions, attributes, constraints: Vec::new(),
-            source_file: filepath.to_string(), source_line: find_line_number(content, part_pos),
-            epistemic_tier: "[TIER-1: OEM]".to_string(),
-        },
-        next_idx.max(idx + 1),
-    ))
-}
-
-/// [DOC-TIER: A] Extracts `SubsystemPart` definitions with ports, attributes, actions, and source provenance from SysML text.
-/// Safety & Traceability: Conforms to DO-178C Level A / DO-330 TQL-4; Realises: [REQ-ASSEMBLE-CONOPS-PARAMS-EXTRACT-SUBSYSTEM-PARTS-FROM-SYSML] [FLS: fls_conops_cmark]
-/// Contract: Scans `content: &str` token stream for `part` / `part def` declarations and returns deduplicated `Vec<SubsystemPart>`.
-/// Bounds & Faults: O(N) time and space over `content.len()`; records 1-indexed `source_line` and `[TIER-1: OEM]` provenance.
-pub fn extract_subsystem_parts_from_sysml(content: &str, filepath: &str) -> Vec<SubsystemPart> {
-    let tokens = tokenize_sysml(content);
-    let (mut parts, mut seen, mut idx) = (Vec::new(), BTreeSet::new(), 0);
-    while let Some(tok) = tokens.get(idx) {
-        if tok.token == SysmlToken::StructuralKw && tok.slice == "part" {
-            if let Some((part, next_idx)) = parse_part_from_tokens(content, filepath, &tokens, idx) {
-                if seen.insert(part.name.clone()) { parts.push(part); }
-                idx = next_idx;
-                continue;
-            }
-        }
-        idx += 1;
-    }
-    parts
-}
+pub use super::cmark_sysml_parts::extract_subsystem_parts_from_sysml;
 
 /// Builds `SubsystemPart` records with line-number provenance from extracted part names (`[REQ-0401]`, `[FLS: fls_conops_cmark]`).
 fn parts_from_names(content: &str, filepath: &str, part_names: BTreeSet<String>) -> Vec<SubsystemPart> {

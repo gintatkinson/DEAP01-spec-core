@@ -30,6 +30,8 @@ mod cmark_physics;
 mod cmark_sanitize;
 #[path = "cmark_schema.rs"]
 mod cmark_schema;
+#[path = "cmark_sysml_parts.rs"]
+mod cmark_sysml_parts;
 
 #[cfg(test)]
 #[path = "cmark_tests_a.rs"]

@@ -203,6 +203,25 @@ struct ParsedPartHeader<'a> {
     next_idx: usize,
 }
 
+/// Skips optional comma-separated specialization types and `[multiplicity]` on a `part` header.
+/// Realises: [REQ-SYSML-AST-SSOT-PARITY/PARSE-PART-DEFS]
+fn skip_extra_bases_and_mult(masked: &str, mut curr: usize) -> usize {
+    while masked.get(curr..).is_some_and(|s| s.starts_with(',')) {
+        curr = curr.saturating_add(1 + skip_ws(masked.get(curr.saturating_add(1)..).unwrap_or("")));
+        let (extra_t, extra_len) = extract_type_ident(masked.get(curr..).unwrap_or(""));
+        if extra_t.is_empty() { break; }
+        curr = curr.saturating_add(extra_len);
+        curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
+    }
+    if masked.get(curr..).is_some_and(|s| s.starts_with('[')) {
+        if let Some(rel_close) = masked.get(curr..).and_then(|s| s.find(']')) {
+            curr = curr.saturating_add(rel_close).saturating_add(1);
+            curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
+        }
+    }
+    curr
+}
+
 /// Parses a `part [def] <name> [: <Type>] ({ ... } | ;)` header starting at byte offset `part_pos`.
 /// Realises: [REQ-SYSML-AST-SSOT-PARITY/PARSE-PART-DEFS]
 fn parse_part_header_and_body<'a>(
@@ -220,16 +239,13 @@ fn parse_part_header_and_body<'a>(
         curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
     }
     let (name, name_len) = extract_ident(masked.get(curr..).unwrap_or(""));
-    if name.is_empty() {
-        return None;
-    }
+    if name.is_empty() { return None; }
     curr = curr.saturating_add(name_len);
     curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
     let mut type_name = None;
     let rem_colon = masked.get(curr..).unwrap_or("");
     if rem_colon.starts_with(":>") || rem_colon.starts_with(':') {
-        let sep_len = if rem_colon.starts_with(":>") { 2 } else { 1 };
-        curr = curr.saturating_add(sep_len);
+        curr = curr.saturating_add(if rem_colon.starts_with(":>") { 2 } else { 1 });
         curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
         let (t_name, t_len) = extract_type_ident(masked.get(curr..).unwrap_or(""));
         if !t_name.is_empty() {
@@ -238,11 +254,11 @@ fn parse_part_header_and_body<'a>(
             curr = curr.saturating_add(skip_ws(masked.get(curr..).unwrap_or("")));
         }
     }
+    curr = skip_extra_bases_and_mult(masked, curr);
     let rem_body = masked.get(curr..).unwrap_or("");
     let (body, next_idx) = if rem_body.starts_with('{') {
         let close_pos = find_matching_brace(clean, curr);
-        let inner = close_pos.and_then(|cp| clean.get(curr.saturating_add(1)..cp)).unwrap_or("");
-        (inner, close_pos.unwrap_or(curr).saturating_add(1))
+        (close_pos.and_then(|cp| clean.get(curr.saturating_add(1)..cp)).unwrap_or(""), close_pos.unwrap_or(curr).saturating_add(1))
     } else if rem_body.starts_with(';') {
         ("", curr.saturating_add(1))
     } else {

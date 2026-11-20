@@ -70,7 +70,10 @@ pub fn load_sysml_symbol_index(repo_root: &Path) -> Result<SysmlSymbolIndex, Spe
     let top_states = deap_core::sysml_cst::parse_state_defs(&combined_content);
     let test_cases = deap_core::sysml_cst::parse_test_case_defs(&combined_content);
 
-    if !other_schema_files.is_empty() {
+    if sysml_files.is_empty()
+        && combined_content.trim().is_empty()
+        && !other_schema_files.is_empty()
+    {
         let non_sysml_parts =
             deap_core::sysml_cst::UnifiedSchemaModelExtractor::extract_subsystem_parts(
                 &other_schema_files,

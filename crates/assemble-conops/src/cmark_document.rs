@@ -6,8 +6,7 @@ use std::path::{Path, PathBuf};
 use deap_core::markdown_ast::{parse_markdown_ast, ParsedMarkdownAst};
 
 use super::cmark_engine::SysMLParameterBindingEngine;
-use super::cmark_links::{relativize_markdown_links, validate_unit_integrity};
-use super::cmark_sanitize::sanitize_level_1b_operational_text;
+use super::cmark_links::{relativize_markdown_links, validate_conops_section4_part_coverage, validate_unit_integrity};
 use super::{CANONICAL_CONOPS_UNITS, CANONICAL_MISSION_INTENT_UNITS};
 use crate::toc::{extract_headings, generate_table_of_contents, verify_markdown_links};
 
@@ -234,25 +233,8 @@ pub fn assemble_document(
     let (meta_title, assembled) =
         render_assembled_markdown(&units, doc_title, doc_version_and_date, param_engine);
     errors.extend(verify_markdown_links(&assembled));
-    let lower = meta_title.to_lowercase();
-    if (lower.contains("concept of operations") || lower.contains("conops"))
-        && !param_engine.ast_part_names.is_empty()
-    {
-        let missing: Vec<String> = param_engine
-            .ast_part_names
-            .iter()
-            .filter(|p| {
-                let clean_p = sanitize_level_1b_operational_text(p);
-                !assembled.contains(p.as_str()) && !assembled.contains(&clean_p)
-            })
-            .cloned()
-            .collect();
-        if !missing.is_empty() {
-            errors.push(format!(
-                "ConOps Section 4 AST Part Coverage Gate failed: Missing declared AST part def(s): {} in Section 4.",
-                missing.join(", ")
-            ));
-        }
+    if let Some(cov_err) = validate_conops_section4_part_coverage(&assembled, &meta_title, param_engine) {
+        errors.push(cov_err);
     }
     (assembled, errors)
 }
@@ -365,8 +347,17 @@ pub(super) fn execute_conops_assembly(
                 let out_file = output_dir.join(out_name);
                 let relativized = relativize_markdown_links(&doc, &out_file, &ws_path);
                 fs::write(&out_file, relativized)?;
+                println!("[+] Successfully wrote compiled {tag} to '{}'.", out_file.display());
             }
         }
     }
-    Ok(all_errors.is_empty())
+    if !all_errors.is_empty() {
+        eprintln!("[!] ConOps Assembly Errors encountered:");
+        for err in &all_errors {
+            eprintln!("    - {err}");
+        }
+        return Ok(false);
+    }
+    println!("[+] All ConOps assembly and verification checks passed cleanly.");
+    Ok(true)
 }
